@@ -1,8 +1,24 @@
 /**
  * Client DeepSeek — appels chat/completions compatibles OpenAI, avec vision.
  *
- * Le modele `deepseek-flash` (DeepSeek-V4.1-Flash) accepte les images et le
- * mode JSON. Les images ne sont autorisees que dans les messages `user`.
+ * Faits verifies aux sources officielles le 18 septembre 2026
+ * (api-docs.deepseek.com/quick_start/pricing, /guides/vision, /guides/thinking_mode) :
+ *
+ *  * le nom de modele courant est `deepseek-flash` (DeepSeek-V4.1-Flash) ;
+ *  * la **vision n'est supportee que par Flash**, pas par `deepseek-v4-pro` ;
+ *  * formats acceptes : JPEG, PNG, GIF, WebP. Le format est detecte sur le
+ *    **contenu** du fichier, pas sur le type MIME declare ;
+ *  * les images ne sont acceptees que dans les messages `user` — ailleurs, 400 ;
+ *  * une image coute au plus 1024 jetons, quelle que soit sa taille ;
+ *  * le mode reflexion est **actif par defaut, effort `high`**.
+ *
+ * Le dernier point est celui qui coute : une tache de perception suivie d'une
+ * mise en forme JSON n'a pas besoin d'une chaine de raisonnement, et les jetons
+ * de raisonnement sont factures comme des jetons de sortie — la ligne la plus
+ * chere. Pire, en mode reflexion `temperature` est **ignore en silence** :
+ * l'envoyer laisserait croire qu'il regle quelque chose. Le mode reflexion est
+ * donc desactive par defaut ici, et `temperature` n'est envoye que lorsqu'il
+ * peut agir.
  *
  * Ce fichier est partage par les Edge Functions Supabase.
  */
@@ -24,6 +40,11 @@ export interface DeepSeekOptions {
   jsonMode?: boolean;
   maxTokens?: number;
   temperature?: number;
+  /**
+   * Mode reflexion. Faux par defaut : voir la note en tete de fichier.
+   * Ne l'activer que pour une tache qui gagne vraiment a raisonner.
+   */
+  thinking?: boolean;
   /** Nombre de tentatives supplementaires en cas d'echec transitoire. */
   retries?: number;
   timeoutMs?: number;
@@ -53,6 +74,7 @@ export async function deepSeekChat(options: DeepSeekOptions): Promise<string> {
     jsonMode = false,
     maxTokens = 2048,
     temperature = 0.2,
+    thinking = false,
     retries = 2,
     timeoutMs = 90_000,
   } = options;
@@ -61,9 +83,13 @@ export async function deepSeekChat(options: DeepSeekOptions): Promise<string> {
     model,
     messages,
     max_tokens: maxTokens,
-    temperature,
+    thinking: { type: thinking ? "enabled" : "disabled" },
   };
   if (jsonMode) body.response_format = { type: "json_object" };
+
+  // `temperature` est ignore par le fournisseur en mode reflexion. L'envoyer
+  // quand meme ferait croire au lecteur qu'il regle la determinisme.
+  if (!thinking) body.temperature = temperature;
 
   let lastError: Error | null = null;
 
