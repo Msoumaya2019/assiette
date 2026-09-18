@@ -44,7 +44,8 @@ class FavoritesScreen extends ConsumerWidget {
               return EmptyState(
                 icon: Icons.star_outline_rounded,
                 title: 'Aucun favori',
-                message: 'Touchez l\'etoile sur un aliment ou un produit pour le '
+                message:
+                    'Touchez l\'etoile sur un aliment ou un produit pour le '
                     'retrouver ici, sans avoir a le rechercher a chaque fois.',
                 action: FilledButton.icon(
                   onPressed: () => context.push(Routes.search),
@@ -54,8 +55,12 @@ class FavoritesScreen extends ConsumerWidget {
               );
             }
 
-            final foods = items.where((item) => item.kind != 'template').toList();
-            final templates = items.where((item) => item.kind == 'template').toList();
+            final foods = items
+                .where((item) => item.kind != 'template')
+                .toList();
+            final templates = items
+                .where((item) => item.kind == 'template')
+                .toList();
 
             return ListView(
               padding: const EdgeInsets.fromLTRB(
@@ -68,14 +73,17 @@ class FavoritesScreen extends ConsumerWidget {
                 if (foods.isNotEmpty) ...[
                   SectionCard(
                     title: 'Aliments et produits',
-                    subtitle: '${foods.length} favori${foods.length > 1 ? 's' : ''}',
+                    subtitle:
+                        '${foods.length} favori${foods.length > 1 ? 's' : ''}',
                     child: Column(
                       children: [
                         for (final favorite in foods)
                           _FavoriteTile(
                             favorite: favorite,
                             onAdd: () => _addFood(context, ref, favorite),
-                            onRemove: () => ref.read(favoritesProvider.notifier).remove(favorite.id),
+                            onRemove: () => ref
+                                .read(favoritesProvider.notifier)
+                                .remove(favorite.id),
                           ),
                       ],
                     ),
@@ -85,14 +93,17 @@ class FavoritesScreen extends ConsumerWidget {
                 if (templates.isNotEmpty)
                   SectionCard(
                     title: 'Repas types',
-                    subtitle: '${templates.length} repas enregistre${templates.length > 1 ? 's' : ''}',
+                    subtitle:
+                        '${templates.length} repas enregistre${templates.length > 1 ? 's' : ''}',
                     child: Column(
                       children: [
                         for (final favorite in templates)
                           _FavoriteTile(
                             favorite: favorite,
                             onAdd: () => _addTemplate(context, ref, favorite),
-                            onRemove: () => ref.read(favoritesProvider.notifier).remove(favorite.id),
+                            onRemove: () => ref
+                                .read(favoritesProvider.notifier)
+                                .remove(favorite.id),
                           ),
                       ],
                     ),
@@ -105,18 +116,27 @@ class FavoritesScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _addFood(BuildContext context, WidgetRef ref, Favorite favorite) async {
+  Future<void> _addFood(
+    BuildContext context,
+    WidgetRef ref,
+    Favorite favorite,
+  ) async {
     final food = favorite.asFood;
     if (food == null) return;
 
-    final grams = await showQuantityDialog(context, initial: food.servingSizeG ?? 100);
+    final grams = await showQuantityDialog(
+      context,
+      initial: food.servingSizeG ?? 100,
+    );
     if (grams == null || grams <= 0) return;
 
     final item = MealItem(food: food, quantityG: grams, isEstimate: false);
     final draft = ref.read(draftMealProvider);
 
     if (draft == null) {
-      ref.read(draftMealProvider.notifier).start(
+      ref
+          .read(draftMealProvider.notifier)
+          .start(
             Meal(
               eatenAt: DateTime.now(),
               name: _suggestName(DateTime.now()),
@@ -133,7 +153,11 @@ class FavoritesScreen extends ConsumerWidget {
     context.push(Routes.review);
   }
 
-  Future<void> _addTemplate(BuildContext context, WidgetRef ref, Favorite favorite) async {
+  Future<void> _addTemplate(
+    BuildContext context,
+    WidgetRef ref,
+    Favorite favorite,
+  ) async {
     final raw = favorite.payload['items'];
     if (raw is! List) return;
 
@@ -141,7 +165,9 @@ class FavoritesScreen extends ConsumerWidget {
         .map((item) => MealItem.fromJson((item as Map).cast<String, dynamic>()))
         .toList();
 
-    ref.read(draftMealProvider.notifier).start(
+    ref
+        .read(draftMealProvider.notifier)
+        .start(
           Meal(
             eatenAt: DateTime.now(),
             name: favorite.label,
@@ -165,7 +191,11 @@ class FavoritesScreen extends ConsumerWidget {
 }
 
 class _FavoriteTile extends StatelessWidget {
-  const _FavoriteTile({required this.favorite, required this.onAdd, required this.onRemove});
+  const _FavoriteTile({
+    required this.favorite,
+    required this.onAdd,
+    required this.onRemove,
+  });
 
   final Favorite favorite;
   final VoidCallback onAdd;
@@ -188,8 +218,8 @@ class _FavoriteTile extends StatelessWidget {
           favorite.kind == 'template'
               ? Icons.bookmark_rounded
               : favorite.kind == 'product'
-                  ? Icons.inventory_2_outlined
-                  : Icons.restaurant_rounded,
+              ? Icons.inventory_2_outlined
+              : Icons.restaurant_rounded,
           size: 18,
           color: palette.mutedText,
         ),
@@ -249,12 +279,9 @@ class FavoriteButton extends ConsumerWidget {
     );
 
     return IconButton(
-      onPressed: () => ref.read(favoritesProvider.notifier).toggle(
-            id: id,
-            kind: kind,
-            label: label,
-            payload: payload,
-          ),
+      onPressed: () => ref
+          .read(favoritesProvider.notifier)
+          .toggle(id: id, kind: kind, label: label, payload: payload),
       icon: Icon(isFavorite ? Icons.star_rounded : Icons.star_outline_rounded),
       color: isFavorite ? AppColors.carbAmber : null,
       tooltip: isFavorite ? 'Retirer des favoris' : 'Ajouter aux favoris',

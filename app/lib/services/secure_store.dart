@@ -7,11 +7,14 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 /// les preferences partagees, ni dans la base de donnees.
 class SecureStore {
   SecureStore({FlutterSecureStorage? storage})
-      : _storage = storage ??
-            const FlutterSecureStorage(
-              aOptions: AndroidOptions(encryptedSharedPreferences: true),
-              iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock_this_device),
-            );
+    : _storage =
+          storage ??
+          const FlutterSecureStorage(
+            aOptions: AndroidOptions(encryptedSharedPreferences: true),
+            iOptions: IOSOptions(
+              accessibility: KeychainAccessibility.first_unlock_this_device,
+            ),
+          );
 
   final FlutterSecureStorage _storage;
 

@@ -104,34 +104,36 @@ class Food {
   }
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'per100g': per100g.toJson(),
-        'source': source.name,
-        'sourceRef': sourceRef,
-        'brand': brand,
-        'imageUrl': imageUrl,
-        'servingSizeG': servingSizeG,
-        'servingLabel': servingLabel,
-        'category': category,
-      };
+    'name': name,
+    'per100g': per100g.toJson(),
+    'source': source.name,
+    'sourceRef': sourceRef,
+    'brand': brand,
+    'imageUrl': imageUrl,
+    'servingSizeG': servingSizeG,
+    'servingLabel': servingLabel,
+    'category': category,
+  };
 
   factory Food.fromJson(Map<String, dynamic> json) => Food(
-        name: (json['name'] as String?) ?? 'Aliment',
-        per100g: NutritionValues.fromJson(
-          (json['per100g'] as Map?)?.cast<String, dynamic>() ?? const {},
-        ),
-        source: FoodSource.fromId(json['source'] as String?),
-        sourceRef: json['sourceRef'] as String?,
-        brand: json['brand'] as String?,
-        imageUrl: json['imageUrl'] as String?,
-        servingSizeG: (json['servingSizeG'] as num?)?.toDouble(),
-        servingLabel: json['servingLabel'] as String?,
-        category: json['category'] as String?,
-      );
+    name: (json['name'] as String?) ?? 'Aliment',
+    per100g: NutritionValues.fromJson(
+      (json['per100g'] as Map?)?.cast<String, dynamic>() ?? const {},
+    ),
+    source: FoodSource.fromId(json['source'] as String?),
+    sourceRef: json['sourceRef'] as String?,
+    brand: json['brand'] as String?,
+    imageUrl: json['imageUrl'] as String?,
+    servingSizeG: (json['servingSizeG'] as num?)?.toDouble(),
+    servingLabel: json['servingLabel'] as String?,
+    category: json['category'] as String?,
+  );
 
   /// Nom complet incluant la marque, pour l'affichage en liste.
-  String get displayName => brand == null || brand!.isEmpty ? name : '$name — $brand';
+  String get displayName =>
+      brand == null || brand!.isEmpty ? name : '$name — $brand';
 
   @override
-  String toString() => 'Food($name, ${per100g.carbs} g glucides/100 g, ${source.displayLabel})';
+  String toString() =>
+      'Food($name, ${per100g.carbs} g glucides/100 g, ${source.displayLabel})';
 }

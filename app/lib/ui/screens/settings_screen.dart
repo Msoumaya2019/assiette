@@ -50,16 +50,22 @@ class SettingsScreen extends ConsumerWidget {
                             value: mode,
                             title: Text(
                               mode.label,
-                              style: const TextStyle(fontWeight: FontWeight.w600),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
-                            subtitle: Text(mode.description, style: const TextStyle(fontSize: 12)),
+                            subtitle: Text(
+                              mode.description,
+                              style: const TextStyle(fontSize: 12),
+                            ),
                             contentPadding: EdgeInsets.zero,
                           ),
                       ],
                     ),
                   ),
 
-                  if (settings.analysisMode == AnalysisModeSetting.personal) ...[
+                  if (settings.analysisMode ==
+                      AnalysisModeSetting.personal) ...[
                     const Divider(height: AppSpacing.lg),
                     _ApiKeyTile(
                       hasKey: settings.hasProviderKey,
@@ -75,9 +81,12 @@ class SettingsScreen extends ConsumerWidget {
                       child: Text(
                         AppConfig.analysisEndpoint.isEmpty
                             ? 'Aucun service n\'est configure dans cette compilation. '
-                                'Utilisez une cle personnelle, ou compilez avec ANALYSIS_ENDPOINT.'
+                                  'Utilisez une cle personnelle, ou compilez avec ANALYSIS_ENDPOINT.'
                             : 'Service configure : ${AppConfig.analysisEndpoint}',
-                        style: TextStyle(fontSize: 12, color: context.palette.mutedText),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.palette.mutedText,
+                        ),
                       ),
                     ),
                   ],
@@ -87,19 +96,29 @@ class SettingsScreen extends ConsumerWidget {
                   Container(
                     padding: const EdgeInsets.all(AppSpacing.md),
                     decoration: BoxDecoration(
-                      color: context.colors.surfaceContainerHighest.withValues(alpha: 0.6),
+                      color: context.colors.surfaceContainerHighest.withValues(
+                        alpha: 0.6,
+                      ),
                       borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                     ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(Icons.lock_outline_rounded, size: 18, color: context.palette.mutedText),
+                        Icon(
+                          Icons.lock_outline_rounded,
+                          size: 18,
+                          color: context.palette.mutedText,
+                        ),
                         const SizedBox(width: AppSpacing.sm),
                         Expanded(
                           child: Text(
                             'Votre cle est conservee dans le trousseau securise du telephone, '
                             'jamais dans l\'application elle-meme.',
-                            style: TextStyle(fontSize: 12, height: 1.4, color: context.palette.mutedText),
+                            style: TextStyle(
+                              fontSize: 12,
+                              height: 1.4,
+                              color: context.palette.mutedText,
+                            ),
                           ),
                         ),
                       ],
@@ -121,7 +140,7 @@ class SettingsScreen extends ConsumerWidget {
                   settings.goals.isEmpty
                       ? 'Aucun objectif defini'
                       : 'Glucides ${settings.goals.carbsG ?? '—'} g · '
-                          '${settings.goals.kcal ?? '—'} kcal',
+                            '${settings.goals.kcal ?? '—'} kcal',
                   style: const TextStyle(fontSize: 12),
                 ),
                 trailing: const Icon(Icons.chevron_right_rounded),
@@ -141,7 +160,11 @@ class SettingsScreen extends ConsumerWidget {
                 child: Column(
                   children: [
                     for (final (mode, label, icon) in const [
-                      (ThemeMode.system, 'Suivre le systeme', Icons.brightness_auto_rounded),
+                      (
+                        ThemeMode.system,
+                        'Suivre le systeme',
+                        Icons.brightness_auto_rounded,
+                      ),
                       (ThemeMode.light, 'Clair', Icons.light_mode_rounded),
                       (ThemeMode.dark, 'Sombre', Icons.dark_mode_rounded),
                     ])
@@ -171,7 +194,9 @@ class SettingsScreen extends ConsumerWidget {
                     value: settings.mealRemindersEnabled,
                     onChanged: notifier.setMealReminders,
                     title: const Text('Rappel pour renseigner un repas'),
-                    subtitle: const Text('Une notification discrete, desactivable a tout moment'),
+                    subtitle: const Text(
+                      'Une notification discrete, desactivable a tout moment',
+                    ),
                     contentPadding: EdgeInsets.zero,
                   ),
                   SwitchListTile(
@@ -180,7 +205,8 @@ class SettingsScreen extends ConsumerWidget {
                     title: const Text('Resume de la journee'),
                     contentPadding: EdgeInsets.zero,
                   ),
-                  if (settings.mealRemindersEnabled || settings.dailySummaryEnabled)
+                  if (settings.mealRemindersEnabled ||
+                      settings.dailySummaryEnabled)
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: const Icon(Icons.schedule_rounded, size: 20),
@@ -198,7 +224,9 @@ class SettingsScreen extends ConsumerWidget {
                             minute: settings.reminderMinute,
                           ),
                         );
-                        if (time != null) notifier.setReminderTime(time.hour, time.minute);
+                        if (time != null) {
+                          notifier.setReminderTime(time.hour, time.minute);
+                        }
                       },
                     ),
                 ],
@@ -223,7 +251,11 @@ class SettingsScreen extends ConsumerWidget {
                   const Divider(height: AppSpacing.lg),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
-                    leading: const Icon(Icons.delete_forever_rounded, size: 20, color: AppColors.danger),
+                    leading: const Icon(
+                      Icons.delete_forever_rounded,
+                      size: 20,
+                      color: AppColors.danger,
+                    ),
                     title: const Text(
                       'Effacer toutes mes donnees',
                       style: TextStyle(color: AppColors.danger),
@@ -285,7 +317,8 @@ class SettingsScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.lg),
 
             const EstimateBanner(
-              message: 'Assiette n\'est pas un dispositif medical. L\'application ne fournit '
+              message:
+                  'Assiette n\'est pas un dispositif medical. L\'application ne fournit '
                   'aucun diagnostic, aucune recommandation therapeutique et aucune posologie.',
             ),
           ],
@@ -300,8 +333,9 @@ class SettingsScreen extends ConsumerWidget {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Effacer toutes les donnees ?'),
         content: const Text(
-          'Vos repas, favoris, repas types, objectifs et votre cle d\'analyse seront '
-          'supprimes de cet appareil. Cette action est definitive et ne peut pas etre annulee.',
+          'Vos repas, favoris, repas types, objectifs, les photos enregistrees et '
+          'votre cle d\'analyse seront supprimes de cet appareil. Cette action est '
+          'definitive et ne peut pas etre annulee.',
         ),
         actions: [
           TextButton(
@@ -321,14 +355,20 @@ class SettingsScreen extends ConsumerWidget {
     await ref.read(settingsProvider.notifier).eraseEverything();
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Toutes les donnees locales ont ete effacees.')),
+      const SnackBar(
+        content: Text('Toutes les donnees locales ont ete effacees.'),
+      ),
     );
   }
 }
 
 /// Saisie de la cle d'analyse personnelle.
 class _ApiKeyTile extends StatefulWidget {
-  const _ApiKeyTile({required this.hasKey, required this.onSave, required this.onClear});
+  const _ApiKeyTile({
+    required this.hasKey,
+    required this.onSave,
+    required this.onClear,
+  });
 
   final bool hasKey;
   final Future<void> Function(String) onSave;
@@ -385,7 +425,11 @@ class _ApiKeyTileState extends State<_ApiKeyTile> {
         if (widget.hasKey) ...[
           Row(
             children: [
-              const Icon(Icons.check_circle_rounded, size: 18, color: AppColors.success),
+              const Icon(
+                Icons.check_circle_rounded,
+                size: 18,
+                color: AppColors.success,
+              ),
               const SizedBox(width: AppSpacing.sm),
               const Expanded(
                 child: Text(
@@ -422,7 +466,11 @@ class _ApiKeyTileState extends State<_ApiKeyTile> {
             helperText: 'Creez une cle sur platform.deepseek.com',
             suffixIcon: IconButton(
               onPressed: () => setState(() => _visible = !_visible),
-              icon: Icon(_visible ? Icons.visibility_off_rounded : Icons.visibility_rounded),
+              icon: Icon(
+                _visible
+                    ? Icons.visibility_off_rounded
+                    : Icons.visibility_rounded,
+              ),
               tooltip: _visible ? 'Masquer' : 'Afficher',
             ),
           ),
@@ -436,7 +484,10 @@ class _ApiKeyTileState extends State<_ApiKeyTile> {
               ? const SizedBox(
                   width: 16,
                   height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
                 )
               : const Icon(Icons.save_rounded, size: 18),
           label: const Text('Enregistrer la cle'),

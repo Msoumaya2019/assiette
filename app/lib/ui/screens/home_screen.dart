@@ -63,7 +63,10 @@ class HomeScreen extends ConsumerWidget {
               const SizedBox(height: AppSpacing.lg),
 
               summary.maybeWhen(
-                data: (data) => MacroGrid(totals: data.totals, goal: _goalValues(settings.goals)),
+                data: (data) => MacroGrid(
+                  totals: data.totals,
+                  goal: _goalValues(settings.goals),
+                ),
                 orElse: () => const SizedBox.shrink(),
               ),
 
@@ -108,7 +111,8 @@ class HomeScreen extends ConsumerWidget {
                               context.push(Routes.review);
                             },
                           ),
-                          if (meal != recent.last) const SizedBox(height: AppSpacing.sm),
+                          if (meal != recent.last)
+                            const SizedBox(height: AppSpacing.sm),
                         ],
                       ],
                     ),
@@ -149,8 +153,8 @@ class _Header extends StatelessWidget {
     final greeting = hour < 12
         ? 'Bonjour'
         : hour < 18
-            ? 'Bon apres-midi'
-            : 'Bonsoir';
+        ? 'Bon apres-midi'
+        : 'Bonsoir';
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -170,7 +174,11 @@ class _Header extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 Format.weekdayDayMonth(date),
-                style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5),
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.5,
+                ),
               ),
             ],
           ),
@@ -261,7 +269,9 @@ class _ActionCard extends StatelessWidget {
           padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-            border: highlighted ? null : Border.all(color: context.palette.cardBorder),
+            border: highlighted
+                ? null
+                : Border.all(color: context.palette.cardBorder),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -278,7 +288,9 @@ class _ActionCard extends StatelessWidget {
                 child: Icon(
                   icon,
                   size: highlighted ? 26 : 20,
-                  color: highlighted ? colors.onPrimary : colors.onPrimaryContainer,
+                  color: highlighted
+                      ? colors.onPrimary
+                      : colors.onPrimaryContainer,
                 ),
               ),
               SizedBox(height: highlighted ? AppSpacing.md : AppSpacing.sm),
@@ -330,7 +342,13 @@ class _QuickAccess extends StatelessWidget {
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: Icon(icon, size: 20),
-              title: Text(label, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+              title: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               trailing: const Icon(Icons.chevron_right_rounded, size: 20),
               onTap: () => context.go(route),
               dense: true,
@@ -355,7 +373,11 @@ class _FirstMealHint extends StatelessWidget {
             'Photographiez votre prochain repas : l\'application identifie les aliments '
             'et estime les glucides. Vous pourrez corriger chaque quantite avant '
             'd\'enregistrer.',
-            style: TextStyle(fontSize: 14, height: 1.5, color: context.palette.mutedText),
+            style: TextStyle(
+              fontSize: 14,
+              height: 1.5,
+              color: context.palette.mutedText,
+            ),
           ),
           const SizedBox(height: AppSpacing.md),
           OutlinedButton.icon(
@@ -396,7 +418,11 @@ class _AttributionFooter extends StatelessWidget {
         'et base Open Food Facts (ODbL).\n'
         'Les quantites deduites d\'une photo sont des estimations, pas des mesures.',
         textAlign: TextAlign.center,
-        style: TextStyle(fontSize: 11, height: 1.5, color: context.palette.mutedText),
+        style: TextStyle(
+          fontSize: 11,
+          height: 1.5,
+          color: context.palette.mutedText,
+        ),
       ),
     );
   }

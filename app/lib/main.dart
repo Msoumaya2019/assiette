@@ -62,7 +62,10 @@ Future<void> main() async {
 ///
 /// Une valeur illisible ou absente retombe sur la valeur par defaut : un
 /// reglage corrompu ne doit jamais empecher l'application de demarrer.
-Future<AppSettings> _loadSettings(AppDatabase database, SecureStore secureStore) async {
+Future<AppSettings> _loadSettings(
+  AppDatabase database,
+  SecureStore secureStore,
+) async {
   try {
     final themeMode = await database.readSetting('theme_mode');
     final analysisMode = await database.readSetting('analysis_mode');
@@ -97,9 +100,9 @@ Future<AppSettings> _loadSettings(AppDatabase database, SecureStore secureStore)
 }
 
 ThemeMode _themeMode(String? value) => ThemeMode.values.firstWhere(
-      (mode) => mode.name == value,
-      orElse: () => ThemeMode.system,
-    );
+  (mode) => mode.name == value,
+  orElse: () => ThemeMode.system,
+);
 
 AnalysisModeSetting _analysisMode(String? value) {
   if (value == null) {

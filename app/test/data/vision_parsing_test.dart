@@ -22,7 +22,8 @@ void main() {
     });
 
     test('ignore le texte place avant et apres l\'objet', () {
-      const raw = 'Voici le resultat :\n{"carbs": 42}\nJ\'espere que cela aide.';
+      const raw =
+          'Voici le resultat :\n{"carbs": 42}\nJ\'espere que cela aide.';
       final decoded = extractJsonObject(raw);
       expect((decoded! as Map)['carbs'], 42);
     });
@@ -82,7 +83,9 @@ void main() {
     });
 
     test('une liste vide est acceptee et signalee', () {
-      final result = parseMealAnalysis('{"foods": [], "overallConfidence": 0, "notes": "Pas de nourriture."}');
+      final result = parseMealAnalysis(
+        '{"foods": [], "overallConfidence": 0, "notes": "Pas de nourriture."}',
+      );
       expect(result.isEmpty, isTrue);
       expect(result.notes, 'Pas de nourriture.');
     });
@@ -95,14 +98,16 @@ void main() {
     });
 
     test('les aliments sans nom sont ecartes', () {
-      const raw = '{"foods": [{"name": "", "estimatedWeightG": 100}, {"name": "Riz", "estimatedWeightG": 100}]}';
+      const raw =
+          '{"foods": [{"name": "", "estimatedWeightG": 100}, {"name": "Riz", "estimatedWeightG": 100}]}';
       final result = parseMealAnalysis(raw);
       expect(result.foods.length, 1);
       expect(result.foods.first.name, 'Riz');
     });
 
     test('un poids negatif ou nul devient zero', () {
-      const raw = '{"foods": [{"name": "Riz", "estimatedWeightG": -50}, {"name": "Pain", "estimatedWeightG": 0}]}';
+      const raw =
+          '{"foods": [{"name": "Riz", "estimatedWeightG": -50}, {"name": "Pain", "estimatedWeightG": 0}]}';
       final result = parseMealAnalysis(raw);
       expect(result.foods[0].estimatedWeightG, 0);
       expect(result.foods[1].estimatedWeightG, 0);
@@ -115,7 +120,8 @@ void main() {
     });
 
     test('une confiance hors bornes est ramenee entre 0 et 1', () {
-      const raw = '{"foods": ['
+      const raw =
+          '{"foods": ['
           '{"name": "Riz", "estimatedWeightG": 100, "confidence": 5},'
           '{"name": "Pain", "estimatedWeightG": 100, "confidence": -2}'
           ']}';
@@ -125,13 +131,15 @@ void main() {
     });
 
     test('une confiance non numerique retombe sur une valeur prudente', () {
-      const raw = '{"foods": [{"name": "Riz", "estimatedWeightG": 100, "confidence": "elevee"}]}';
+      const raw =
+          '{"foods": [{"name": "Riz", "estimatedWeightG": 100, "confidence": "elevee"}]}';
       final result = parseMealAnalysis(raw);
       expect(result.foods.first.confidence, 0.5);
     });
 
     test('sans confiance globale, la moyenne des aliments est utilisee', () {
-      const raw = '{"foods": ['
+      const raw =
+          '{"foods": ['
           '{"name": "Riz", "estimatedWeightG": 100, "confidence": 0.8},'
           '{"name": "Pain", "estimatedWeightG": 100, "confidence": 0.6}'
           ']}';
@@ -140,7 +148,8 @@ void main() {
     });
 
     test('les nombres envoyes sous forme de chaines sont acceptes', () {
-      const raw = '{"foods": [{"name": "Riz", "estimatedWeightG": "180", "confidence": "0.9"}]}';
+      const raw =
+          '{"foods": [{"name": "Riz", "estimatedWeightG": "180", "confidence": "0.9"}]}';
       final result = parseMealAnalysis(raw);
       expect(result.foods.first.estimatedWeightG, 180);
       expect(result.foods.first.confidence, closeTo(0.9, 1e-9));
@@ -154,18 +163,24 @@ void main() {
 
     test('un nom trop long est tronque', () {
       final longName = 'a' * 400;
-      final result = parseMealAnalysis('{"foods": [{"name": "$longName", "estimatedWeightG": 100}]}');
+      final result = parseMealAnalysis(
+        '{"foods": [{"name": "$longName", "estimatedWeightG": 100}]}',
+      );
       expect(result.foods.first.name.length, 120);
     });
 
     test('le nombre d\'aliments est plafonne', () {
-      final foods = List.generate(60, (index) => '{"name": "Aliment $index", "estimatedWeightG": 100}').join(',');
+      final foods = List.generate(
+        60,
+        (index) => '{"name": "Aliment $index", "estimatedWeightG": 100}',
+      ).join(',');
       final result = parseMealAnalysis('{"foods": [$foods]}');
       expect(result.foods.length, 25);
     });
 
     test('une entree qui n\'est pas un objet est ignoree', () {
-      const raw = '{"foods": ["riz", 42, null, {"name": "Pain", "estimatedWeightG": 60}]}';
+      const raw =
+          '{"foods": ["riz", 42, null, {"name": "Pain", "estimatedWeightG": 60}]}';
       final result = parseMealAnalysis(raw);
       expect(result.foods.length, 1);
       expect(result.foods.first.name, 'Pain');
@@ -213,7 +228,8 @@ void main() {
     });
 
     test('les valeurs illisibles restent nulles plutot que devinees', () {
-      const raw = '{"carbohydrates": 12, "proteins": null, "fat": null, "confidence": 0.4}';
+      const raw =
+          '{"carbohydrates": 12, "proteins": null, "fat": null, "confidence": 0.4}';
       final extraction = parseLabelExtraction(raw);
 
       expect(extraction.per100g.carbs, 12);
@@ -235,23 +251,32 @@ void main() {
       expect(extraction.per100g.carbs, 0);
     });
 
-    test('la base 100 ml est conservee, toute autre valeur retombe sur 100 g', () {
-      expect(parseLabelExtraction('{"basis": "100ml"}').basis, '100ml');
-      expect(parseLabelExtraction('{"basis": "portion"}').basis, '100g');
-      expect(parseLabelExtraction('{}').basis, '100g');
-    });
+    test(
+      'la base 100 ml est conservee, toute autre valeur retombe sur 100 g',
+      () {
+        expect(parseLabelExtraction('{"basis": "100ml"}').basis, '100ml');
+        expect(parseLabelExtraction('{"basis": "portion"}').basis, '100g');
+        expect(parseLabelExtraction('{}').basis, '100g');
+      },
+    );
 
     test('le nom suggere combine produit et marque', () {
       expect(
-        parseLabelExtraction('{"productName": "Cereales", "brand": "Exemple"}').suggestedName,
+        parseLabelExtraction(
+          '{"productName": "Cereales", "brand": "Exemple"}',
+        ).suggestedName,
         'Cereales — Exemple',
       );
-      expect(parseLabelExtraction('{"productName": "Cereales"}').suggestedName, 'Cereales');
+      expect(
+        parseLabelExtraction('{"productName": "Cereales"}').suggestedName,
+        'Cereales',
+      );
       expect(parseLabelExtraction('{}').suggestedName, 'Produit etiquete');
     });
 
     test('les chaines vides ou « null » sont traitees comme absentes', () {
-      const raw = '{"productName": "", "brand": "null", "packageQuantity": "   "}';
+      const raw =
+          '{"productName": "", "brand": "null", "packageQuantity": "   "}';
       final extraction = parseLabelExtraction(raw);
       expect(extraction.productName, isNull);
       expect(extraction.brand, isNull);

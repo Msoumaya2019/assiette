@@ -46,6 +46,6 @@ Toutes les valeurs numeriques sont des nombres ou null. Aucune valeur inventee.'
 String buildLabelUserPrompt({bool hasSecondImage = false}) {
   return hasSecondImage
       ? 'Deux photos du meme produit sont fournies (par exemple le tableau nutritionnel et le devant du paquet). '
-          'Croise les informations et renvoie l\'objet json decrit.'
+            'Croise les informations et renvoie l\'objet json decrit.'
       : 'Analyse la photo fournie et renvoie l\'objet json decrit.';
 }

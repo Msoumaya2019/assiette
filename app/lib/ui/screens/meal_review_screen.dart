@@ -109,20 +109,24 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
 
             SectionCard(
               title: 'Aliments detectes',
-              subtitle: '${meal.items.length} aliment${meal.items.length > 1 ? 's' : ''} · '
+              subtitle:
+                  '${meal.items.length} aliment${meal.items.length > 1 ? 's' : ''} · '
                   '${Format.grams(meal.totalGrams)} au total',
               child: Column(
                 children: [
                   for (final item in meal.items)
                     _EditableItem(
                       item: item,
-                      onQuantityChanged: (grams) => notifier.setQuantity(item.id, grams),
+                      onQuantityChanged: (grams) =>
+                          notifier.setQuantity(item.id, grams),
                       onRemove: () => notifier.removeItem(item.id),
                       onReplace: () => _replaceItem(context, item),
                     ),
                   if (meal.items.isEmpty)
                     Padding(
-                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: AppSpacing.lg,
+                      ),
                       child: Text(
                         'Aucun aliment dans ce repas. Ajoutez-en un ci-dessous.',
                         textAlign: TextAlign.center,
@@ -175,7 +179,10 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
                   ? const SizedBox(
                       width: 18,
                       height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     )
                   : const Icon(Icons.check_rounded),
               label: Text(_saving ? 'Enregistrement…' : 'Enregistrer ce repas'),
@@ -200,7 +207,9 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
   Future<void> _save(BuildContext context, Meal meal) async {
     if (meal.items.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ajoutez au moins un aliment avant d\'enregistrer.')),
+        const SnackBar(
+          content: Text('Ajoutez au moins un aliment avant d\'enregistrer.'),
+        ),
       );
       return;
     }
@@ -241,7 +250,10 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
               padding: const EdgeInsets.all(AppSpacing.md),
               child: Text(
                 item.food.name,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
             ListTile(
@@ -270,7 +282,10 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
       case 'replace':
         context.push('${Routes.search}?mode=replace&item=${item.id}');
       case 'weight':
-        final grams = await showQuantityDialog(context, initial: item.quantityG);
+        final grams = await showQuantityDialog(
+          context,
+          initial: item.quantityG,
+        );
         if (grams != null) {
           ref.read(draftMealProvider.notifier).setQuantity(item.id, grams);
         }
@@ -313,19 +328,26 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
       case 'template':
         await _saveAsTemplate(context, meal);
       case 'duplicate':
-        ref.read(draftMealProvider.notifier).start(
+        ref
+            .read(draftMealProvider.notifier)
+            .start(
               Meal(
                 eatenAt: DateTime.now(),
                 name: meal.name,
                 items: meal.items
-                    .map((item) => MealItem(food: item.food, quantityG: item.quantityG))
+                    .map(
+                      (item) =>
+                          MealItem(food: item.food, quantityG: item.quantityG),
+                    )
                     .toList(),
                 source: meal.source,
               ),
             );
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Copie creee : modifiez-la puis enregistrez.')),
+            const SnackBar(
+              content: Text('Copie creee : modifiez-la puis enregistrez.'),
+            ),
           );
         }
       case 'note':
@@ -338,7 +360,9 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
               controller: controller,
               maxLines: 3,
               autofocus: true,
-              decoration: const InputDecoration(hintText: 'Par exemple : restaurant, invite…'),
+              decoration: const InputDecoration(
+                hintText: 'Par exemple : restaurant, invite…',
+              ),
             ),
             actions: [
               TextButton(
@@ -346,7 +370,8 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
                 child: const Text('Annuler'),
               ),
               FilledButton(
-                onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+                onPressed: () =>
+                    Navigator.of(dialogContext).pop(controller.text),
                 child: const Text('Valider'),
               ),
             ],
@@ -373,7 +398,8 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
             child: const Text('Annuler'),
           ),
           FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(controller.text.trim()),
             child: const Text('Enregistrer'),
           ),
         ],
@@ -382,7 +408,9 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
 
     if (name == null || name.isEmpty) return;
 
-    await ref.read(templatesProvider.notifier).save(
+    await ref
+        .read(templatesProvider.notifier)
+        .save(
           DateTime.now().microsecondsSinceEpoch.toString(),
           name,
           meal.items,
@@ -397,7 +425,11 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
 
 /// Carte de modification du nom et de l'heure du repas.
 class _MealDetailsCard extends StatelessWidget {
-  const _MealDetailsCard({required this.meal, required this.onRename, required this.onSetTime});
+  const _MealDetailsCard({
+    required this.meal,
+    required this.onRename,
+    required this.onSetTime,
+  });
 
   final Meal meal;
   final void Function(String) onRename;
@@ -428,7 +460,9 @@ class _MealDetailsCard extends StatelessWidget {
                       child: const Text('Annuler'),
                     ),
                     FilledButton(
-                      onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
+                      onPressed: () => Navigator.of(
+                        dialogContext,
+                      ).pop(controller.text.trim()),
                       child: const Text('Valider'),
                     ),
                   ],
@@ -458,7 +492,15 @@ class _MealDetailsCard extends StatelessWidget {
                 initialTime: TimeOfDay.fromDateTime(meal.eatenAt),
               );
               if (time == null) return;
-              onSetTime(DateTime(date.year, date.month, date.day, time.hour, time.minute));
+              onSetTime(
+                DateTime(
+                  date.year,
+                  date.month,
+                  date.day,
+                  time.hour,
+                  time.minute,
+                ),
+              );
             },
           ),
         ],
@@ -536,7 +578,8 @@ class _ScaleAllCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return SectionCard(
       title: 'Ajuster tout le repas',
-      subtitle: 'Utile lorsque l\'assiette etait plus grande ou plus petite que prevu',
+      subtitle:
+          'Utile lorsque l\'assiette etait plus grande ou plus petite que prevu',
       child: Wrap(
         spacing: AppSpacing.sm,
         children: [
@@ -547,10 +590,7 @@ class _ScaleAllCard extends StatelessWidget {
             ('Un peu plus', 1.25),
             ('Presque double', 1.8),
           ])
-            ActionChip(
-              label: Text(label),
-              onPressed: () => onApply(factor),
-            ),
+            ActionChip(label: Text(label), onPressed: () => onApply(factor)),
         ],
       ),
     );

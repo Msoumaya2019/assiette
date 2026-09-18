@@ -127,7 +127,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   _WelcomeStep(),
                   _PrivacyStep(
                     accepted: _privacyAccepted,
-                    onChanged: (value) => setState(() => _privacyAccepted = value),
+                    onChanged: (value) =>
+                        setState(() => _privacyAccepted = value),
                   ),
                   _AnalysisStep(
                     controller: _keyController,
@@ -136,9 +137,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     error: _keyError,
                     onSave: _saveKey,
                     onUseDemo: () async {
-                      await ref.read(settingsProvider.notifier).setAnalysisMode(
-                            AnalysisModeSetting.demo,
-                          );
+                      await ref
+                          .read(settingsProvider.notifier)
+                          .setAnalysisMode(AnalysisModeSetting.demo);
                       if (!mounted) return;
                       setState(() => _keySaved = true);
                     },
@@ -162,7 +163,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                       padding: const EdgeInsets.only(top: AppSpacing.sm),
                       child: Text(
                         'Cochez la case pour continuer.',
-                        style: TextStyle(fontSize: 12, color: context.palette.mutedText),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: context.palette.mutedText,
+                        ),
                       ),
                     ),
                 ],
@@ -189,17 +193,27 @@ class _WelcomeStep extends StatelessWidget {
           ),
           child: Column(
             children: [
-              Icon(Icons.restaurant_menu_rounded, size: 44, color: context.palette.carb),
+              Icon(
+                Icons.restaurant_menu_rounded,
+                size: 44,
+                color: context.palette.carb,
+              ),
               const SizedBox(height: AppSpacing.md),
               Text(
                 AppConfig.appName,
-                style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800),
+                style: const TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
               const SizedBox(height: AppSpacing.xs),
               Text(
                 'Estimez les glucides de vos repas en une photo.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: context.palette.mutedText),
+                style: TextStyle(
+                  fontSize: 14,
+                  color: context.palette.mutedText,
+                ),
               ),
             ],
           ),
@@ -208,25 +222,29 @@ class _WelcomeStep extends StatelessWidget {
         const _StepBullet(
           icon: Icons.photo_camera_rounded,
           title: 'Photographiez',
-          body: 'Cadrez l\'assiette. Une seconde photo sous un autre angle ameliore '
+          body:
+              'Cadrez l\'assiette. Une seconde photo sous un autre angle ameliore '
               'l\'estimation du volume.',
         ),
         const _StepBullet(
           icon: Icons.grain_rounded,
           title: 'Les glucides d\'abord',
-          body: 'Le resultat met en avant les glucides, avec la fourchette d\'incertitude '
+          body:
+              'Le resultat met en avant les glucides, avec la fourchette d\'incertitude '
               'et le detail aliment par aliment.',
         ),
         const _StepBullet(
           icon: Icons.tune_rounded,
           title: 'Corrigez librement',
-          body: 'Changez un poids, remplacez un aliment, ajoutez ce qui manque. '
+          body:
+              'Changez un poids, remplacez un aliment, ajoutez ce qui manque. '
               'Le total se recalcule aussitot.',
         ),
         const _StepBullet(
           icon: Icons.dataset_rounded,
           title: 'Valeurs de reference',
-          body: 'Les valeurs viennent de la table Ciqual de l\'ANSES et d\'Open Food Facts. '
+          body:
+              'Les valeurs viennent de la table Ciqual de l\'ANSES et d\'Open Food Facts. '
               'L\'analyse d\'image ne fait qu\'identifier les aliments et estimer les poids.',
         ),
       ],
@@ -292,18 +310,32 @@ class _PrivacyPoint extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.only(top: 3),
-          child: Icon(Icons.check_circle_outline_rounded, size: 18, color: context.colors.primary),
+          child: Icon(
+            Icons.check_circle_outline_rounded,
+            size: 18,
+            color: context.colors.primary,
+          ),
         ),
         const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               const SizedBox(height: 2),
               Text(
                 body,
-                style: TextStyle(fontSize: 13, height: 1.5, color: context.palette.mutedText),
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.5,
+                  color: context.palette.mutedText,
+                ),
               ),
             ],
           ),
@@ -344,7 +376,11 @@ class _AnalysisStep extends StatelessWidget {
           'Pour identifier les aliments sur une photo, l\'application utilise un modele '
           'multimodal. Vous pouvez fournir votre propre cle : elle sera conservee dans '
           'le trousseau securise du telephone.',
-          style: TextStyle(fontSize: 14, height: 1.5, color: context.palette.mutedText),
+          style: TextStyle(
+            fontSize: 14,
+            height: 1.5,
+            color: context.palette.mutedText,
+          ),
         ),
 
         const SizedBox(height: AppSpacing.lg),
@@ -388,14 +424,20 @@ class _AnalysisStep extends StatelessWidget {
                 ? const SizedBox(
                     width: 16,
                     height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
                 : const Icon(Icons.save_rounded, size: 18),
             label: const Text('Enregistrer la cle'),
           ),
           if (error != null) ...[
             const SizedBox(height: AppSpacing.sm),
-            Text(error!, style: const TextStyle(color: AppColors.danger, fontSize: 12)),
+            Text(
+              error!,
+              style: const TextStyle(color: AppColors.danger, fontSize: 12),
+            ),
           ],
           const SizedBox(height: AppSpacing.md),
           const Divider(),
@@ -409,7 +451,11 @@ class _AnalysisStep extends StatelessWidget {
           Text(
             'Le mode demonstration affiche des donnees de test : il sert a decouvrir '
             'l\'interface, pas a analyser de vraies photos.',
-            style: TextStyle(fontSize: 12, height: 1.4, color: context.palette.mutedText),
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.4,
+              color: context.palette.mutedText,
+            ),
           ),
         ],
 
@@ -418,19 +464,29 @@ class _AnalysisStep extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
-            color: context.colors.surfaceContainerHighest.withValues(alpha: 0.6),
+            color: context.colors.surfaceContainerHighest.withValues(
+              alpha: 0.6,
+            ),
             borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.lock_outline_rounded, size: 18, color: context.palette.mutedText),
+              Icon(
+                Icons.lock_outline_rounded,
+                size: 18,
+                color: context.palette.mutedText,
+              ),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
                   'Votre cle ne figure jamais dans l\'application. Elle est lue au moment '
                   'de l\'analyse depuis le trousseau du systeme.',
-                  style: TextStyle(fontSize: 12, height: 1.5, color: context.palette.mutedText),
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.5,
+                    color: context.palette.mutedText,
+                  ),
                 ),
               ),
             ],
@@ -461,7 +517,8 @@ class _GoalsStep extends StatelessWidget {
         const SizedBox(height: AppSpacing.lg),
 
         const EstimateBanner(
-          message: 'L\'application ne propose aucun objectif et ne suggere aucun chiffre : '
+          message:
+              'L\'application ne propose aucun objectif et ne suggere aucun chiffre : '
               'un objectif depend de votre situation. Si vous en avez besoin, '
               'demandez-le a un professionnel de sante.',
         ),
@@ -471,12 +528,14 @@ class _GoalsStep extends StatelessWidget {
         const _StepBullet(
           icon: Icons.insights_rounded,
           title: 'Suivi',
-          body: 'Une fois un objectif defini, chaque ecran affiche votre progression du jour.',
+          body:
+              'Une fois un objectif defini, chaque ecran affiche votre progression du jour.',
         ),
         const _StepBullet(
           icon: Icons.timer_outlined,
           title: 'Ensuite',
-          body: 'Vous pourrez ajouter un rappel pour ne pas oublier de renseigner un repas.',
+          body:
+              'Vous pourrez ajouter un rappel pour ne pas oublier de renseigner un repas.',
         ),
       ],
     );
@@ -484,7 +543,11 @@ class _GoalsStep extends StatelessWidget {
 }
 
 class _StepBullet extends StatelessWidget {
-  const _StepBullet({required this.icon, required this.title, required this.body});
+  const _StepBullet({
+    required this.icon,
+    required this.title,
+    required this.body,
+  });
 
   final IconData icon;
   final String title;
@@ -510,11 +573,21 @@ class _StepBullet extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
                 const SizedBox(height: 3),
                 Text(
                   body,
-                  style: TextStyle(fontSize: 13, height: 1.5, color: context.palette.mutedText),
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.5,
+                    color: context.palette.mutedText,
+                  ),
                 ),
               ],
             ),

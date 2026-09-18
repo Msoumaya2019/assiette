@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Meme fond, en mode sombre : reprend darkBackground de lib/core/theme.dart. -->
+    <color name="splash_background">#16130F</color>
+</resources>

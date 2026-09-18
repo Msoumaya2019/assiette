@@ -109,7 +109,11 @@ class AppPalette extends ThemeExtension<AppPalette> {
       fiber: Color.lerp(fiber, other.fiber, t)!,
       mutedText: Color.lerp(mutedText, other.mutedText, t)!,
       cardBorder: Color.lerp(cardBorder, other.cardBorder, t)!,
-      estimateBackground: Color.lerp(estimateBackground, other.estimateBackground, t)!,
+      estimateBackground: Color.lerp(
+        estimateBackground,
+        other.estimateBackground,
+        t,
+      )!,
     );
   }
 }
@@ -251,14 +255,18 @@ class AppTheme {
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-          side: BorderSide(color: isDark ? AppColors.darkOutline : AppColors.lightOutline),
+          side: BorderSide(
+            color: isDark ? AppColors.darkOutline : AppColors.lightOutline,
+          ),
         ),
       ),
 
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           minimumSize: const Size.fromHeight(54),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.radiusMd)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+          ),
           textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),
       ),
@@ -266,7 +274,9 @@ class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           minimumSize: const Size.fromHeight(52),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.radiusMd)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+          ),
           side: BorderSide(color: scheme.outline),
           textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
         ),
@@ -280,8 +290,13 @@ class AppTheme {
 
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: isDark ? AppColors.darkSurfaceVariant : AppColors.lightSurfaceVariant,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+        fillColor: isDark
+            ? AppColors.darkSurfaceVariant
+            : AppColors.lightSurfaceVariant,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 18,
+          vertical: 16,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           borderSide: BorderSide.none,
@@ -309,7 +324,11 @@ class AppTheme {
         side: BorderSide(color: scheme.outline),
         backgroundColor: scheme.surface,
         selectedColor: scheme.primaryContainer,
-        labelStyle: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: scheme.onSurface),
+        labelStyle: TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w600,
+          color: scheme.onSurface,
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       ),
 
@@ -345,9 +364,17 @@ class AppTheme {
 
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: isDark ? AppColors.darkSurfaceVariant : const Color(0xFF3A322A),
-        contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.radiusMd)),
+        backgroundColor: isDark
+            ? AppColors.darkSurfaceVariant
+            : const Color(0xFF3A322A),
+        contentTextStyle: const TextStyle(
+          color: Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+        ),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        ),
         insetPadding: const EdgeInsets.all(AppSpacing.md),
       ),
 
@@ -356,14 +383,18 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         showDragHandle: true,
         shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(AppSpacing.radiusXl)),
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppSpacing.radiusXl),
+          ),
         ),
       ),
 
       dialogTheme: DialogThemeData(
         backgroundColor: scheme.surface,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.radiusLg)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
+        ),
       ),
 
       progressIndicatorTheme: ProgressIndicatorThemeData(
@@ -372,7 +403,9 @@ class AppTheme {
       ),
 
       listTileTheme: ListTileThemeData(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.radiusMd)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        ),
         iconColor: scheme.onSurfaceVariant,
       ),
     );

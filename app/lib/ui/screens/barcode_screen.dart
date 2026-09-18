@@ -28,7 +28,12 @@ class BarcodeScreen extends ConsumerStatefulWidget {
 class _BarcodeScreenState extends ConsumerState<BarcodeScreen> {
   final MobileScannerController _controller = MobileScannerController(
     detectionSpeed: DetectionSpeed.noDuplicates,
-    formats: const [BarcodeFormat.ean13, BarcodeFormat.ean8, BarcodeFormat.upcA, BarcodeFormat.upcE],
+    formats: const [
+      BarcodeFormat.ean13,
+      BarcodeFormat.ean8,
+      BarcodeFormat.upcA,
+      BarcodeFormat.upcE,
+    ],
   );
 
   bool _handling = false;
@@ -47,7 +52,10 @@ class _BarcodeScreenState extends ConsumerState<BarcodeScreen> {
 
     final code = capture.barcodes
         .map((barcode) => barcode.rawValue)
-        .firstWhere((value) => value != null && value.length >= 8, orElse: () => null);
+        .firstWhere(
+          (value) => value != null && value.length >= 8,
+          orElse: () => null,
+        );
 
     if (code == null || code == _lastCode) return;
 
@@ -61,7 +69,9 @@ class _BarcodeScreenState extends ConsumerState<BarcodeScreen> {
     await _controller.stop();
 
     try {
-      final product = await ref.read(openFoodFactsProvider).fetchByBarcode(code);
+      final product = await ref
+          .read(openFoodFactsProvider)
+          .fetchByBarcode(code);
       if (!mounted) return;
       setState(() {
         _product = product;
@@ -92,14 +102,19 @@ class _BarcodeScreenState extends ConsumerState<BarcodeScreen> {
   }
 
   Future<void> _addProduct(Food food) async {
-    final grams = await showQuantityDialog(context, initial: food.servingSizeG ?? 100);
+    final grams = await showQuantityDialog(
+      context,
+      initial: food.servingSizeG ?? 100,
+    );
     if (grams == null || grams <= 0) return;
 
     final item = MealItem(food: food, quantityG: grams, isEstimate: false);
     final draft = ref.read(draftMealProvider);
 
     if (draft == null) {
-      ref.read(draftMealProvider.notifier).start(
+      ref
+          .read(draftMealProvider.notifier)
+          .start(
             Meal(
               eatenAt: DateTime.now(),
               name: _suggestName(DateTime.now()),
@@ -216,7 +231,10 @@ class _ScannerOverlay extends StatelessWidget {
           height: 160,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.9), width: 2.5),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.9),
+              width: 2.5,
+            ),
           ),
         ),
       ),
@@ -225,7 +243,11 @@ class _ScannerOverlay extends StatelessWidget {
 }
 
 class _ProductPanel extends StatelessWidget {
-  const _ProductPanel({required this.food, required this.onAdd, required this.onScanAgain});
+  const _ProductPanel({
+    required this.food,
+    required this.onAdd,
+    required this.onScanAgain,
+  });
 
   final Food food;
   final VoidCallback onAdd;
@@ -249,7 +271,8 @@ class _ProductPanel extends StatelessWidget {
                   width: 64,
                   height: 64,
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, stack) => const SizedBox(width: 64, height: 64),
+                  errorBuilder: (context, error, stack) =>
+                      const SizedBox(width: 64, height: 64),
                 ),
               ),
             const SizedBox(width: AppSpacing.md),
@@ -259,12 +282,21 @@ class _ProductPanel extends StatelessWidget {
                 children: [
                   Text(
                     food.name,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                   if (food.brand != null)
-                    Text(food.brand!, style: TextStyle(fontSize: 13, color: palette.mutedText)),
+                    Text(
+                      food.brand!,
+                      style: TextStyle(fontSize: 13, color: palette.mutedText),
+                    ),
                   const SizedBox(height: 4),
-                  const SourceBadge(label: 'Open Food Facts', color: Color(0xFF4A7C94)),
+                  const SourceBadge(
+                    label: 'Open Food Facts',
+                    color: Color(0xFF4A7C94),
+                  ),
                 ],
               ),
             ),
@@ -285,24 +317,37 @@ class _ProductPanel extends StatelessWidget {
               children: [
                 Text(
                   Format.carbs(food.per100g.carbs),
-                  style: TextStyle(fontSize: 34, fontWeight: FontWeight.w800, color: palette.carb),
+                  style: TextStyle(
+                    fontSize: 34,
+                    fontWeight: FontWeight.w800,
+                    color: palette.carb,
+                  ),
                 ),
                 const SizedBox(width: 6),
                 Text(
                   'g de glucides\npour 100 g',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: palette.carb),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: palette.carb,
+                  ),
                 ),
                 const Spacer(),
                 Text(
                   Format.kcal(food.per100g.kcal),
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: palette.mutedText),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: palette.mutedText,
+                  ),
                 ),
               ],
             ),
           )
         else
           const EstimateBanner(
-            message: 'Ce produit figure dans la base mais sans valeurs nutritionnelles. '
+            message:
+                'Ce produit figure dans la base mais sans valeurs nutritionnelles. '
                 'Vous pouvez lire l\'etiquette pour les saisir.',
             severity: EstimateSeverity.warning,
           ),
@@ -344,7 +389,9 @@ class _ErrorPanel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         EstimateBanner(
-          message: failure.hint == null ? failure.message : '${failure.message}. ${failure.hint}',
+          message: failure.hint == null
+              ? failure.message
+              : '${failure.message}. ${failure.hint}',
           severity: EstimateSeverity.warning,
         ),
         const SizedBox(height: AppSpacing.md),

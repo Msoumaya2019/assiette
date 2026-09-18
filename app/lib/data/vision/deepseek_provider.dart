@@ -60,7 +60,8 @@ class DeepSeekVisionProvider implements VisionProvider {
       {
         'type': 'image_url',
         'image_url': {
-          'url': 'data:${request.mimeType};base64,${base64Encode(request.image)}',
+          'url':
+              'data:${request.mimeType};base64,${base64Encode(request.image)}',
           'detail': 'high',
         },
       },
@@ -70,7 +71,8 @@ class DeepSeekVisionProvider implements VisionProvider {
       blocks.add({
         'type': 'image_url',
         'image_url': {
-          'url': 'data:${request.secondMimeType ?? request.mimeType};base64,${base64Encode(request.secondImage!)}',
+          'url':
+              'data:${request.secondMimeType ?? request.mimeType};base64,${base64Encode(request.secondImage!)}',
           'detail': 'high',
         },
       });
@@ -83,7 +85,10 @@ class DeepSeekVisionProvider implements VisionProvider {
       temperature: 0.2,
     );
 
-    final result = parseMealAnalysis(content, promptVersion: meal_prompt.promptVersion);
+    final result = parseMealAnalysis(
+      content,
+      promptVersion: meal_prompt.promptVersion,
+    );
     if (result.isEmpty) throw const NoFoodDetectedFailure();
     return result;
   }
@@ -95,12 +100,15 @@ class DeepSeekVisionProvider implements VisionProvider {
     final blocks = <Map<String, dynamic>>[
       {
         'type': 'text',
-        'text': label_prompt.buildLabelUserPrompt(hasSecondImage: request.hasSecondImage),
+        'text': label_prompt.buildLabelUserPrompt(
+          hasSecondImage: request.hasSecondImage,
+        ),
       },
       {
         'type': 'image_url',
         'image_url': {
-          'url': 'data:${request.mimeType};base64,${base64Encode(request.image)}',
+          'url':
+              'data:${request.mimeType};base64,${base64Encode(request.image)}',
           'detail': 'high',
         },
       },
@@ -110,7 +118,8 @@ class DeepSeekVisionProvider implements VisionProvider {
       blocks.add({
         'type': 'image_url',
         'image_url': {
-          'url': 'data:${request.secondMimeType ?? request.mimeType};base64,${base64Encode(request.secondImage!)}',
+          'url':
+              'data:${request.secondMimeType ?? request.mimeType};base64,${base64Encode(request.secondImage!)}',
           'detail': 'high',
         },
       });
@@ -123,7 +132,10 @@ class DeepSeekVisionProvider implements VisionProvider {
       temperature: 0.1,
     );
 
-    return parseLabelExtraction(content, promptVersion: label_prompt.promptVersion);
+    return parseLabelExtraction(
+      content,
+      promptVersion: label_prompt.promptVersion,
+    );
   }
 
   void _ensureConfigured() {
@@ -193,7 +205,9 @@ class DeepSeekVisionProvider implements VisionProvider {
         lastError = const InvalidResponseFailure();
       } on AppFailure catch (error) {
         // Une erreur de fond (cle refusee, quota) ne se retente pas.
-        if (error is MissingCredentialFailure || error is RateLimitFailure) rethrow;
+        if (error is MissingCredentialFailure || error is RateLimitFailure) {
+          rethrow;
+        }
         if (error is ProviderFailure && (error.statusCode ?? 0) < 500) rethrow;
         lastError = error;
       } on SocketException {

@@ -33,17 +33,29 @@ class PrivacyScreen extends ConsumerWidget {
                 const SizedBox(width: AppSpacing.sm),
                 Text(
                   'Version ${PrivacyPolicy.version}',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: context.palette.mutedText),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: context.palette.mutedText,
+                  ),
                 ),
                 const Spacer(),
                 if (accepted)
                   const Row(
                     children: [
-                      Icon(Icons.check_circle_rounded, size: 16, color: AppColors.success),
+                      Icon(
+                        Icons.check_circle_rounded,
+                        size: 16,
+                        color: AppColors.success,
+                      ),
                       SizedBox(width: 4),
                       Text(
                         'Acceptee',
-                        style: TextStyle(fontSize: 12, color: AppColors.success, fontWeight: FontWeight.w700),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.success,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ],
                   ),
@@ -64,7 +76,8 @@ class PrivacyScreen extends ConsumerWidget {
             ],
 
             const EstimateBanner(
-              message: 'En resume : vos donnees restent sur votre telephone, seule l\'image '
+              message:
+                  'En resume : vos donnees restent sur votre telephone, seule l\'image '
                   'du repas est transmise pour analyse, et rien n\'est conserve cote serveur.',
             ),
 
@@ -78,7 +91,9 @@ class PrivacyScreen extends ConsumerWidget {
                       .acceptPrivacyPolicy(PrivacyPolicy.version);
                   if (!context.mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Politique de confidentialite acceptee.')),
+                    const SnackBar(
+                      content: Text('Politique de confidentialite acceptee.'),
+                    ),
                   );
                 },
                 child: const Text('J\'accepte cette politique'),

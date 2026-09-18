@@ -119,7 +119,10 @@ class CiqualRepository {
     final needle = normalizeForSearch(detectedName);
     if (needle.isEmpty) return null;
 
-    final tokens = needle.split(' ').where((token) => token.length > 2).toList();
+    final tokens = needle
+        .split(' ')
+        .where((token) => token.length > 2)
+        .toList();
 
     Food? best;
     var bestScore = 0.0;
@@ -173,8 +176,10 @@ class CiqualRepository {
   // fait plusieurs milliers d'entrees et la recherche doit rester instantanee.
   final Map<String, String> _searchKeyCache = {};
 
-  String _searchKey(Food food) =>
-      _searchKeyCache.putIfAbsent(food.sourceRef ?? food.name, () => normalizeForSearch(food.name));
+  String _searchKey(Food food) => _searchKeyCache.putIfAbsent(
+    food.sourceRef ?? food.name,
+    () => normalizeForSearch(food.name),
+  );
 }
 
 /// Minuscule sans accents, espaces normalises.
@@ -183,16 +188,36 @@ class CiqualRepository {
 /// toutes les plateformes.
 String normalizeForSearch(String input) {
   const replacements = {
-    'à': 'a', 'á': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a', 'å': 'a',
+    'à': 'a',
+    'á': 'a',
+    'â': 'a',
+    'ã': 'a',
+    'ä': 'a',
+    'å': 'a',
     'ç': 'c',
-    'è': 'e', 'é': 'e', 'ê': 'e', 'ë': 'e',
-    'ì': 'i', 'í': 'i', 'î': 'i', 'ï': 'i',
+    'è': 'e',
+    'é': 'e',
+    'ê': 'e',
+    'ë': 'e',
+    'ì': 'i',
+    'í': 'i',
+    'î': 'i',
+    'ï': 'i',
     'ñ': 'n',
-    'ò': 'o', 'ó': 'o', 'ô': 'o', 'õ': 'o', 'ö': 'o',
-    'ù': 'u', 'ú': 'u', 'û': 'u', 'ü': 'u',
-    'ý': 'y', 'ÿ': 'y',
+    'ò': 'o',
+    'ó': 'o',
+    'ô': 'o',
+    'õ': 'o',
+    'ö': 'o',
+    'ù': 'u',
+    'ú': 'u',
+    'û': 'u',
+    'ü': 'u',
+    'ý': 'y',
+    'ÿ': 'y',
     'ß': 'ss',
-    'œ': 'oe', 'æ': 'ae',
+    'œ': 'oe',
+    'æ': 'ae',
   };
 
   final lower = input.toLowerCase();
@@ -202,8 +227,5 @@ String normalizeForSearch(String input) {
     buffer.write(replacements[char] ?? char);
   }
 
-  return buffer
-      .toString()
-      .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
-      .trim();
+  return buffer.toString().replaceAll(RegExp(r'[^a-z0-9]+'), ' ').trim();
 }

@@ -71,7 +71,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 
     // La recherche distante est differee : l'API Open Food Facts limite le
     // nombre de requetes par minute.
-    _debounce = Timer(const Duration(milliseconds: 600), () => _searchProducts(query));
+    _debounce = Timer(
+      const Duration(milliseconds: 600),
+      () => _searchProducts(query),
+    );
   }
 
   Future<void> _searchProducts(String query) async {
@@ -81,7 +84,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     });
 
     try {
-      final results = await ref.read(openFoodFactsProvider).search(query, limit: 20);
+      final results = await ref
+          .read(openFoodFactsProvider)
+          .search(query, limit: 20);
       if (!mounted || _controller.text.trim() != query.trim()) return;
       setState(() {
         _productResults = results;
@@ -207,7 +212,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   ),
                 ],
                 selected: {_tab},
-                onSelectionChanged: (selection) => setState(() => _tab = selection.first),
+                onSelectionChanged: (selection) =>
+                    setState(() => _tab = selection.first),
               ),
             ),
 
@@ -217,14 +223,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               child: query.length < 2
                   ? const _SearchHint()
                   : _tab == 0
-                      ? _LocalResults(results: _localResults, onSelect: _selectFood)
-                      : _ProductResults(
-                          results: _productResults,
-                          loading: _searchingProducts,
-                          error: _productError,
-                          onSelect: _selectFood,
-                          onRetry: () => _searchProducts(query),
-                        ),
+                  ? _LocalResults(results: _localResults, onSelect: _selectFood)
+                  : _ProductResults(
+                      results: _productResults,
+                      loading: _searchingProducts,
+                      error: _productError,
+                      onSelect: _selectFood,
+                      onRetry: () => _searchProducts(query),
+                    ),
             ),
           ],
         ),
@@ -241,7 +247,8 @@ class _SearchHint extends StatelessWidget {
     return const EmptyState(
       icon: Icons.search_rounded,
       title: 'Cherchez un aliment',
-      message: 'Tapez au moins deux lettres. Les aliments courants sont disponibles '
+      message:
+          'Tapez au moins deux lettres. Les aliments courants sont disponibles '
           'hors ligne ; les produits emballes viennent d\'Open Food Facts.',
     );
   }
@@ -259,15 +266,22 @@ class _LocalResults extends StatelessWidget {
       return const EmptyState(
         icon: Icons.search_off_rounded,
         title: 'Aucun aliment trouve',
-        message: 'Essayez un mot plus simple, par exemple « riz » plutot que '
+        message:
+            'Essayez un mot plus simple, par exemple « riz » plutot que '
             '« riz basmati long grain ».',
       );
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, AppSpacing.xl),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        0,
+        AppSpacing.md,
+        AppSpacing.xl,
+      ),
       itemCount: results.length + 1,
-      separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.sm),
+      separatorBuilder: (context, index) =>
+          const SizedBox(height: AppSpacing.sm),
       itemBuilder: (context, index) {
         if (index == results.length) {
           return Padding(
@@ -279,7 +293,10 @@ class _LocalResults extends StatelessWidget {
             ),
           );
         }
-        return _FoodTile(food: results[index], onTap: () => onSelect(results[index]));
+        return _FoodTile(
+          food: results[index],
+          onTap: () => onSelect(results[index]),
+        );
       },
     );
   }
@@ -334,15 +351,22 @@ class _ProductResults extends StatelessWidget {
       return const EmptyState(
         icon: Icons.inventory_2_outlined,
         title: 'Aucun produit trouve',
-        message: 'La base de produits est collaborative : un produit recent peut '
+        message:
+            'La base de produits est collaborative : un produit recent peut '
             'ne pas y figurer. Utilisez l\'onglet Aliments ou lisez l\'etiquette.',
       );
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.md, 0, AppSpacing.md, AppSpacing.xl),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.md,
+        0,
+        AppSpacing.md,
+        AppSpacing.xl,
+      ),
       itemCount: results.length + 1,
-      separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.sm),
+      separatorBuilder: (context, index) =>
+          const SizedBox(height: AppSpacing.sm),
       itemBuilder: (context, index) {
         if (index == results.length) {
           return Padding(
@@ -354,7 +378,10 @@ class _ProductResults extends StatelessWidget {
             ),
           );
         }
-        return _FoodTile(food: results[index], onTap: () => onSelect(results[index]));
+        return _FoodTile(
+          food: results[index],
+          onTap: () => onSelect(results[index]),
+        );
       },
     );
   }
@@ -387,7 +414,8 @@ class _FoodTile extends StatelessWidget {
                     width: 48,
                     height: 48,
                     fit: BoxFit.cover,
-                    errorBuilder: (context, error, stack) => _PlaceholderIcon(food: food),
+                    errorBuilder: (context, error, stack) =>
+                        _PlaceholderIcon(food: food),
                     loadingBuilder: (context, child, progress) =>
                         progress == null ? child : _PlaceholderIcon(food: food),
                   ),
@@ -402,7 +430,10 @@ class _FoodTile extends StatelessWidget {
                   children: [
                     Text(
                       food.name,
-                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -410,7 +441,10 @@ class _FoodTile extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         food.brand!,
-                        style: TextStyle(fontSize: 12, color: palette.mutedText),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: palette.mutedText,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -440,7 +474,10 @@ class _FoodTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
-              Icon(Icons.add_circle_outline_rounded, color: context.colors.primary),
+              Icon(
+                Icons.add_circle_outline_rounded,
+                color: context.colors.primary,
+              ),
             ],
           ),
         ),
@@ -464,7 +501,9 @@ class _PlaceholderIcon extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
       ),
       child: Icon(
-        food.source == FoodSource.openFoodFacts ? Icons.inventory_2_outlined : Icons.restaurant_rounded,
+        food.source == FoodSource.openFoodFacts
+            ? Icons.inventory_2_outlined
+            : Icons.restaurant_rounded,
         size: 20,
         color: context.palette.mutedText,
       ),
@@ -473,7 +512,11 @@ class _PlaceholderIcon extends StatelessWidget {
 }
 
 class _MiniValue extends StatelessWidget {
-  const _MiniValue({required this.label, required this.value, required this.color});
+  const _MiniValue({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
 
   final String label;
   final String value;
@@ -485,8 +528,14 @@ class _MiniValue extends StatelessWidget {
       text: TextSpan(
         style: TextStyle(fontSize: 11, color: color),
         children: [
-          TextSpan(text: value, style: const TextStyle(fontWeight: FontWeight.w800)),
-          TextSpan(text: ' $label', style: TextStyle(color: context.palette.mutedText)),
+          TextSpan(
+            text: value,
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          TextSpan(
+            text: ' $label',
+            style: TextStyle(color: context.palette.mutedText),
+          ),
         ],
       ),
     );

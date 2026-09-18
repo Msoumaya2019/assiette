@@ -46,82 +46,124 @@ class Routes {
 /// le recreer a chaque reconstruction reinitialiserait la pile de navigation.
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
-      initialLocation: Routes.home,
-      routes: [
-        StatefulShellRoute.indexedStack(
-          builder: (context, state, navigationShell) => AppShell(navigationShell: navigationShell),
-          branches: [
-            StatefulShellBranch(
-              routes: [
-                GoRoute(path: Routes.home, builder: (context, state) => const HomeScreen()),
-              ],
-            ),
-            StatefulShellBranch(
-              routes: [
-                GoRoute(path: Routes.history, builder: (context, state) => const HistoryScreen()),
-              ],
-            ),
-            StatefulShellBranch(
-              routes: [
-                GoRoute(path: Routes.stats, builder: (context, state) => const DashboardScreen()),
-              ],
-            ),
-            StatefulShellBranch(
-              routes: [
-                GoRoute(path: Routes.favorites, builder: (context, state) => const FavoritesScreen()),
-              ],
-            ),
-            StatefulShellBranch(
-              routes: [
-                GoRoute(path: Routes.settings, builder: (context, state) => const SettingsScreen()),
-              ],
-            ),
-          ],
-        ),
-
-        // Ecrans plein ecran, hors barre de navigation.
-        GoRoute(
-          path: Routes.capture,
-          builder: (context, state) => CaptureScreen(
-            source: state.uri.queryParameters['source'],
+    initialLocation: Routes.home,
+    routes: [
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) =>
+            AppShell(navigationShell: navigationShell),
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: Routes.home,
+                builder: (context, state) => const HomeScreen(),
+              ),
+            ],
           ),
-        ),
-        GoRoute(path: Routes.analysis, builder: (context, state) => const AnalysisScreen()),
-        GoRoute(path: Routes.review, builder: (context, state) => const MealReviewScreen()),
-        GoRoute(path: Routes.search, builder: (context, state) => const SearchScreen()),
-        GoRoute(path: Routes.barcode, builder: (context, state) => const BarcodeScreen()),
-        GoRoute(path: Routes.label, builder: (context, state) => const LabelScreen()),
-        GoRoute(path: Routes.templates, builder: (context, state) => const TemplatesScreen()),
-        GoRoute(path: Routes.goals, builder: (context, state) => const GoalsScreen()),
-        GoRoute(path: Routes.privacy, builder: (context, state) => const PrivacyScreen()),
-        GoRoute(path: Routes.onboarding, builder: (context, state) => const OnboardingScreen()),
-      ],
-      errorBuilder: (context, state) => Scaffold(
-        appBar: AppBar(title: const Text('Page introuvable')),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.explore_off_rounded, size: 40),
-                const SizedBox(height: 16),
-                Text(
-                  'Cet ecran n\'existe pas.',
-                  style: Theme.of(context).textTheme.titleMedium,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 20),
-                FilledButton(
-                  onPressed: () => context.go(Routes.home),
-                  child: const Text('Revenir a l\'accueil'),
-                ),
-              ],
-            ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: Routes.history,
+                builder: (context, state) => const HistoryScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: Routes.stats,
+                builder: (context, state) => const DashboardScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: Routes.favorites,
+                builder: (context, state) => const FavoritesScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: Routes.settings,
+                builder: (context, state) => const SettingsScreen(),
+              ),
+            ],
+          ),
+        ],
+      ),
+
+      // Ecrans plein ecran, hors barre de navigation.
+      GoRoute(
+        path: Routes.capture,
+        builder: (context, state) =>
+            CaptureScreen(source: state.uri.queryParameters['source']),
+      ),
+      GoRoute(
+        path: Routes.analysis,
+        builder: (context, state) => const AnalysisScreen(),
+      ),
+      GoRoute(
+        path: Routes.review,
+        builder: (context, state) => const MealReviewScreen(),
+      ),
+      GoRoute(
+        path: Routes.search,
+        builder: (context, state) => const SearchScreen(),
+      ),
+      GoRoute(
+        path: Routes.barcode,
+        builder: (context, state) => const BarcodeScreen(),
+      ),
+      GoRoute(
+        path: Routes.label,
+        builder: (context, state) => const LabelScreen(),
+      ),
+      GoRoute(
+        path: Routes.templates,
+        builder: (context, state) => const TemplatesScreen(),
+      ),
+      GoRoute(
+        path: Routes.goals,
+        builder: (context, state) => const GoalsScreen(),
+      ),
+      GoRoute(
+        path: Routes.privacy,
+        builder: (context, state) => const PrivacyScreen(),
+      ),
+      GoRoute(
+        path: Routes.onboarding,
+        builder: (context, state) => const OnboardingScreen(),
+      ),
+    ],
+    errorBuilder: (context, state) => Scaffold(
+      appBar: AppBar(title: const Text('Page introuvable')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.explore_off_rounded, size: 40),
+              const SizedBox(height: 16),
+              Text(
+                'Cet ecran n\'existe pas.',
+                style: Theme.of(context).textTheme.titleMedium,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: () => context.go(Routes.home),
+                child: const Text('Revenir a l\'accueil'),
+              ),
+            ],
           ),
         ),
       ),
-    );
+    ),
+  );
 });
 
 /// Indique si l'assistant de premiere utilisation doit etre affiche.

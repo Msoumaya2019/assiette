@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- A partir d'Android 12 (API 31), le systeme dessine lui-meme l'ecran de
+         demarrage et n'utilise plus windowBackground pour cela : sans ces
+         attributs, l'ecran resterait blanc sur la quasi-totalite des
+         telephones actuels. L'icone n'est pas redefinie, le systeme reprend
+         android:icon — donc l'icone adaptative, correctement dimensionnee.
+
+         La couleur, elle, n'a pas besoin de variante ici : @color/splash_background
+         se resout tout seul en clair ou en sombre via values-night/colors.xml. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowSplashScreenBackground">@color/splash_background</item>
+        <item name="android:windowBackground">@drawable/launch_background</item>
+    </style>
+</resources>

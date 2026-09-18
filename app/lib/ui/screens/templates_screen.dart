@@ -41,7 +41,8 @@ class TemplatesScreen extends ConsumerWidget {
               return EmptyState(
                 icon: Icons.bookmark_border_rounded,
                 title: 'Aucun repas enregistre',
-                message: 'Composez un repas, puis enregistrez-le comme modele depuis '
+                message:
+                    'Composez un repas, puis enregistrez-le comme modele depuis '
                     'l\'ecran de verification. Vous pourrez le reutiliser en un geste.',
                 action: FilledButton.icon(
                   onPressed: () => context.push(Routes.search),
@@ -59,13 +60,18 @@ class TemplatesScreen extends ConsumerWidget {
                 AppSpacing.xxl,
               ),
               itemCount: items.length,
-              separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.sm),
+              separatorBuilder: (context, index) =>
+                  const SizedBox(height: AppSpacing.sm),
               itemBuilder: (context, index) => _TemplateCard(
                 template: items[index],
                 onUse: () => _use(context, ref, items[index]),
                 onEdit: () {
-                  ref.read(draftMealProvider.notifier).start(
-                        ref.read(templatesProvider.notifier).instantiate(items[index]),
+                  ref
+                      .read(draftMealProvider.notifier)
+                      .start(
+                        ref
+                            .read(templatesProvider.notifier)
+                            .instantiate(items[index]),
                       );
                   context.push(Routes.review);
                 },
@@ -78,7 +84,11 @@ class TemplatesScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _use(BuildContext context, WidgetRef ref, MealTemplate template) async {
+  Future<void> _use(
+    BuildContext context,
+    WidgetRef ref,
+    MealTemplate template,
+  ) async {
     final meal = ref.read(templatesProvider.notifier).instantiate(template);
     await ref.read(mealsProvider.notifier).save(meal);
 
@@ -93,7 +103,11 @@ class TemplatesScreen extends ConsumerWidget {
     context.go(Routes.home);
   }
 
-  Future<void> _confirmDelete(BuildContext context, WidgetRef ref, MealTemplate template) async {
+  Future<void> _confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    MealTemplate template,
+  ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -148,18 +162,28 @@ class _TemplateCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     template.name,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
                     color: palette.carb.withValues(alpha: 0.14),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     '${Format.carbs(totals.carbs)} g gluc.',
-                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: palette.carb),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: palette.carb,
+                    ),
                   ),
                 ),
               ],
@@ -185,7 +209,10 @@ class _TemplateCard extends StatelessWidget {
                   ),
                 if (template.items.length > 4)
                   Chip(
-                    label: Text('+${template.items.length - 4}', style: const TextStyle(fontSize: 11)),
+                    label: Text(
+                      '+${template.items.length - 4}',
+                      style: const TextStyle(fontSize: 11),
+                    ),
                     visualDensity: VisualDensity.compact,
                   ),
               ],
@@ -198,7 +225,9 @@ class _TemplateCard extends StatelessWidget {
                     onPressed: onUse,
                     icon: const Icon(Icons.add_rounded, size: 18),
                     label: const Text('Ajouter'),
-                    style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(44)),
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size.fromHeight(44),
+                    ),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.sm),

@@ -47,7 +47,10 @@ class AppShell extends StatelessWidget {
         child: DecoratedBox(
           decoration: BoxDecoration(
             border: Border(
-              top: BorderSide(color: Theme.of(context).colorScheme.outline, width: 1),
+              top: BorderSide(
+                color: Theme.of(context).colorScheme.outline,
+                width: 1,
+              ),
             ),
           ),
           child: NavigationBar(

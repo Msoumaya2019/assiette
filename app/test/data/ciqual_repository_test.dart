@@ -81,6 +81,24 @@ const List<Map<String, dynamic>> _sample = [
     'fiber': 0.0,
     'salt': 0.12,
   },
+  // Entree au nom accentue, indispensable pour eprouver la recherche sans
+  // accent : la table Ciqual reelle compte 42 aliments dont le nom contient
+  // « cereales », mais aucun des cinq ci-dessus.
+  {
+    'code': '9000',
+    'name': 'Céréales pour petit déjeuner, nature',
+    'n': 'cereales pour petit dejeuner nature',
+    'group': '09',
+    'groupName': 'Cereales et derives',
+    'kcal': 380,
+    'carbs': 78.0,
+    'sugars': 8.0,
+    'starch': 70.0,
+    'protein': 8.5,
+    'fat': 2.5,
+    'fiber': 6.0,
+    'salt': 0.9,
+  },
 ];
 
 CiqualRepository repository() {
@@ -152,15 +170,35 @@ void main() {
       final repo = repository();
       // « cuit » ne porte pas d'accent, mais « grille » est ecrit « grille »
       // dans la table : la recherche doit tolerer les deux formes.
-      expect(repo.search('grille').map((food) => food.sourceRef), contains('1000'));
-      expect(repo.search('grillé').map((food) => food.sourceRef), contains('1000'));
+      expect(
+        repo.search('grille').map((food) => food.sourceRef),
+        contains('1000'),
+      );
+      expect(
+        repo.search('grillé').map((food) => food.sourceRef),
+        contains('1000'),
+      );
     });
 
-    test('trouve un aliment meme si la requete contient un accent', () {
-      final repo = repository();
-      expect(repo.search('céréales'), isNotEmpty);
-      expect(repo.search('cereales'), isNotEmpty);
-    });
+    test(
+      'une requete accentuee et son equivalent sans accent donnent le meme resultat',
+      () {
+        final repo = repository();
+        // L'accent est retire des deux cotes de la comparaison, requete et nom :
+        // les deux graphies doivent donc remonter exactement les memes aliments.
+        final avecAccent = repo
+            .search('céréales')
+            .map((food) => food.sourceRef)
+            .toList();
+        final sansAccent = repo
+            .search('cereales')
+            .map((food) => food.sourceRef)
+            .toList();
+        expect(avecAccent, isNotEmpty);
+        expect(avecAccent, contains('9000'));
+        expect(avecAccent, sansAccent);
+      },
+    );
 
     test('une requete vide ne renvoie rien', () {
       final repo = repository();

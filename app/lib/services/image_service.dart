@@ -83,14 +83,20 @@ class ImageService {
 
   CapturedImage fromBytes(Uint8List bytes, {String mimeType = 'image/jpeg'}) {
     if (bytes.isEmpty) {
-      throw const ProviderFailure('Photo illisible', hint: 'Reprenez la photo.');
+      throw const ProviderFailure(
+        'Photo illisible',
+        hint: 'Reprenez la photo.',
+      );
     }
     return CapturedImage(bytes: bytes, mimeType: mimeType);
   }
 
   CapturedImage _finalize(Uint8List bytes, String? path) {
     if (bytes.isEmpty) {
-      throw const ProviderFailure('Photo illisible', hint: 'Reprenez la photo.');
+      throw const ProviderFailure(
+        'Photo illisible',
+        hint: 'Reprenez la photo.',
+      );
     }
     if (bytes.length > maxUploadBytes) {
       throw const ProviderFailure(
@@ -141,6 +147,28 @@ class ImageService {
       if (file.existsSync()) await file.delete();
     } catch (_) {
       // Une photo orpheline n'est pas un probleme bloquant.
+    }
+  }
+
+  /// Supprime toutes les photos conservees avec les repas.
+  ///
+  /// La remise a zero vide la base, mais les fichiers, eux, survivraient dans
+  /// le dossier prive de l'application : sans cette methode, une personne qui
+  /// demande l'effacement de ses donnees garderait ses photos de repas sur son
+  /// telephone. Le dossier est supprime entierement, puis recree a la premiere
+  /// photo enregistree.
+  ///
+  /// Best-effort, comme `delete` : un echec ici ne doit pas empecher la suite
+  /// de l'effacement, qui a deja vide la base et les secrets.
+  Future<void> deleteAll() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final photos = Directory(p.join(directory.path, 'meal_photos'));
+      if (photos.existsSync()) {
+        await photos.delete(recursive: true);
+      }
+    } catch (_) {
+      // Rien de plus a tenter.
     }
   }
 }

@@ -62,8 +62,11 @@ class MockVisionProvider implements VisionProvider {
 
     return MealAnalysisResult(
       foods: picked,
-      overallConfidence: picked.map((f) => f.confidence).reduce((a, b) => a + b) / picked.length,
-      notes: 'Donnees de demonstration : aucune analyse reelle n\'a ete effectuee.',
+      overallConfidence:
+          picked.map((f) => f.confidence).reduce((a, b) => a + b) /
+          picked.length,
+      notes:
+          'Donnees de demonstration : aucune analyse reelle n\'a ete effectuee.',
       promptVersion: 'mock',
     );
   }
@@ -86,7 +89,8 @@ class MockVisionProvider implements VisionProvider {
       productName: 'Produit de demonstration',
       brand: 'Donnees de test',
       packageQuantity: '375 g',
-      notes: 'Donnees de demonstration : aucune lecture reelle n\'a ete effectuee.',
+      notes:
+          'Donnees de demonstration : aucune lecture reelle n\'a ete effectuee.',
       saturatedFat: 4.2,
     );
   }

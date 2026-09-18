@@ -19,8 +19,10 @@ import '../models/nutrition_values.dart';
 ///
 /// Base de donnees publiee sous licence ODbL ; attribution obligatoire.
 class OpenFoodFactsRepository {
-  OpenFoodFactsRepository({http.Client? client, this.baseUrl = 'https://world.openfoodfacts.org'})
-      : _client = client ?? http.Client();
+  OpenFoodFactsRepository({
+    http.Client? client,
+    this.baseUrl = 'https://world.openfoodfacts.org',
+  }) : _client = client ?? http.Client();
 
   final http.Client _client;
   final String baseUrl;
@@ -36,9 +38,9 @@ class OpenFoodFactsRepository {
   String get attribution => 'Donnees Open Food Facts — ODbL';
 
   Map<String, String> get _headers => {
-        'User-Agent': AppConfig.openFoodFactsUserAgent,
-        'Accept': 'application/json',
-      };
+    'User-Agent': AppConfig.openFoodFactsUserAgent,
+    'Accept': 'application/json',
+  };
 
   /// Lit un produit par son code-barres.
   ///
@@ -54,7 +56,9 @@ class OpenFoodFactsRepository {
 
     final Map<String, dynamic> payload;
     try {
-      final response = await _client.get(uri, headers: _headers).timeout(_timeout);
+      final response = await _client
+          .get(uri, headers: _headers)
+          .timeout(_timeout);
       if (response.statusCode == 404) throw ProductNotFoundFailure(code);
       if (response.statusCode == 429) throw const RateLimitFailure();
       if (response.statusCode >= 500) {
@@ -65,9 +69,13 @@ class OpenFoodFactsRepository {
         );
       }
       if (response.statusCode != 200) {
-        throw ProviderFailure('Reponse inattendue de la base de produits', statusCode: response.statusCode);
+        throw ProviderFailure(
+          'Reponse inattendue de la base de produits',
+          statusCode: response.statusCode,
+        );
       }
-      payload = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      payload =
+          jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
     } on AppFailure {
       rethrow;
     } on SocketException {
@@ -108,17 +116,23 @@ class OpenFoodFactsRepository {
     );
 
     try {
-      final response = await _client.get(uri, headers: _headers).timeout(_timeout);
+      final response = await _client
+          .get(uri, headers: _headers)
+          .timeout(_timeout);
       if (response.statusCode == 429) throw const RateLimitFailure();
       if (response.statusCode != 200) return const [];
 
-      final payload = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final payload =
+          jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
       final hits = (payload['hits'] as List?) ?? const [];
 
       final foods = <Food>[];
       for (final hit in hits) {
         if (hit is! Map) continue;
-        final food = _toFood(hit.cast<String, dynamic>(), requireNutrients: true);
+        final food = _toFood(
+          hit.cast<String, dynamic>(),
+          requireNutrients: true,
+        );
         if (food != null) foods.add(food);
       }
 
@@ -176,7 +190,9 @@ class OpenFoodFactsRepository {
       per100g: per100g,
       source: FoodSource.openFoodFacts,
       sourceRef: code.isEmpty ? null : code,
-      brand: brands == null || brands.isEmpty ? null : brands.split(',').first.trim(),
+      brand: brands == null || brands.isEmpty
+          ? null
+          : brands.split(',').first.trim(),
       imageUrl: _firstNonEmpty([
         product['image_front_small_url'],
         product['image_front_url'],
@@ -251,7 +267,10 @@ class OpenFoodFactsRepository {
   /// Analyse « 125 g », « 1 pot (125 g) », « 250ml ».
   double? _parseServingSize(String? text) {
     if (text == null || text.isEmpty) return null;
-    final match = RegExp(r'(\d+(?:[.,]\d+)?)\s*(g|ml)\b', caseSensitive: false).firstMatch(text);
+    final match = RegExp(
+      r'(\d+(?:[.,]\d+)?)\s*(g|ml)\b',
+      caseSensitive: false,
+    ).firstMatch(text);
     if (match == null) return null;
     final value = double.tryParse(match.group(1)!.replaceAll(',', '.'));
     if (value == null || value <= 0 || value > 5000) return null;
@@ -261,7 +280,9 @@ class OpenFoodFactsRepository {
   String? _firstNonEmpty(List<Object?> values) {
     for (final value in values) {
       final text = value?.toString().trim();
-      if (text != null && text.isNotEmpty && text.toLowerCase() != 'null') return text;
+      if (text != null && text.isNotEmpty && text.toLowerCase() != 'null') {
+        return text;
+      }
     }
     return null;
   }

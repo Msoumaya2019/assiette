@@ -27,7 +27,7 @@ import '../models/app_settings.dart';
 /// inexact, et aucune permission supplementaire.
 class NotificationService {
   NotificationService({FlutterLocalNotificationsPlugin? plugin})
-      : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
+    : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
 
   final FlutterLocalNotificationsPlugin _plugin;
 
@@ -92,13 +92,17 @@ class NotificationService {
 
     try {
       if (Platform.isAndroid) {
-        final android = _plugin.resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
+        final android = _plugin
+            .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin
+            >();
         return await android?.requestNotificationsPermission() ?? false;
       }
       if (Platform.isIOS) {
-        final ios = _plugin.resolvePlatformSpecificImplementation<
-            IOSFlutterLocalNotificationsPlugin>();
+        final ios = _plugin
+            .resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin
+            >();
         return await ios?.requestPermissions(
               alert: true,
               badge: true,

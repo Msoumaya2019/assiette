@@ -39,7 +39,8 @@ class MealTile extends StatelessWidget {
 
     return Semantics(
       button: onTap != null,
-      label: '${meal.name}, ${Format.carbs(totals.carbs)} grammes de glucides, '
+      label:
+          '${meal.name}, ${Format.carbs(totals.carbs)} grammes de glucides, '
           '${Format.time(meal.eatenAt)}',
       child: Material(
         color: context.colors.surfaceContainerHighest.withValues(alpha: 0.45),
@@ -48,7 +49,10 @@ class MealTile extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.sm,
+            ),
             child: Row(
               children: [
                 _LeadingIcon(meal: meal),
@@ -60,14 +64,20 @@ class MealTile extends StatelessWidget {
                     children: [
                       Text(
                         meal.name,
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
                       Text(
                         subtitleParts.join(' · '),
-                        style: TextStyle(fontSize: 12, color: palette.mutedText),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: palette.mutedText,
+                        ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -151,15 +161,31 @@ class _CarbBadge extends StatelessWidget {
                 ),
               Text(
                 Format.carbs(carbs),
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: carb, height: 1),
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: carb,
+                  height: 1,
+                ),
               ),
               const SizedBox(width: 2),
-              Text('g', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: carb)),
+              Text(
+                'g',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: carb,
+                ),
+              ),
             ],
           ),
           Text(
             'glucides',
-            style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: carb.withValues(alpha: 0.8)),
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+              color: carb.withValues(alpha: 0.8),
+            ),
           ),
         ],
       ),
@@ -207,21 +233,36 @@ class MealItemRow extends StatelessWidget {
                 children: [
                   Text(
                     name,
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(height: 3),
                   Row(
                     children: [
                       Text(
                         Format.grams(quantityG),
-                        style: TextStyle(fontSize: 12, color: palette.mutedText),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: palette.mutedText,
+                        ),
                       ),
                       if (sourceLabel != null) ...[
-                        Text(' · ', style: TextStyle(fontSize: 12, color: palette.mutedText)),
+                        Text(
+                          ' · ',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: palette.mutedText,
+                          ),
+                        ),
                         Flexible(
                           child: Text(
                             sourceLabel!,
-                            style: TextStyle(fontSize: 12, color: palette.mutedText),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: palette.mutedText,
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -253,7 +294,11 @@ class MealItemRow extends StatelessWidget {
                     const SizedBox(width: 2),
                     Text(
                       'g gluc.',
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: palette.carb),
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: palette.carb,
+                      ),
                     ),
                   ],
                 ),

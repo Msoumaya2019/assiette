@@ -65,28 +65,28 @@ class NutritionValues {
   }
 
   NutritionValues operator +(NutritionValues other) => NutritionValues(
-        kcal: kcal + other.kcal,
-        carbs: carbs + other.carbs,
-        sugars: sugars + other.sugars,
-        starch: starch + other.starch,
-        protein: protein + other.protein,
-        fat: fat + other.fat,
-        saturatedFat: saturatedFat + other.saturatedFat,
-        fiber: fiber + other.fiber,
-        salt: salt + other.salt,
-      );
+    kcal: kcal + other.kcal,
+    carbs: carbs + other.carbs,
+    sugars: sugars + other.sugars,
+    starch: starch + other.starch,
+    protein: protein + other.protein,
+    fat: fat + other.fat,
+    saturatedFat: saturatedFat + other.saturatedFat,
+    fiber: fiber + other.fiber,
+    salt: salt + other.salt,
+  );
 
   NutritionValues operator -(NutritionValues other) => NutritionValues(
-        kcal: kcal - other.kcal,
-        carbs: carbs - other.carbs,
-        sugars: sugars - other.sugars,
-        starch: starch - other.starch,
-        protein: protein - other.protein,
-        fat: fat - other.fat,
-        saturatedFat: saturatedFat - other.saturatedFat,
-        fiber: fiber - other.fiber,
-        salt: salt - other.salt,
-      );
+    kcal: kcal - other.kcal,
+    carbs: carbs - other.carbs,
+    sugars: sugars - other.sugars,
+    starch: starch - other.starch,
+    protein: protein - other.protein,
+    fat: fat - other.fat,
+    saturatedFat: saturatedFat - other.saturatedFat,
+    fiber: fiber - other.fiber,
+    salt: salt - other.salt,
+  );
 
   /// Addition en ignorant les valeurs nulles, sans risque d'erreur d'arrondi.
   static NutritionValues sum(Iterable<NutritionValues> values) {
@@ -114,19 +114,25 @@ class NutritionValues {
   double get sugarShare => carbs <= 0 ? 0 : (sugars / carbs).clamp(0.0, 1.0);
 
   bool get isNotEmpty =>
-      kcal > 0 || carbs > 0 || protein > 0 || fat > 0 || fiber > 0 || sugars > 0 || salt > 0;
+      kcal > 0 ||
+      carbs > 0 ||
+      protein > 0 ||
+      fat > 0 ||
+      fiber > 0 ||
+      sugars > 0 ||
+      salt > 0;
 
   Map<String, dynamic> toJson() => {
-        'kcal': kcal,
-        'carbs': carbs,
-        'sugars': sugars,
-        'starch': starch,
-        'protein': protein,
-        'fat': fat,
-        'saturatedFat': saturatedFat,
-        'fiber': fiber,
-        'salt': salt,
-      };
+    'kcal': kcal,
+    'carbs': carbs,
+    'sugars': sugars,
+    'starch': starch,
+    'protein': protein,
+    'fat': fat,
+    'saturatedFat': saturatedFat,
+    'fiber': fiber,
+    'salt': salt,
+  };
 
   factory NutritionValues.fromJson(Map<String, dynamic> json) {
     double read(String key) {

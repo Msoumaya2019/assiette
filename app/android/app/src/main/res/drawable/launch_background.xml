@@ -1,12 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modify this file to customize your launch splash screen -->
+<!-- Ecran de demarrage avant Android 12. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@android:color/white" />
+    <!-- La couleur, resolue en clair ou en sombre par le systeme. -->
+    <item android:drawable="@color/splash_background" />
 
-    <!-- You can insert your own image assets here -->
-    <!-- <item>
+    <!-- L'assiette, centree. Une image plutot qu'un dessin vectoriel : le logo
+         n'a aucune raison d'etre recalcule a chaque lancement. -->
+    <item>
         <bitmap
             android:gravity="center"
-            android:src="@mipmap/launch_image" />
-    </item> -->
+            android:src="@drawable/splash_logo" />
+    </item>
 </layer-list>

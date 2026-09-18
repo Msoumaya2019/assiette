@@ -40,7 +40,9 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
   TextEditingController _controllerFor(double? value) {
     if (value == null) return TextEditingController();
     return TextEditingController(
-      text: value == value.roundToDouble() ? value.round().toString() : value.toString(),
+      text: value == value.roundToDouble()
+          ? value.round().toString()
+          : value.toString(),
     );
   }
 
@@ -73,7 +75,11 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(goals.isEmpty ? 'Objectifs effaces.' : 'Objectifs enregistres.')),
+      SnackBar(
+        content: Text(
+          goals.isEmpty ? 'Objectifs effaces.' : 'Objectifs enregistres.',
+        ),
+      ),
     );
     Navigator.of(context).pop();
   }
@@ -104,13 +110,29 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
                     helper: 'L\'information principale de l\'application',
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  _GoalField(controller: _kcal, label: 'Calories par jour', unit: 'kcal'),
+                  _GoalField(
+                    controller: _kcal,
+                    label: 'Calories par jour',
+                    unit: 'kcal',
+                  ),
                   const SizedBox(height: AppSpacing.md),
-                  _GoalField(controller: _protein, label: 'Proteines par jour', unit: 'g'),
+                  _GoalField(
+                    controller: _protein,
+                    label: 'Proteines par jour',
+                    unit: 'g',
+                  ),
                   const SizedBox(height: AppSpacing.md),
-                  _GoalField(controller: _fat, label: 'Lipides par jour', unit: 'g'),
+                  _GoalField(
+                    controller: _fat,
+                    label: 'Lipides par jour',
+                    unit: 'g',
+                  ),
                   const SizedBox(height: AppSpacing.md),
-                  _GoalField(controller: _fiber, label: 'Fibres par jour', unit: 'g'),
+                  _GoalField(
+                    controller: _fiber,
+                    label: 'Fibres par jour',
+                    unit: 'g',
+                  ),
                 ],
               ),
             ),
@@ -118,7 +140,8 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
             const SizedBox(height: AppSpacing.lg),
 
             const EstimateBanner(
-              message: 'Ces objectifs sont ceux que vous definissez. L\'application ne les '
+              message:
+                  'Ces objectifs sont ceux que vous definissez. L\'application ne les '
                   'propose pas et ne les interprete pas : elle affiche seulement votre '
                   'progression. Pour determiner un objectif adapte a votre situation, '
                   'adressez-vous a un professionnel de sante.',
@@ -136,7 +159,13 @@ class _GoalsScreenState extends ConsumerState<GoalsScreen> {
 
             OutlinedButton(
               onPressed: () {
-                for (final controller in [_carbs, _kcal, _protein, _fat, _fiber]) {
+                for (final controller in [
+                  _carbs,
+                  _kcal,
+                  _protein,
+                  _fat,
+                  _fiber,
+                ]) {
                   controller.clear();
                 }
               },
@@ -181,7 +210,9 @@ class _GoalField extends StatelessWidget {
         labelText: label,
         suffixText: unit,
         helperText: helper,
-        labelStyle: highlighted ? TextStyle(color: palette.carb, fontWeight: FontWeight.w700) : null,
+        labelStyle: highlighted
+            ? TextStyle(color: palette.carb, fontWeight: FontWeight.w700)
+            : null,
       ),
     );
   }

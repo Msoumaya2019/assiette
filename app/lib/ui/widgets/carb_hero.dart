@@ -45,11 +45,15 @@ class CarbHero extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.palette;
     final carb = palette.carb;
-    final hasRange = rangeLow != null && rangeHigh != null && rangeHigh! > rangeLow!;
-    final ratio = goalG != null && goalG! > 0 ? (carbs / goalG!).clamp(0.0, 1.0) : null;
+    final hasRange =
+        rangeLow != null && rangeHigh != null && rangeHigh! > rangeLow!;
+    final ratio = goalG != null && goalG! > 0
+        ? (carbs / goalG!).clamp(0.0, 1.0)
+        : null;
 
     return Semantics(
-      label: '$title : ${Format.carbs(carbs)} grammes'
+      label:
+          '$title : ${Format.carbs(carbs)} grammes'
           '${hasRange ? ', fourchette ${Format.range(rangeLow!, rangeHigh!)}' : ''}'
           '${isEstimate ? ', estimation' : ''}',
       child: Container(
@@ -88,14 +92,21 @@ class CarbHero extends StatelessWidget {
                 ),
                 if (isEstimate)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
                       color: carb.withValues(alpha: 0.18),
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
                       '≈ estimation',
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: carb),
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: carb,
+                      ),
                     ),
                   ),
               ],
@@ -154,7 +165,11 @@ class CarbHero extends StatelessWidget {
               const SizedBox(height: AppSpacing.sm),
               Text(
                 '${Format.percent(ratio)} de l\'objectif de ${Format.grams(goalG!)}',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: palette.mutedText),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: palette.mutedText,
+                ),
               ),
             ],
           ],

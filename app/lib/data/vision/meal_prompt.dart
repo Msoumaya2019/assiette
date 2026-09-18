@@ -54,7 +54,8 @@ String buildMealUserPrompt({
 
   const hints = {
     'small': 'L\'utilisateur indique une petite portion.',
-    'medium': 'L\'utilisateur indique une portion moyenne (portion habituelle).',
+    'medium':
+        'L\'utilisateur indique une portion moyenne (portion habituelle).',
     'large': 'L\'utilisateur indique une grande portion.',
   };
   final hint = hints[portionHint];
@@ -62,9 +63,13 @@ String buildMealUserPrompt({
 
   final trimmed = userHint?.trim() ?? '';
   if (trimmed.isNotEmpty) {
-    parts.add('Precision donnee par l\'utilisateur : ${trimmed.length > 300 ? trimmed.substring(0, 300) : trimmed}');
+    parts.add(
+      'Precision donnee par l\'utilisateur : ${trimmed.length > 300 ? trimmed.substring(0, 300) : trimmed}',
+    );
   }
 
-  parts.add('Renvoie l\'objet json decrivant les aliments identifies et leurs poids estimes.');
+  parts.add(
+    'Renvoie l\'objet json decrivant les aliments identifies et leurs poids estimes.',
+  );
   return parts.join('\n');
 }

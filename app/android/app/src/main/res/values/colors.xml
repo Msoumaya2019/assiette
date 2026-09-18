@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fond de l'ecran de demarrage. Reprend la surface de l'application pour
+         que le passage au premier ecran ne produise pas de rupture de couleur.
+         La variante sombre est dans values-night/colors.xml : le systeme
+         choisit tout seul, aucune condition a ecrire. -->
+    <color name="splash_background">#FBF7F3</color>
+</resources>

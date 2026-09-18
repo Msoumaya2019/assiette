@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fond de l'icone adaptative : meme degrade que l'icone classique. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="#EA6B42"
+        android:endColor="#CB4E28"
+        android:type="linear" />
+</shape>

@@ -40,7 +40,10 @@ class MealAnalysisService {
   final VisionProvider vision;
   final CiqualRepository ciqual;
 
-  Future<MealAnalysisOutcome> analyze(MealAnalysisRequest request, {DateTime? eatenAt}) async {
+  Future<MealAnalysisOutcome> analyze(
+    MealAnalysisRequest request, {
+    DateTime? eatenAt,
+  }) async {
     await ciqual.load();
 
     final result = await vision.analyzeMeal(request);
@@ -66,7 +69,9 @@ class MealAnalysisService {
               per100g: NutritionValues.zero,
               source: FoodSource.ai,
             ),
-            quantityG: detected.estimatedWeightG > 0 ? detected.estimatedWeightG : 100,
+            quantityG: detected.estimatedWeightG > 0
+                ? detected.estimatedWeightG
+                : 100,
             confidence: detected.confidence,
             isEstimate: true,
             sortOrder: index,
@@ -78,7 +83,9 @@ class MealAnalysisService {
       items.add(
         MealItem(
           food: match,
-          quantityG: detected.estimatedWeightG > 0 ? detected.estimatedWeightG : 100,
+          quantityG: detected.estimatedWeightG > 0
+              ? detected.estimatedWeightG
+              : 100,
           confidence: detected.confidence,
           isEstimate: true,
           sortOrder: index,
@@ -94,7 +101,11 @@ class MealAnalysisService {
       isEstimate: true,
     );
 
-    return MealAnalysisOutcome(meal: meal, result: result, unmatched: unmatched);
+    return MealAnalysisOutcome(
+      meal: meal,
+      result: result,
+      unmatched: unmatched,
+    );
   }
 
   /// Nom de repas propose d'apres l'heure : l'utilisateur n'a presque jamais a

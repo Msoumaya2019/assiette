@@ -26,7 +26,8 @@ sealed class AppFailure implements Exception {
     }
 
     final text = error.toString();
-    if (text.contains('SocketException') || text.contains('Failed host lookup')) {
+    if (text.contains('SocketException') ||
+        text.contains('Failed host lookup')) {
       return const NetworkFailure();
     }
     if (text.contains('TimeoutException') || text.contains('timed out')) {
@@ -43,49 +44,52 @@ sealed class AppFailure implements Exception {
 /// Aucune connexion reseau.
 class NetworkFailure extends AppFailure {
   const NetworkFailure()
-      : super(
-          'Pas de connexion internet',
-          hint: 'Verifiez votre connexion, puis relancez l\'analyse.',
-          isRetryable: true,
-        );
+    : super(
+        'Pas de connexion internet',
+        hint: 'Verifiez votre connexion, puis relancez l\'analyse.',
+        isRetryable: true,
+      );
 }
 
 /// Le serveur n'a pas repondu dans le delai imparti.
 class TimeoutFailure extends AppFailure {
   const TimeoutFailure()
-      : super(
-          'L\'analyse a pris trop de temps',
-          hint: 'Reessayez avec une photo plus petite ou une connexion plus stable.',
-          isRetryable: true,
-        );
+    : super(
+        'L\'analyse a pris trop de temps',
+        hint:
+            'Reessayez avec une photo plus petite ou une connexion plus stable.',
+        isRetryable: true,
+      );
 }
 
 /// Reponse illisible ou inattendue.
 class InvalidResponseFailure extends AppFailure {
   const InvalidResponseFailure()
-      : super(
-          'Reponse inattendue du service',
-          hint: 'Reessayez dans un instant.',
-          isRetryable: true,
-        );
+    : super(
+        'Reponse inattendue du service',
+        hint: 'Reessayez dans un instant.',
+        isRetryable: true,
+      );
 }
 
 /// Aucun aliment n'a ete reconnu sur la photo.
 class NoFoodDetectedFailure extends AppFailure {
   const NoFoodDetectedFailure()
-      : super(
-          'Aucun aliment reconnu',
-          hint: 'Reprenez la photo en cadrant mieux l\'assiette, avec plus de lumiere.',
-        );
+    : super(
+        'Aucun aliment reconnu',
+        hint:
+            'Reprenez la photo en cadrant mieux l\'assiette, avec plus de lumiere.',
+      );
 }
 
 /// La cle d'acces est absente ou refusee.
 class MissingCredentialFailure extends AppFailure {
   const MissingCredentialFailure({this.rejected = false})
-      : super(
-          'Cle d\'analyse absente ou refusee',
-          hint: 'Renseignez une cle valide dans Reglages, section Analyse des repas.',
-        );
+    : super(
+        'Cle d\'analyse absente ou refusee',
+        hint:
+            'Renseignez une cle valide dans Reglages, section Analyse des repas.',
+      );
 
   /// Vrai lorsque le fournisseur a explicitement refuse la cle fournie.
   final bool rejected;
@@ -109,11 +113,11 @@ class ProviderFailure extends AppFailure {
 /// Quota d'appels depasse.
 class RateLimitFailure extends AppFailure {
   const RateLimitFailure({this.retryAfterS})
-      : super(
-          'Trop de requetes',
-          hint: 'Patientez quelques secondes avant de relancer l\'analyse.',
-          isRetryable: true,
-        );
+    : super(
+        'Trop de requetes',
+        hint: 'Patientez quelques secondes avant de relancer l\'analyse.',
+        isRetryable: true,
+      );
 
   final int? retryAfterS;
 }
@@ -121,10 +125,11 @@ class RateLimitFailure extends AppFailure {
 /// Produit introuvable dans la base de produits.
 class ProductNotFoundFailure extends AppFailure {
   const ProductNotFoundFailure(this.barcode)
-      : super(
-          'Produit inconnu',
-          hint: 'Ce code-barres n\'est pas dans la base. Vous pouvez saisir les valeurs de l\'etiquette.',
-        );
+    : super(
+        'Produit inconnu',
+        hint:
+            'Ce code-barres n\'est pas dans la base. Vous pouvez saisir les valeurs de l\'etiquette.',
+      );
 
   final String barcode;
 }
@@ -132,11 +137,11 @@ class ProductNotFoundFailure extends AppFailure {
 /// Erreur non identifiee.
 class UnknownFailure extends AppFailure {
   UnknownFailure({String? context})
-      : super(
-          'Une erreur est survenue',
-          hint: context == null
-              ? 'Reessayez. Si le probleme persiste, signalez-le depuis Reglages.'
-              : 'Contexte : $context',
-          isRetryable: true,
-        );
+    : super(
+        'Une erreur est survenue',
+        hint: context == null
+            ? 'Reessayez. Si le probleme persiste, signalez-le depuis Reglages.'
+            : 'Contexte : $context',
+        isRetryable: true,
+      );
 }

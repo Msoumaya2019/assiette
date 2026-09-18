@@ -28,28 +28,40 @@ import '../services/secure_store.dart';
 // ---------------------------------------------------------------------------
 
 final appDatabaseProvider = Provider<AppDatabase>(
-  (ref) => throw UnimplementedError('appDatabaseProvider doit etre surcharge au demarrage'),
+  (ref) => throw UnimplementedError(
+    'appDatabaseProvider doit etre surcharge au demarrage',
+  ),
 );
 
 final ciqualRepositoryProvider = Provider<CiqualRepository>(
-  (ref) => throw UnimplementedError('ciqualRepositoryProvider doit etre surcharge au demarrage'),
+  (ref) => throw UnimplementedError(
+    'ciqualRepositoryProvider doit etre surcharge au demarrage',
+  ),
 );
 
 final secureStoreProvider = Provider<SecureStore>(
-  (ref) => throw UnimplementedError('secureStoreProvider doit etre surcharge au demarrage'),
+  (ref) => throw UnimplementedError(
+    'secureStoreProvider doit etre surcharge au demarrage',
+  ),
 );
 
 /// Reglages charges avant le premier affichage.
 final initialSettingsProvider = Provider<AppSettings>(
-  (ref) => throw UnimplementedError('initialSettingsProvider doit etre surcharge au demarrage'),
+  (ref) => throw UnimplementedError(
+    'initialSettingsProvider doit etre surcharge au demarrage',
+  ),
 );
 
-final openFoodFactsProvider = Provider<OpenFoodFactsRepository>((ref) => OpenFoodFactsRepository());
+final openFoodFactsProvider = Provider<OpenFoodFactsRepository>(
+  (ref) => OpenFoodFactsRepository(),
+);
 
 final imageServiceProvider = Provider<ImageService>((ref) => ImageService());
 
 final notificationServiceProvider = Provider<NotificationService>(
-  (ref) => throw UnimplementedError('notificationServiceProvider doit etre surcharge au demarrage'),
+  (ref) => throw UnimplementedError(
+    'notificationServiceProvider doit etre surcharge au demarrage',
+  ),
 );
 
 // ---------------------------------------------------------------------------
@@ -65,7 +77,8 @@ class SettingsNotifier extends Notifier<AppSettings> {
     // On ne reprogramme les rappels que si un reglage qui les concerne a
     // change : replanifier trente notifications a chaque bascule de theme
     // serait un gaspillage.
-    final rappelsModifies = next.mealRemindersEnabled != state.mealRemindersEnabled ||
+    final rappelsModifies =
+        next.mealRemindersEnabled != state.mealRemindersEnabled ||
         next.dailySummaryEnabled != state.dailySummaryEnabled ||
         next.reminderHour != state.reminderHour ||
         next.reminderMinute != state.reminderMinute;
@@ -74,15 +87,33 @@ class SettingsNotifier extends Notifier<AppSettings> {
     final database = ref.read(appDatabaseProvider);
     await database.writeSetting('theme_mode', next.themeMode.name);
     await database.writeSetting('analysis_mode', next.analysisMode.name);
-    await database.writeSetting('onboarding_done', next.onboardingDone ? '1' : '0');
+    await database.writeSetting(
+      'onboarding_done',
+      next.onboardingDone ? '1' : '0',
+    );
     await database.writeSetting('keep_photos', next.keepPhotos ? '1' : '0');
-    await database.writeSetting('meal_reminders', next.mealRemindersEnabled ? '1' : '0');
-    await database.writeSetting('daily_summary', next.dailySummaryEnabled ? '1' : '0');
+    await database.writeSetting(
+      'meal_reminders',
+      next.mealRemindersEnabled ? '1' : '0',
+    );
+    await database.writeSetting(
+      'daily_summary',
+      next.dailySummaryEnabled ? '1' : '0',
+    );
     await database.writeSetting('reminder_hour', next.reminderHour.toString());
-    await database.writeSetting('reminder_minute', next.reminderMinute.toString());
-    await database.writeSetting('disclaimer_seen', next.useEstimatesDisclaimerSeen ? '1' : '0');
+    await database.writeSetting(
+      'reminder_minute',
+      next.reminderMinute.toString(),
+    );
+    await database.writeSetting(
+      'disclaimer_seen',
+      next.useEstimatesDisclaimerSeen ? '1' : '0',
+    );
     if (next.privacyPolicyAcceptedVersion != null) {
-      await database.writeSetting('privacy_version', next.privacyPolicyAcceptedVersion!);
+      await database.writeSetting(
+        'privacy_version',
+        next.privacyPolicyAcceptedVersion!,
+      );
     }
     await database.writeGoals(next.goals);
 
@@ -91,29 +122,35 @@ class SettingsNotifier extends Notifier<AppSettings> {
     }
   }
 
-  Future<void> setThemeMode(ThemeMode mode) => _persist(state.copyWith(themeMode: mode));
+  Future<void> setThemeMode(ThemeMode mode) =>
+      _persist(state.copyWith(themeMode: mode));
 
   Future<void> setAnalysisMode(AnalysisModeSetting mode) =>
       _persist(state.copyWith(analysisMode: mode));
 
-  Future<void> setKeepPhotos(bool value) => _persist(state.copyWith(keepPhotos: value));
+  Future<void> setKeepPhotos(bool value) =>
+      _persist(state.copyWith(keepPhotos: value));
 
   Future<void> setMealReminders(bool value) =>
       _persist(state.copyWith(mealRemindersEnabled: value));
 
-  Future<void> setDailySummary(bool value) => _persist(state.copyWith(dailySummaryEnabled: value));
+  Future<void> setDailySummary(bool value) =>
+      _persist(state.copyWith(dailySummaryEnabled: value));
 
   Future<void> setReminderTime(int hour, int minute) =>
       _persist(state.copyWith(reminderHour: hour, reminderMinute: minute));
 
-  Future<void> completeOnboarding() => _persist(state.copyWith(onboardingDone: true));
+  Future<void> completeOnboarding() =>
+      _persist(state.copyWith(onboardingDone: true));
 
   Future<void> acceptPrivacyPolicy(String version) =>
       _persist(state.copyWith(privacyPolicyAcceptedVersion: version));
 
-  Future<void> markDisclaimerSeen() => _persist(state.copyWith(useEstimatesDisclaimerSeen: true));
+  Future<void> markDisclaimerSeen() =>
+      _persist(state.copyWith(useEstimatesDisclaimerSeen: true));
 
-  Future<void> updateGoals(DailyGoals goals) => _persist(state.copyWith(goals: goals));
+  Future<void> updateGoals(DailyGoals goals) =>
+      _persist(state.copyWith(goals: goals));
 
   /// Enregistre la cle d'analyse dans le trousseau du systeme.
   Future<void> saveProviderKey(String key) async {
@@ -131,6 +168,9 @@ class SettingsNotifier extends Notifier<AppSettings> {
   Future<void> eraseEverything() async {
     await ref.read(appDatabaseProvider).wipe();
     await ref.read(secureStoreProvider).wipe();
+    // Les photos ne sont pas dans la base : sans cet appel, elles resteraient
+    // sur le telephone apres une demande d'effacement.
+    await ref.read(imageServiceProvider).deleteAll();
     state = const AppSettings();
     ref.invalidate(mealsProvider);
     ref.invalidate(favoritesProvider);
@@ -138,7 +178,9 @@ class SettingsNotifier extends Notifier<AppSettings> {
   }
 }
 
-final settingsProvider = NotifierProvider<SettingsNotifier, AppSettings>(SettingsNotifier.new);
+final settingsProvider = NotifierProvider<SettingsNotifier, AppSettings>(
+  SettingsNotifier.new,
+);
 
 // ---------------------------------------------------------------------------
 // Moteur d'analyse
@@ -180,9 +222,14 @@ final visionProviderProvider = FutureProvider<VisionProvider>((ref) async {
 });
 
 /// Service d'analyse pret a l'emploi.
-final mealAnalysisServiceProvider = FutureProvider<MealAnalysisService>((ref) async {
+final mealAnalysisServiceProvider = FutureProvider<MealAnalysisService>((
+  ref,
+) async {
   final vision = await ref.watch(visionProviderProvider.future);
-  return MealAnalysisService(vision: vision, ciqual: ref.watch(ciqualRepositoryProvider));
+  return MealAnalysisService(
+    vision: vision,
+    ciqual: ref.watch(ciqualRepositoryProvider),
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -199,7 +246,9 @@ class MealsNotifier extends AsyncNotifier<List<Meal>> {
 
   Future<void> refresh() async {
     state = const AsyncValue.loading();
-    state = await AsyncValue.guard(() => ref.read(appDatabaseProvider).recentMeals(limit: 400));
+    state = await AsyncValue.guard(
+      () => ref.read(appDatabaseProvider).recentMeals(limit: 400),
+    );
   }
 
   /// Enregistre un repas puis recharge la liste.
@@ -218,7 +267,9 @@ class MealsNotifier extends AsyncNotifier<List<Meal>> {
     final copy = Meal(
       eatenAt: DateTime.now(),
       name: meal.name,
-      items: meal.items.map((item) => MealItem(food: item.food, quantityG: item.quantityG)).toList(),
+      items: meal.items
+          .map((item) => MealItem(food: item.food, quantityG: item.quantityG))
+          .toList(),
       source: meal.source,
       notes: meal.notes,
       isEstimate: meal.isEstimate,
@@ -229,45 +280,60 @@ class MealsNotifier extends AsyncNotifier<List<Meal>> {
   }
 }
 
-final mealsProvider = AsyncNotifierProvider<MealsNotifier, List<Meal>>(MealsNotifier.new);
+final mealsProvider = AsyncNotifierProvider<MealsNotifier, List<Meal>>(
+  MealsNotifier.new,
+);
 
 /// Repas du jour.
 final todayMealsProvider = Provider<AsyncValue<List<Meal>>>((ref) {
-  return ref.watch(mealsProvider).whenData((meals) => NutritionCalculator.forDay(meals, DateTime.now()));
+  return ref
+      .watch(mealsProvider)
+      .whenData((meals) => NutritionCalculator.forDay(meals, DateTime.now()));
 });
 
 /// Resume du jour : totaux et nombre de repas.
 final todaySummaryProvider = Provider<AsyncValue<NutritionSummary>>((ref) {
   return ref.watch(todayMealsProvider).whenData((meals) {
-    return NutritionSummary(totals: NutritionCalculator.totalOf(meals), mealCount: meals.length);
+    return NutritionSummary(
+      totals: NutritionCalculator.totalOf(meals),
+      mealCount: meals.length,
+    );
   });
 });
 
 /// Totaux des glucides du jour, utilises par l'ecran d'accueil.
 final todayCarbsProvider = Provider<AsyncValue<double>>((ref) {
-  return ref.watch(todaySummaryProvider).whenData((summary) => summary.totals.carbs);
+  return ref
+      .watch(todaySummaryProvider)
+      .whenData((summary) => summary.totals.carbs);
 });
 
 /// Serie des sept derniers jours, pour le graphique du tableau de bord.
 final weeklySeriesProvider = Provider<AsyncValue<List<DailyBucket>>>((ref) {
-  return ref.watch(mealsProvider).whenData(
-        (meals) => NutritionCalculator.dailySeries(meals, DateTime.now(), days: 7),
+  return ref
+      .watch(mealsProvider)
+      .whenData(
+        (meals) =>
+            NutritionCalculator.dailySeries(meals, DateTime.now(), days: 7),
       );
 });
 
 /// Serie des six dernieres semaines.
 final monthlySeriesProvider = Provider<AsyncValue<List<DailyBucket>>>((ref) {
-  return ref.watch(mealsProvider).whenData(
-        (meals) => NutritionCalculator.weeklySeries(meals, DateTime.now(), weeks: 6),
+  return ref
+      .watch(mealsProvider)
+      .whenData(
+        (meals) =>
+            NutritionCalculator.weeklySeries(meals, DateTime.now(), weeks: 6),
       );
 });
 
 /// Progression vers les objectifs du jour.
 final goalProgressProvider = Provider<AsyncValue<List<GoalProgress>>>((ref) {
   final goals = ref.watch(settingsProvider).goals;
-  return ref.watch(todaySummaryProvider).whenData(
-        (summary) => NutritionCalculator.progress(goals, summary),
-      );
+  return ref
+      .watch(todaySummaryProvider)
+      .whenData((summary) => NutritionCalculator.progress(goals, summary));
 });
 
 // ---------------------------------------------------------------------------
@@ -280,7 +346,11 @@ final goalProgressProvider = Provider<AsyncValue<List<GoalProgress>>>((ref) {
 /// de faire voyager des octets d'image dans l'URL et survit a une
 /// reconstruction de l'ecran.
 class PendingCapture {
-  const PendingCapture({required this.image, this.secondImage, this.portionHint});
+  const PendingCapture({
+    required this.image,
+    this.secondImage,
+    this.portionHint,
+  });
 
   final CapturedImage image;
   final CapturedImage? secondImage;
@@ -299,7 +369,9 @@ class PendingCaptureNotifier extends Notifier<PendingCapture?> {
 }
 
 final pendingCaptureProvider =
-    NotifierProvider<PendingCaptureNotifier, PendingCapture?>(PendingCaptureNotifier.new);
+    NotifierProvider<PendingCaptureNotifier, PendingCapture?>(
+      PendingCaptureNotifier.new,
+    );
 
 // ---------------------------------------------------------------------------
 // Repas en cours de modification
@@ -359,7 +431,11 @@ class DraftMealNotifier extends Notifier<Meal?> {
     final meal = state;
     if (meal == null) return;
     final items = meal.items
-        .map((item) => item.id == itemId ? replacement.copyWith(sortOrder: item.sortOrder) : item)
+        .map(
+          (item) => item.id == itemId
+              ? replacement.copyWith(sortOrder: item.sortOrder)
+              : item,
+        )
         .toList();
     state = _renumber(meal.copyWith(items: items));
   }
@@ -369,7 +445,11 @@ class DraftMealNotifier extends Notifier<Meal?> {
     final meal = state;
     if (meal == null) return;
     final items = meal.items
-        .map((item) => item.id == itemId ? item.copyWith(quantityG: grams.clamp(0, 5000)) : item)
+        .map(
+          (item) => item.id == itemId
+              ? item.copyWith(quantityG: grams.clamp(0, 5000))
+              : item,
+        )
         .toList();
     state = meal.copyWith(items: items);
   }
@@ -390,7 +470,11 @@ class DraftMealNotifier extends Notifier<Meal?> {
     final meal = state;
     if (meal == null) return;
     final items = meal.items
-        .map((item) => item.copyWith(quantityG: (item.quantityG * factor).clamp(1, 5000)))
+        .map(
+          (item) => item.copyWith(
+            quantityG: (item.quantityG * factor).clamp(1, 5000),
+          ),
+        )
         .toList();
     state = meal.copyWith(items: items);
   }
@@ -404,7 +488,9 @@ class DraftMealNotifier extends Notifier<Meal?> {
   }
 }
 
-final draftMealProvider = NotifierProvider<DraftMealNotifier, Meal?>(DraftMealNotifier.new);
+final draftMealProvider = NotifierProvider<DraftMealNotifier, Meal?>(
+  DraftMealNotifier.new,
+);
 
 /// Totaux du repas en cours, recalcules a chaque modification.
 final draftTotalsProvider = Provider<NutritionValues?>((ref) {
@@ -441,11 +527,15 @@ class FavoritesNotifier extends AsyncNotifier<List<Favorite>> {
   }
 }
 
-final favoritesProvider = AsyncNotifierProvider<FavoritesNotifier, List<Favorite>>(FavoritesNotifier.new);
+final favoritesProvider =
+    AsyncNotifierProvider<FavoritesNotifier, List<Favorite>>(
+      FavoritesNotifier.new,
+    );
 
 class TemplatesNotifier extends AsyncNotifier<List<MealTemplate>> {
   @override
-  Future<List<MealTemplate>> build() => ref.watch(appDatabaseProvider).templates();
+  Future<List<MealTemplate>> build() =>
+      ref.watch(appDatabaseProvider).templates();
 
   Future<void> save(String id, String name, List<MealItem> items) async {
     final database = ref.read(appDatabaseProvider);
@@ -473,4 +563,7 @@ class TemplatesNotifier extends AsyncNotifier<List<MealTemplate>> {
   }
 }
 
-final templatesProvider = AsyncNotifierProvider<TemplatesNotifier, List<MealTemplate>>(TemplatesNotifier.new);
+final templatesProvider =
+    AsyncNotifierProvider<TemplatesNotifier, List<MealTemplate>>(
+      TemplatesNotifier.new,
+    );

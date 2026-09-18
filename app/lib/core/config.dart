@@ -28,17 +28,24 @@ class AppConfig {
   static const String appName = 'Assiette';
 
   /// Identifiant de version, utile pour les rapports d'erreur.
-  static const String buildChannel = String.fromEnvironment('APP_ENV', defaultValue: 'dev');
+  static const String buildChannel = String.fromEnvironment(
+    'APP_ENV',
+    defaultValue: 'dev',
+  );
 
   /// URL de la fonction d'analyse cote serveur (mode proxy).
-  static const String analysisEndpoint = String.fromEnvironment('ANALYSIS_ENDPOINT');
+  static const String analysisEndpoint = String.fromEnvironment(
+    'ANALYSIS_ENDPOINT',
+  );
 
   /// Projet Supabase (synchronisation et compte). Facultatif.
   static const String supabaseUrl = String.fromEnvironment('SUPABASE_URL');
 
   /// Cle publique Supabase. Publique par conception : la protection repose sur
   /// les politiques RLS, pas sur le secret de cette cle.
-  static const String supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+  static const String supabaseAnonKey = String.fromEnvironment(
+    'SUPABASE_ANON_KEY',
+  );
 
   /// Mode d'analyse par defaut a la premiere ouverture.
   ///
@@ -54,7 +61,8 @@ class AppConfig {
   static const String providerModel = 'deepseek-flash';
 
   /// Identifiant envoye a Open Food Facts. Exige par leur politique d'usage.
-  static const String openFoodFactsUserAgent = 'Assiette/0.1 (https://github.com/axox934)';
+  static const String openFoodFactsUserAgent =
+      'Assiette/0.1 (https://github.com/axox934)';
 
   /// URL d'assistance, affichee dans les parametres et les fiches de store.
   static const String supportUrl = 'https://github.com/axox934/assiette/issues';

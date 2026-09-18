@@ -41,13 +41,19 @@ class SectionCard extends StatelessWidget {
                     children: [
                       Text(
                         title!,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       if (subtitle != null) ...[
                         const SizedBox(height: 2),
                         Text(
                           subtitle!,
-                          style: TextStyle(fontSize: 13, color: context.palette.mutedText),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: context.palette.mutedText,
+                          ),
                         ),
                       ],
                     ],
@@ -93,8 +99,14 @@ class EstimateBanner extends StatelessWidget {
     final palette = context.palette;
     final (color, icon) = switch (severity) {
       EstimateSeverity.info => (palette.carb, Icons.info_outline_rounded),
-      EstimateSeverity.warning => (AppColors.warning, Icons.warning_amber_rounded),
-      EstimateSeverity.danger => (AppColors.danger, Icons.error_outline_rounded),
+      EstimateSeverity.warning => (
+        AppColors.warning,
+        Icons.warning_amber_rounded,
+      ),
+      EstimateSeverity.danger => (
+        AppColors.danger,
+        Icons.error_outline_rounded,
+      ),
     };
 
     return Container(
@@ -159,7 +171,9 @@ class MacroTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ratio = target != null && target! > 0 ? (value / target!).clamp(0.0, 1.0) : null;
+    final ratio = target != null && target! > 0
+        ? (value / target!).clamp(0.0, 1.0)
+        : null;
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -204,7 +218,11 @@ class MacroTile extends StatelessWidget {
               Flexible(
                 child: Text(
                   Format.number(value),
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, height: 1),
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    height: 1,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -305,12 +323,15 @@ class MacroGrid extends StatelessWidget {
         // grille plutot qu'une taille d'ecran supposee.
         final columns = constraints.maxWidth > 620 ? 3 : 2;
         const spacing = AppSpacing.sm;
-        final itemWidth = (constraints.maxWidth - spacing * (columns - 1)) / columns;
+        final itemWidth =
+            (constraints.maxWidth - spacing * (columns - 1)) / columns;
 
         return Wrap(
           spacing: spacing,
           runSpacing: spacing,
-          children: tiles.map((tile) => SizedBox(width: itemWidth, child: tile)).toList(),
+          children: tiles
+              .map((tile) => SizedBox(width: itemWidth, child: tile))
+              .toList(),
         );
       },
     );
@@ -360,7 +381,11 @@ class EmptyState extends StatelessWidget {
               Text(
                 message!,
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, height: 1.45, color: context.palette.mutedText),
+                style: TextStyle(
+                  fontSize: 14,
+                  height: 1.45,
+                  color: context.palette.mutedText,
+                ),
               ),
             ],
             if (action != null) ...[
@@ -391,7 +416,11 @@ class SourceBadge extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color),
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: color,
+        ),
       ),
     );
   }
@@ -427,7 +456,11 @@ class ConfidenceChip extends StatelessWidget {
             const SizedBox(width: 5),
             Text(
               Format.confidence(confidence),
-              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
             ),
           ],
         ),

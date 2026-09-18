@@ -83,7 +83,11 @@ class _AnalysisScreenState extends ConsumerState<AnalysisScreen> {
     final draft = ref.read(draftMealProvider);
     final meal = draft == null
         ? outcome.meal
-        : outcome.meal.copyWith(name: draft.name, photoPath: draft.photoPath, eatenAt: draft.eatenAt);
+        : outcome.meal.copyWith(
+            name: draft.name,
+            photoPath: draft.photoPath,
+            eatenAt: draft.eatenAt,
+          );
 
     ref.read(draftMealProvider.notifier).start(meal);
 
@@ -171,12 +175,17 @@ class _Loading extends StatelessWidget {
               children: [
                 Image.memory(photo, height: 260, fit: BoxFit.cover),
                 Positioned.fill(
-                  child: ColoredBox(color: Colors.black.withValues(alpha: 0.35)),
+                  child: ColoredBox(
+                    color: Colors.black.withValues(alpha: 0.35),
+                  ),
                 ),
                 const SizedBox(
                   width: 56,
                   height: 56,
-                  child: CircularProgressIndicator(strokeWidth: 3.5, color: Colors.white),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3.5,
+                    color: Colors.white,
+                  ),
                 ),
               ],
             ),
@@ -202,7 +211,11 @@ class _Loading extends StatelessWidget {
 }
 
 class _FailureView extends StatelessWidget {
-  const _FailureView({required this.failure, required this.onRetry, required this.onCancel});
+  const _FailureView({
+    required this.failure,
+    required this.onRetry,
+    required this.onCancel,
+  });
 
   final AppFailure failure;
   final VoidCallback onRetry;
@@ -243,7 +256,11 @@ class _FailureView extends StatelessWidget {
               Text(
                 failure.hint!,
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, height: 1.5, color: context.palette.mutedText),
+                style: TextStyle(
+                  fontSize: 14,
+                  height: 1.5,
+                  color: context.palette.mutedText,
+                ),
               ),
             ],
             const SizedBox(height: AppSpacing.xl),

@@ -23,7 +23,12 @@ class DailyGoals {
   final double? fatG;
   final double? fiberG;
 
-  bool get isEmpty => carbsG == null && kcal == null && proteinG == null && fatG == null && fiberG == null;
+  bool get isEmpty =>
+      carbsG == null &&
+      kcal == null &&
+      proteinG == null &&
+      fatG == null &&
+      fiberG == null;
 
   bool get isNotEmpty => !isEmpty;
 
@@ -49,12 +54,12 @@ class DailyGoals {
   }
 
   Map<String, dynamic> toJson() => {
-        'carbsG': carbsG,
-        'kcal': kcal,
-        'proteinG': proteinG,
-        'fatG': fatG,
-        'fiberG': fiberG,
-      };
+    'carbsG': carbsG,
+    'kcal': kcal,
+    'proteinG': proteinG,
+    'fatG': fatG,
+    'fiberG': fiberG,
+  };
 
   factory DailyGoals.fromJson(Map<String, dynamic> json) {
     double? read(String key) => (json[key] as num?)?.toDouble();
@@ -98,19 +103,54 @@ class GoalProgress {
   static List<GoalProgress> from(DailyGoals goals, NutritionValues consumed) {
     final list = <GoalProgress>[];
     if (goals.carbsG != null) {
-      list.add(GoalProgress(label: 'Glucides', consumed: consumed.carbs, target: goals.carbsG!, unit: 'g'));
+      list.add(
+        GoalProgress(
+          label: 'Glucides',
+          consumed: consumed.carbs,
+          target: goals.carbsG!,
+          unit: 'g',
+        ),
+      );
     }
     if (goals.kcal != null) {
-      list.add(GoalProgress(label: 'Calories', consumed: consumed.kcal, target: goals.kcal!, unit: 'kcal'));
+      list.add(
+        GoalProgress(
+          label: 'Calories',
+          consumed: consumed.kcal,
+          target: goals.kcal!,
+          unit: 'kcal',
+        ),
+      );
     }
     if (goals.proteinG != null) {
-      list.add(GoalProgress(label: 'Proteines', consumed: consumed.protein, target: goals.proteinG!, unit: 'g'));
+      list.add(
+        GoalProgress(
+          label: 'Proteines',
+          consumed: consumed.protein,
+          target: goals.proteinG!,
+          unit: 'g',
+        ),
+      );
     }
     if (goals.fatG != null) {
-      list.add(GoalProgress(label: 'Lipides', consumed: consumed.fat, target: goals.fatG!, unit: 'g'));
+      list.add(
+        GoalProgress(
+          label: 'Lipides',
+          consumed: consumed.fat,
+          target: goals.fatG!,
+          unit: 'g',
+        ),
+      );
     }
     if (goals.fiberG != null) {
-      list.add(GoalProgress(label: 'Fibres', consumed: consumed.fiber, target: goals.fiberG!, unit: 'g'));
+      list.add(
+        GoalProgress(
+          label: 'Fibres',
+          consumed: consumed.fiber,
+          target: goals.fiberG!,
+          unit: 'g',
+        ),
+      );
     }
     return list;
   }

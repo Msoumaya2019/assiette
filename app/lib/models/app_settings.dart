@@ -73,7 +73,8 @@ class AppSettings {
       privacyPolicyAcceptedVersion:
           privacyPolicyAcceptedVersion ?? this.privacyPolicyAcceptedVersion,
       goals: goals ?? this.goals,
-      useEstimatesDisclaimerSeen: useEstimatesDisclaimerSeen ?? this.useEstimatesDisclaimerSeen,
+      useEstimatesDisclaimerSeen:
+          useEstimatesDisclaimerSeen ?? this.useEstimatesDisclaimerSeen,
     );
   }
 }
@@ -81,10 +82,16 @@ class AppSettings {
 /// Mode d'analyse choisi par l'utilisateur.
 enum AnalysisModeSetting {
   /// Cle personnelle, stockee dans le trousseau du systeme.
-  personal('Cle personnelle', 'Votre cle, conservee dans le trousseau du telephone'),
+  personal(
+    'Cle personnelle',
+    'Votre cle, conservee dans le trousseau du telephone',
+  ),
 
   /// Service securise heberge, prevu pour la publication.
-  proxy('Service securise', 'Aucune cle a saisir, l\'analyse passe par un service heberge'),
+  proxy(
+    'Service securise',
+    'Aucune cle a saisir, l\'analyse passe par un service heberge',
+  ),
 
   /// Mode demonstration, sans appel reseau.
   demo('Demonstration', 'Donnees de test, aucune analyse reelle');
@@ -94,7 +101,8 @@ enum AnalysisModeSetting {
   final String label;
   final String description;
 
-  static AnalysisModeSetting fromId(String? id) => AnalysisModeSetting.values.firstWhere(
+  static AnalysisModeSetting fromId(String? id) =>
+      AnalysisModeSetting.values.firstWhere(
         (mode) => mode.name == id,
         orElse: () => AnalysisModeSetting.personal,
       );
@@ -112,44 +120,44 @@ class PrivacyPolicy {
       'Ce que fait l\'application',
       'Assiette estime les valeurs nutritionnelles d\'un repas a partir d\'une photo, '
           'd\'un code-barres ou d\'une recherche. Les quantites deduites d\'une photo sont '
-          'des estimations : elles doivent etre verifiees lorsque la precision compte.'
+          'des estimations : elles doivent etre verifiees lorsque la precision compte.',
     ),
     (
       'Quelles donnees sont envoyees',
       'Lors d\'une analyse par photo, seule l\'image du repas est transmise au service '
           'd\'analyse, apres reduction de sa taille. Aucun nom, aucune adresse et aucun '
           'identifiant de telephone ne sont transmis. Si vous utilisez votre propre cle '
-          'd\'acces, l\'image est envoyee directement au fournisseur que vous avez choisi.'
+          'd\'acces, l\'image est envoyee directement au fournisseur que vous avez choisi.',
     ),
     (
       'Ce qui reste sur votre telephone',
       'Vos repas, vos aliments, vos favoris, vos objectifs et vos reglages sont stockes '
           'uniquement sur votre appareil. L\'application fonctionne entierement hors ligne '
-          'pour la consultation de l\'historique et la recherche d\'aliments.'
+          'pour la consultation de l\'historique et la recherche d\'aliments.',
     ),
     (
       'Ce qui n\'est pas conserve',
       'Les images envoyees pour analyse ne sont pas archivees par le service : elles sont '
           'traitees puis oubliees. Seule la photo que vous choisissez de conserver reste sur '
-          'votre appareil.'
+          'votre appareil.',
     ),
     (
       'Bases de donnees utilisees',
       'Les valeurs nutritionnelles proviennent de la table Ciqual publiee par l\'ANSES '
           '(Licence Ouverte 2.0) et de la base Open Food Facts (licence ODbL). Ces sources '
-          'sont citees dans l\'application.'
+          'sont citees dans l\'application.',
     ),
     (
       'Vos droits',
       'Vous pouvez supprimer un repas, effacer l\'ensemble de vos donnees ou retirer votre '
           'cle d\'acces a tout moment depuis les reglages. La desinstallation de '
-          'l\'application supprime definitivement les donnees locales.'
+          'l\'application supprime definitivement les donnees locales.',
     ),
     (
       'Avertissement',
       'Assiette n\'est pas un dispositif medical. L\'application ne fournit aucun diagnostic, '
           'aucune recommandation therapeutique et aucune posologie. Pour toute decision '
-          'concernant votre sante, consultez un professionnel.'
+          'concernant votre sante, consultez un professionnel.',
     ),
   ];
 }

@@ -68,14 +68,17 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
             SectionCard(
               title: 'Glucides dans le temps',
-              subtitle: _range == 0 ? '7 derniers jours' : '6 dernieres semaines',
+              subtitle: _range == 0
+                  ? '7 derniers jours'
+                  : '6 dernieres semaines',
               trailing: SegmentedButton<int>(
                 segments: const [
                   ButtonSegment(value: 0, label: Text('7 j')),
                   ButtonSegment(value: 1, label: Text('6 sem.')),
                 ],
                 selected: {_range},
-                onSelectionChanged: (selection) => setState(() => _range = selection.first),
+                onSelectionChanged: (selection) =>
+                    setState(() => _range = selection.first),
                 showSelectedIcon: false,
                 style: const ButtonStyle(
                   visualDensity: VisualDensity.compact,
@@ -92,7 +95,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   children: [
                     SizedBox(
                       height: 210,
-                      child: _CarbsBarChart(buckets: buckets, weekly: _range == 1),
+                      child: _CarbsBarChart(
+                        buckets: buckets,
+                        weekly: _range == 1,
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.md),
                     _SeriesStats(buckets: buckets, weekly: _range == 1),
@@ -135,7 +141,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       'Definissez un objectif de glucides par jour pour suivre votre '
                       'progression. L\'application n\'en propose aucun par defaut : '
                       'ces valeurs vous appartiennent.',
-                      style: TextStyle(fontSize: 14, height: 1.5, color: context.palette.mutedText),
+                      style: TextStyle(
+                        fontSize: 14,
+                        height: 1.5,
+                        color: context.palette.mutedText,
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.md),
                     OutlinedButton.icon(
@@ -154,7 +164,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             const SizedBox(height: AppSpacing.lg),
 
             const EstimateBanner(
-              message: 'Ces chiffres reposent sur les quantites que vous avez validees. '
+              message:
+                  'Ces chiffres reposent sur les quantites que vous avez validees. '
                   'Ils ne constituent pas un avis medical.',
             ),
           ],
@@ -176,7 +187,8 @@ class _TodayCard extends StatelessWidget {
 
     return SectionCard(
       title: 'Aujourd\'hui',
-      subtitle: '${summary.mealCount} repas enregistre${summary.mealCount > 1 ? 's' : ''}',
+      subtitle:
+          '${summary.mealCount} repas enregistre${summary.mealCount > 1 ? 's' : ''}',
       child: Column(
         children: [
           Row(
@@ -185,12 +197,20 @@ class _TodayCard extends StatelessWidget {
               const SizedBox(width: AppSpacing.sm),
               Text(
                 'Glucides',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: palette.carb),
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: palette.carb,
+                ),
               ),
               const Spacer(),
               Text(
                 '${Format.carbs(totals.carbs)} g',
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: palette.carb),
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: palette.carb,
+                ),
               ),
             ],
           ),
@@ -214,7 +234,10 @@ class _CarbsBarChart extends StatelessWidget {
     final palette = context.palette;
     final maxValue = buckets
         .map((bucket) => bucket.totals.carbs)
-        .fold<double>(0, (previous, value) => value > previous ? value : previous);
+        .fold<double>(
+          0,
+          (previous, value) => value > previous ? value : previous,
+        );
 
     // Une echelle minimale evite un graphique ecrase lorsque les valeurs sont
     // faibles, tout en restant proportionnelle des que les glucides montent.
@@ -246,15 +269,17 @@ class _CarbsBarChart extends StatelessWidget {
           show: true,
           drawVerticalLine: false,
           horizontalInterval: maxY / 4,
-          getDrawingHorizontalLine: (value) => FlLine(
-            color: palette.cardBorder,
-            strokeWidth: 1,
-          ),
+          getDrawingHorizontalLine: (value) =>
+              FlLine(color: palette.cardBorder, strokeWidth: 1),
         ),
         borderData: FlBorderData(show: false),
         titlesData: FlTitlesData(
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
@@ -272,7 +297,9 @@ class _CarbsBarChart extends StatelessWidget {
               reservedSize: 28,
               getTitlesWidget: (value, meta) {
                 final index = value.toInt();
-                if (index < 0 || index >= buckets.length) return const SizedBox.shrink();
+                if (index < 0 || index >= buckets.length) {
+                  return const SizedBox.shrink();
+                }
                 final date = buckets[index].date;
                 final label = weekly
                     ? Format.dayMonth(date).split(' ').first
@@ -332,7 +359,10 @@ class _SeriesStats extends StatelessWidget {
       spacing: AppSpacing.lg,
       runSpacing: AppSpacing.sm,
       children: [
-        _Stat(label: 'Moyenne par $unit actif', value: '${Format.carbs(average.carbs)} g'),
+        _Stat(
+          label: 'Moyenne par $unit actif',
+          value: '${Format.carbs(average.carbs)} g',
+        ),
         _Stat(label: 'Total', value: '${Format.carbs(total.carbs)} g'),
         _Stat(
           label: weekly ? 'Periodes actives' : 'Jours actifs',
@@ -376,7 +406,9 @@ class _GoalBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
-    final color = progress.isExceeded ? AppColors.warning : context.colors.primary;
+    final color = progress.isExceeded
+        ? AppColors.warning
+        : context.colors.primary;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -386,12 +418,19 @@ class _GoalBar extends StatelessWidget {
             Expanded(
               child: Text(
                 progress.label,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
             Text(
               '${Format.number(progress.consumed)} / ${Format.number(progress.target)} ${progress.unit}',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: palette.mutedText),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: palette.mutedText,
+              ),
             ),
           ],
         ),

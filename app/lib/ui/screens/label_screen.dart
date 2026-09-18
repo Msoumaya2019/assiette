@@ -72,7 +72,9 @@ class _LabelScreenState extends ConsumerState<LabelScreen> {
 
     try {
       final service = ref.read(imageServiceProvider);
-      final photo = fromCamera ? await service.pickFromCamera() : await service.pickFromGallery();
+      final photo = fromCamera
+          ? await service.pickFromCamera()
+          : await service.pickFromGallery();
       if (!mounted) return;
       if (photo == null) {
         setState(() => _busy = false);
@@ -186,7 +188,9 @@ class _LabelScreenState extends ConsumerState<LabelScreen> {
     final draft = ref.read(draftMealProvider);
 
     if (draft == null) {
-      ref.read(draftMealProvider.notifier).start(
+      ref
+          .read(draftMealProvider.notifier)
+          .start(
             Meal(
               eatenAt: DateTime.now(),
               name: _suggestName(DateTime.now()),
@@ -227,7 +231,8 @@ class _LabelScreenState extends ConsumerState<LabelScreen> {
             ),
             children: [
               const EstimateBanner(
-                message: 'Visez le tableau nutritionnel du produit, en entier et bien eclaire. '
+                message:
+                    'Visez le tableau nutritionnel du produit, en entier et bien eclaire. '
                     'Verifiez chaque valeur : une lecture peut se tromper.',
               ),
 
@@ -237,13 +242,19 @@ class _LabelScreenState extends ConsumerState<LabelScreen> {
                 Column(
                   children: [
                     OutlinedButton.icon(
-                      onPressed: _busy ? null : () => _capture(fromCamera: true),
+                      onPressed: _busy
+                          ? null
+                          : () => _capture(fromCamera: true),
                       icon: const Icon(Icons.photo_camera_rounded, size: 20),
-                      label: const Text('Photographier le tableau nutritionnel'),
+                      label: const Text(
+                        'Photographier le tableau nutritionnel',
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     OutlinedButton.icon(
-                      onPressed: _busy ? null : () => _capture(fromCamera: false),
+                      onPressed: _busy
+                          ? null
+                          : () => _capture(fromCamera: false),
                       icon: const Icon(Icons.photo_library_rounded, size: 20),
                       label: const Text('Choisir dans la galerie'),
                     ),
@@ -254,7 +265,12 @@ class _LabelScreenState extends ConsumerState<LabelScreen> {
                   borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                   child: Stack(
                     children: [
-                      Image.memory(_photo!.bytes, height: 180, width: double.infinity, fit: BoxFit.cover),
+                      Image.memory(
+                        _photo!.bytes,
+                        height: 180,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                      ),
                       if (_busy)
                         Positioned.fill(
                           child: ColoredBox(
@@ -263,11 +279,16 @@ class _LabelScreenState extends ConsumerState<LabelScreen> {
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
-                                  CircularProgressIndicator(color: Colors.white),
+                                  CircularProgressIndicator(
+                                    color: Colors.white,
+                                  ),
                                   SizedBox(height: AppSpacing.md),
                                   Text(
                                     'Lecture de l\'etiquette…',
-                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -304,7 +325,9 @@ class _LabelScreenState extends ConsumerState<LabelScreen> {
 
               SectionCard(
                 title: 'Valeurs pour 100 g',
-                subtitle: _extraction?.basis == '100ml' ? 'Etiquette exprimee pour 100 ml' : null,
+                subtitle: _extraction?.basis == '100ml'
+                    ? 'Etiquette exprimee pour 100 ml'
+                    : null,
                 child: Column(
                   children: [
                     TextFormField(
@@ -332,15 +355,35 @@ class _LabelScreenState extends ConsumerState<LabelScreen> {
                       onChanged: () => setState(() {}),
                     ),
                     const SizedBox(height: AppSpacing.sm),
-                    _NumericField(controller: _sugarsController, label: 'dont sucres', unit: 'g'),
+                    _NumericField(
+                      controller: _sugarsController,
+                      label: 'dont sucres',
+                      unit: 'g',
+                    ),
                     const SizedBox(height: AppSpacing.sm),
-                    _NumericField(controller: _proteinController, label: 'Proteines', unit: 'g'),
+                    _NumericField(
+                      controller: _proteinController,
+                      label: 'Proteines',
+                      unit: 'g',
+                    ),
                     const SizedBox(height: AppSpacing.sm),
-                    _NumericField(controller: _fatController, label: 'Lipides', unit: 'g'),
+                    _NumericField(
+                      controller: _fatController,
+                      label: 'Lipides',
+                      unit: 'g',
+                    ),
                     const SizedBox(height: AppSpacing.sm),
-                    _NumericField(controller: _fiberController, label: 'Fibres', unit: 'g'),
+                    _NumericField(
+                      controller: _fiberController,
+                      label: 'Fibres',
+                      unit: 'g',
+                    ),
                     const SizedBox(height: AppSpacing.sm),
-                    _NumericField(controller: _saltController, label: 'Sel', unit: 'g'),
+                    _NumericField(
+                      controller: _saltController,
+                      label: 'Sel',
+                      unit: 'g',
+                    ),
                   ],
                 ),
               ),
@@ -351,9 +394,9 @@ class _LabelScreenState extends ConsumerState<LabelScreen> {
                 EstimateBanner(
                   message: _extraction!.confidence >= 0.6
                       ? 'Lecture automatique (confiance ${Format.confidence(_extraction!.confidence)}). '
-                          'Verifiez avant d\'ajouter.'
+                            'Verifiez avant d\'ajouter.'
                       : 'Lecture peu fiable (confiance ${Format.confidence(_extraction!.confidence)}). '
-                          'Corrigez les valeurs ci-dessus.',
+                            'Corrigez les valeurs ci-dessus.',
                   severity: _extraction!.confidence >= 0.6
                       ? EstimateSeverity.info
                       : EstimateSeverity.warning,

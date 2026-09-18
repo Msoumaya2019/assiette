@@ -7,10 +7,25 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// Aliment de test, avec des valeurs rondes pour que les attentes restent
 /// lisibles : 50 g de glucides pour 100 g.
-Food food(String name, {double carbs = 50, double kcal = 250, double protein = 8, double fat = 4, double fiber = 2, double sugars = 5}) {
+Food food(
+  String name, {
+  double carbs = 50,
+  double kcal = 250,
+  double protein = 8,
+  double fat = 4,
+  double fiber = 2,
+  double sugars = 5,
+}) {
   return Food(
     name: name,
-    per100g: NutritionValues(kcal: kcal, carbs: carbs, protein: protein, fat: fat, fiber: fiber, sugars: sugars),
+    per100g: NutritionValues(
+      kcal: kcal,
+      carbs: carbs,
+      protein: protein,
+      fat: fat,
+      fiber: fiber,
+      sugars: sugars,
+    ),
     source: FoodSource.ciqual,
   );
 }
@@ -19,7 +34,13 @@ Meal mealAt(DateTime at, List<MealItem> items, {String name = 'Repas'}) {
   return Meal(eatenAt: at, name: name, items: items, isEstimate: false);
 }
 
-MealItem item(double grams, {String name = 'Riz', double? carbs, double? confidence, bool isEstimate = false}) {
+MealItem item(
+  double grams, {
+  String name = 'Riz',
+  double? carbs,
+  double? confidence,
+  bool isEstimate = false,
+}) {
   return MealItem(
     food: food(name, carbs: carbs ?? 50),
     quantityG: grams,
@@ -107,32 +128,58 @@ void main() {
 
   group('Filtrage par periode', () {
     final meals = [
-      mealAt(DateTime(2026, 3, 16, 8), [item(100, carbs: 50)], name: 'Lundi matin'),
-      mealAt(DateTime(2026, 3, 16, 20), [item(100, carbs: 50)], name: 'Lundi soir'),
-      mealAt(DateTime(2026, 3, 17, 12), [item(200, carbs: 50)], name: 'Mardi midi'),
-      mealAt(DateTime(2026, 3, 18, 12), [item(50, carbs: 100)], name: 'Mercredi midi'),
+      mealAt(DateTime(2026, 3, 16, 8), [
+        item(100, carbs: 50),
+      ], name: 'Lundi matin'),
+      mealAt(DateTime(2026, 3, 16, 20), [
+        item(100, carbs: 50),
+      ], name: 'Lundi soir'),
+      mealAt(DateTime(2026, 3, 17, 12), [
+        item(200, carbs: 50),
+      ], name: 'Mardi midi'),
+      mealAt(DateTime(2026, 3, 18, 12), [
+        item(50, carbs: 100),
+      ], name: 'Mercredi midi'),
     ];
 
     test('les repas d\'un jour sont correctement isoles', () {
       final monday = NutritionCalculator.forDay(meals, DateTime(2026, 3, 16));
       expect(monday.length, 2);
-      expect(monday.map((meal) => meal.name), containsAll(['Lundi matin', 'Lundi soir']));
+      expect(
+        monday.map((meal) => meal.name),
+        containsAll(['Lundi matin', 'Lundi soir']),
+      );
     });
 
     test('un repas en fin de journee appartient bien a ce jour', () {
       final late = mealAt(DateTime(2026, 3, 16, 23, 59, 59), [item(100)]);
-      expect(NutritionCalculator.forDay([late], DateTime(2026, 3, 16)).length, 1);
-      expect(NutritionCalculator.forDay([late], DateTime(2026, 3, 17)), isEmpty);
+      expect(
+        NutritionCalculator.forDay([late], DateTime(2026, 3, 16)).length,
+        1,
+      );
+      expect(
+        NutritionCalculator.forDay([late], DateTime(2026, 3, 17)),
+        isEmpty,
+      );
     });
 
     test('un repas a minuit appartient au jour qui commence', () {
       final midnight = mealAt(DateTime(2026, 3, 17, 0, 0, 0), [item(100)]);
-      expect(NutritionCalculator.forDay([midnight], DateTime(2026, 3, 16)), isEmpty);
-      expect(NutritionCalculator.forDay([midnight], DateTime(2026, 3, 17)).length, 1);
+      expect(
+        NutritionCalculator.forDay([midnight], DateTime(2026, 3, 16)),
+        isEmpty,
+      );
+      expect(
+        NutritionCalculator.forDay([midnight], DateTime(2026, 3, 17)).length,
+        1,
+      );
     });
 
     test('le resume du jour agrege totaux et nombre de repas', () {
-      final summary = NutritionCalculator.summaryForDay(meals, DateTime(2026, 3, 16));
+      final summary = NutritionCalculator.summaryForDay(
+        meals,
+        DateTime(2026, 3, 16),
+      );
 
       expect(summary.mealCount, 2);
       expect(summary.totals.carbs, closeTo(100, 0.001)); // 2 x 50 g
@@ -141,14 +188,22 @@ void main() {
 
   group('Serie journaliere', () {
     test('sept jours sont toujours renvoyes, meme sans repas', () {
-      final series = NutritionCalculator.dailySeries(const [], reference, days: 7);
+      final series = NutritionCalculator.dailySeries(
+        const [],
+        reference,
+        days: 7,
+      );
       expect(series.length, 7);
       expect(series.every((bucket) => bucket.mealCount == 0), isTrue);
       expect(series.every((bucket) => bucket.totals.carbs == 0), isTrue);
     });
 
     test('la serie se termine au jour de reference', () {
-      final series = NutritionCalculator.dailySeries(const [], reference, days: 7);
+      final series = NutritionCalculator.dailySeries(
+        const [],
+        reference,
+        days: 7,
+      );
       expect(series.last.date, DateTime(2026, 3, 18));
       expect(series.first.date, DateTime(2026, 3, 12));
     });
@@ -167,7 +222,9 @@ void main() {
     });
 
     test('un repas hors de la fenetre est ignore', () {
-      final meals = [mealAt(DateTime(2026, 2, 1, 12), [item(100)])];
+      final meals = [
+        mealAt(DateTime(2026, 2, 1, 12), [item(100)]),
+      ];
       final series = NutritionCalculator.dailySeries(meals, reference, days: 7);
       expect(series.every((bucket) => bucket.mealCount == 0), isTrue);
     });
@@ -175,15 +232,29 @@ void main() {
 
   group('Serie hebdomadaire', () {
     test('les semaines commencent le lundi', () {
-      final series = NutritionCalculator.weeklySeries(const [], reference, weeks: 6);
+      final series = NutritionCalculator.weeklySeries(
+        const [],
+        reference,
+        weeks: 6,
+      );
       expect(series.length, 6);
-      expect(series.every((bucket) => bucket.date.weekday == DateTime.monday), isTrue);
+      expect(
+        series.every((bucket) => bucket.date.weekday == DateTime.monday),
+        isTrue,
+      );
     });
 
     test('la derniere semaine contient le jour de reference', () {
-      final series = NutritionCalculator.weeklySeries(const [], reference, weeks: 6);
+      final series = NutritionCalculator.weeklySeries(
+        const [],
+        reference,
+        weeks: 6,
+      );
       final lastWeek = series.last.date;
-      expect(lastWeek.isBefore(reference) || lastWeek.isAtSameMomentAs(reference), isTrue);
+      expect(
+        lastWeek.isBefore(reference) || lastWeek.isAtSameMomentAs(reference),
+        isTrue,
+      );
       expect(reference.difference(lastWeek).inDays, lessThan(7));
     });
   });
@@ -211,29 +282,36 @@ void main() {
       expect(average.carbs, closeTo(60, 1e-9));
     });
 
-    test('la moyenne porte sur toutes les valeurs, pas seulement les glucides', () {
-      final series = [
-        DailyBucket(
-          date: DateTime(2026, 3, 10),
-          totals: const NutritionValues(kcal: 2000, carbs: 200, protein: 100),
-          mealCount: 3,
-        ),
-        DailyBucket(
-          date: DateTime(2026, 3, 11),
-          totals: const NutritionValues(kcal: 1000, carbs: 100, protein: 50),
-          mealCount: 2,
-        ),
-      ];
+    test(
+      'la moyenne porte sur toutes les valeurs, pas seulement les glucides',
+      () {
+        final series = [
+          DailyBucket(
+            date: DateTime(2026, 3, 10),
+            totals: const NutritionValues(kcal: 2000, carbs: 200, protein: 100),
+            mealCount: 3,
+          ),
+          DailyBucket(
+            date: DateTime(2026, 3, 11),
+            totals: const NutritionValues(kcal: 1000, carbs: 100, protein: 50),
+            mealCount: 2,
+          ),
+        ];
 
-      final average = NutritionCalculator.averagePerActiveDay(series);
-      expect(average.kcal, closeTo(1500, 1e-9));
-      expect(average.carbs, closeTo(150, 1e-9));
-      expect(average.protein, closeTo(75, 1e-9));
-    });
+        final average = NutritionCalculator.averagePerActiveDay(series);
+        expect(average.kcal, closeTo(1500, 1e-9));
+        expect(average.carbs, closeTo(150, 1e-9));
+        expect(average.protein, closeTo(75, 1e-9));
+      },
+    );
 
     test('sans periode active, la moyenne est nulle', () {
       final series = [
-        DailyBucket(date: reference, totals: NutritionValues.zero, mealCount: 0),
+        DailyBucket(
+          date: reference,
+          totals: NutritionValues.zero,
+          mealCount: 0,
+        ),
       ];
       expect(NutritionCalculator.averagePerActiveDay(series).carbs, 0);
     });
@@ -254,10 +332,20 @@ void main() {
 
     test('une confiance faible elargit la fourchette', () {
       final sure = mealAt(reference, [
-        MealItem(food: food('Riz'), quantityG: 200, confidence: 0.95, isEstimate: true),
+        MealItem(
+          food: food('Riz'),
+          quantityG: 200,
+          confidence: 0.95,
+          isEstimate: true,
+        ),
       ]);
       final unsure = mealAt(reference, [
-        MealItem(food: food('Riz'), quantityG: 200, confidence: 0.35, isEstimate: true),
+        MealItem(
+          food: food('Riz'),
+          quantityG: 200,
+          confidence: 0.35,
+          isEstimate: true,
+        ),
       ]);
 
       final (sureLow, sureHigh) = NutritionCalculator.carbsRange(sure);
@@ -268,7 +356,12 @@ void main() {
 
     test('la fourchette est centree sur le total estime', () {
       final meal = mealAt(reference, [
-        MealItem(food: food('Riz'), quantityG: 200, confidence: 0.8, isEstimate: true),
+        MealItem(
+          food: food('Riz'),
+          quantityG: 200,
+          confidence: 0.8,
+          isEstimate: true,
+        ),
       ]);
 
       final (low, high) = NutritionCalculator.carbsRange(meal);
@@ -279,7 +372,12 @@ void main() {
 
     test('la borne basse ne descend jamais sous zero', () {
       final meal = mealAt(reference, [
-        MealItem(food: food('Riz', carbs: 0), quantityG: 200, confidence: 0.2, isEstimate: true),
+        MealItem(
+          food: food('Riz', carbs: 0),
+          quantityG: 200,
+          confidence: 0.2,
+          isEstimate: true,
+        ),
       ]);
 
       final (low, high) = NutritionCalculator.carbsRange(meal);
@@ -291,13 +389,19 @@ void main() {
   group('Progression vers les objectifs', () {
     test('aucun objectif defini ne produit aucune progression', () {
       const goals = DailyGoals.none;
-      const summary = NutritionSummary(totals: NutritionValues(carbs: 50), mealCount: 1);
+      const summary = NutritionSummary(
+        totals: NutritionValues(carbs: 50),
+        mealCount: 1,
+      );
       expect(NutritionCalculator.progress(goals, summary), isEmpty);
     });
 
     test('un objectif de glucides produit une progression', () {
       const goals = DailyGoals(carbsG: 200);
-      const summary = NutritionSummary(totals: NutritionValues(carbs: 50), mealCount: 1);
+      const summary = NutritionSummary(
+        totals: NutritionValues(carbs: 50),
+        mealCount: 1,
+      );
 
       final progress = NutritionCalculator.progress(goals, summary);
       expect(progress.length, 1);
@@ -308,7 +412,10 @@ void main() {
 
     test('un depassement est signale et le remplissage reste borne', () {
       const goals = DailyGoals(carbsG: 100);
-      const summary = NutritionSummary(totals: NutritionValues(carbs: 150), mealCount: 3);
+      const summary = NutritionSummary(
+        totals: NutritionValues(carbs: 150),
+        mealCount: 3,
+      );
 
       final progress = NutritionCalculator.progress(goals, summary).first;
       expect(progress.isExceeded, isTrue);
@@ -318,7 +425,10 @@ void main() {
 
     test('un objectif nul ne provoque pas de division par zero', () {
       const goals = DailyGoals(carbsG: 0);
-      const summary = NutritionSummary(totals: NutritionValues(carbs: 50), mealCount: 1);
+      const summary = NutritionSummary(
+        totals: NutritionValues(carbs: 50),
+        mealCount: 1,
+      );
       expect(NutritionCalculator.progress(goals, summary).first.ratio, 0);
     });
   });

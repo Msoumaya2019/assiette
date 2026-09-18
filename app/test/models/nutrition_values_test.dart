@@ -4,7 +4,14 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('NutritionValues.forGrams', () {
     test('met a l\'echelle proportionnellement au poids', () {
-      const values = NutritionValues(kcal: 200, carbs: 50, protein: 10, fat: 5, fiber: 4, salt: 1);
+      const values = NutritionValues(
+        kcal: 200,
+        carbs: 50,
+        protein: 10,
+        fat: 5,
+        fiber: 4,
+        salt: 1,
+      );
 
       final half = values.forGrams(50);
       expect(half.carbs, closeTo(25, 0.001));
@@ -30,7 +37,13 @@ void main() {
     });
 
     test('100 g restitue exactement la valeur de reference', () {
-      const values = NutritionValues(kcal: 137.5, carbs: 22.25, protein: 8.1, fat: 3.3, fiber: 2.2);
+      const values = NutritionValues(
+        kcal: 137.5,
+        carbs: 22.25,
+        protein: 8.1,
+        fat: 3.3,
+        fiber: 2.2,
+      );
       final same = values.forGrams(100);
 
       expect(same.kcal, closeTo(137.5, 1e-9));
@@ -48,15 +61,34 @@ void main() {
       var quantity = 180.0;
       for (final factor in [0.5, 2.0, 1.25, 0.8]) {
         quantity *= factor;
-        expect(values.forGrams(quantity).carbs, closeTo(63.7 * quantity / 100, 1e-9));
+        expect(
+          values.forGrams(quantity).carbs,
+          closeTo(63.7 * quantity / 100, 1e-9),
+        );
       }
     });
   });
 
   group('NutritionValues addition', () {
     test('additionne composant par composant', () {
-      const a = NutritionValues(kcal: 100, carbs: 20, sugars: 5, protein: 3, fat: 2, fiber: 1, salt: 0.2);
-      const b = NutritionValues(kcal: 250, carbs: 10, sugars: 1, protein: 15, fat: 12, fiber: 3, salt: 0.8);
+      const a = NutritionValues(
+        kcal: 100,
+        carbs: 20,
+        sugars: 5,
+        protein: 3,
+        fat: 2,
+        fiber: 1,
+        salt: 0.2,
+      );
+      const b = NutritionValues(
+        kcal: 250,
+        carbs: 10,
+        sugars: 1,
+        protein: 15,
+        fat: 12,
+        fiber: 3,
+        salt: 0.8,
+      );
 
       final sum = a + b;
 
@@ -97,27 +129,49 @@ void main() {
 
   group('Indicateurs derives', () {
     test('la part des sucres est bornee entre 0 et 1', () {
-      expect(const NutritionValues(carbs: 100, sugars: 50).sugarShare, closeTo(0.5, 1e-9));
+      expect(
+        const NutritionValues(carbs: 100, sugars: 50).sugarShare,
+        closeTo(0.5, 1e-9),
+      );
       expect(const NutritionValues(carbs: 0, sugars: 0).sugarShare, 0);
       // Donnee incoherente : la part reste bornee plutot que de depasser 1.
       expect(const NutritionValues(carbs: 10, sugars: 30).sugarShare, 1.0);
     });
 
-    test('une energie coherente avec les macronutriments n\'est pas signalee', () {
-      // 20 g de glucides + 10 g de proteines + 10 g de lipides = 80 + 40 + 90 = 210 kcal
-      const values = NutritionValues(kcal: 210, carbs: 20, protein: 10, fat: 10);
-      expect(values.energyIsInconsistent, isFalse);
-    });
+    test(
+      'une energie coherente avec les macronutriments n\'est pas signalee',
+      () {
+        // 20 g de glucides + 10 g de proteines + 10 g de lipides = 80 + 40 + 90 = 210 kcal
+        const values = NutritionValues(
+          kcal: 210,
+          carbs: 20,
+          protein: 10,
+          fat: 10,
+        );
+        expect(values.energyIsInconsistent, isFalse);
+      },
+    );
 
     test('une energie tres eloignee des macronutriments est signalee', () {
-      const values = NutritionValues(kcal: 500, carbs: 20, protein: 10, fat: 10);
+      const values = NutritionValues(
+        kcal: 500,
+        carbs: 20,
+        protein: 10,
+        fat: 10,
+      );
       expect(values.energyIsInconsistent, isTrue);
     });
 
-    test('une donnee sans energie n\'est jamais signalee comme incoherente', () {
-      expect(const NutritionValues(carbs: 20, protein: 5).energyIsInconsistent, isFalse);
-      expect(NutritionValues.zero.energyIsInconsistent, isFalse);
-    });
+    test(
+      'une donnee sans energie n\'est jamais signalee comme incoherente',
+      () {
+        expect(
+          const NutritionValues(carbs: 20, protein: 5).energyIsInconsistent,
+          isFalse,
+        );
+        expect(NutritionValues.zero.energyIsInconsistent, isFalse);
+      },
+    );
   });
 
   group('Serialisation', () {

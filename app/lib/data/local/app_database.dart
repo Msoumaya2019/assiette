@@ -15,10 +15,29 @@ import '../../models/nutrition_values.dart';
 /// ces tables. Les valeurs nutritionnelles sont stockees **pour 100 g** dans
 /// `meal_items`, jamais en total : modifier une portion reste donc toujours
 /// recalculable sans perte de precision.
+///
+/// Ce qu'une ligne de `meal_items` conserve d'un aliment, et ce qu'elle ne
+/// conserve pas — le choix est deliberé, il est donc ecrit ici :
+///
+///   - conserve : le nom, les neuf constituants pour 100 g, la provenance
+///     (`source`, `source_ref`), la marque et l'image. La provenance est ce qui
+///     permet a l'interface d'annoncer d'ou vient une valeur ;
+///   - non conserve : le groupe d'aliments (`category`) et la portion usuelle
+///     (`serving_size_g`, `serving_label`). Ces metadonnees ne servent qu'a
+///     proposer une quantite au moment ou l'on ajoute un aliment, a partir de
+///     la source interrogee en direct. Aucun ecran ne les relit depuis un repas
+///     enregistre. Les stocker ajouterait trois colonnes pour des donnees que
+///     personne ne lit.
+///
+/// Si un ecran venait a proposer la portion usuelle d'un aliment deja
+/// enregistre, il faudrait ajouter ces colonnes et une migration.
 class AppDatabase {
-  AppDatabase({this.fileName = 'assiette.db', DatabaseFactory? factory, String? customPath})
-      : _factory = factory ?? databaseFactory,
-        _customPath = customPath;
+  AppDatabase({
+    this.fileName = 'assiette.db',
+    DatabaseFactory? factory,
+    String? customPath,
+  }) : _factory = factory ?? databaseFactory,
+       _customPath = customPath;
 
   final String fileName;
   final DatabaseFactory _factory;
@@ -32,7 +51,9 @@ class AppDatabase {
   Database get db {
     final database = _db;
     if (database == null) {
-      throw StateError('La base de donnees n\'est pas ouverte. Appelez open() d\'abord.');
+      throw StateError(
+        'La base de donnees n\'est pas ouverte. Appelez open() d\'abord.',
+      );
     }
     return database;
   }
@@ -42,7 +63,8 @@ class AppDatabase {
   Future<void> open() async {
     if (_db != null) return;
 
-    final path = _customPath ?? p.join(await _factory.getDatabasesPath(), fileName);
+    final path =
+        _customPath ?? p.join(await _factory.getDatabasesPath(), fileName);
 
     _db = await _factory.openDatabase(
       path,
@@ -153,26 +175,26 @@ class AppDatabase {
     final now = DateTime.now().millisecondsSinceEpoch;
 
     await db.transaction((txn) async {
-      await txn.insert(
-        'meals',
-        {
-          'id': meal.id,
-          'eaten_at': meal.eatenAt.millisecondsSinceEpoch,
-          'name': meal.name,
-          'source': meal.source.name,
-          'notes': meal.notes,
-          'photo_path': meal.photoPath,
-          'is_estimate': meal.isEstimate ? 1 : 0,
-          'created_at': now,
-          'updated_at': now,
-          'deleted_at': null,
-        },
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      await txn.insert('meals', {
+        'id': meal.id,
+        'eaten_at': meal.eatenAt.millisecondsSinceEpoch,
+        'name': meal.name,
+        'source': meal.source.name,
+        'notes': meal.notes,
+        'photo_path': meal.photoPath,
+        'is_estimate': meal.isEstimate ? 1 : 0,
+        'created_at': now,
+        'updated_at': now,
+        'deleted_at': null,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
 
       // Remplacement complet des lignes : plus simple et plus sur qu'un
       // differentiel, et le volume par repas reste faible.
-      await txn.delete('meal_items', where: 'meal_id = ?', whereArgs: [meal.id]);
+      await txn.delete(
+        'meal_items',
+        where: 'meal_id = ?',
+        whereArgs: [meal.id],
+      );
 
       final batch = txn.batch();
       for (var index = 0; index < meal.items.length; index++) {
@@ -206,7 +228,12 @@ class AppDatabase {
   }
 
   Future<Meal?> mealById(String id) async {
-    final rows = await db.query('meals', where: 'id = ? AND deleted_at IS NULL', whereArgs: [id], limit: 1);
+    final rows = await db.query(
+      'meals',
+      where: 'id = ? AND deleted_at IS NULL',
+      whereArgs: [id],
+      limit: 1,
+    );
     if (rows.isEmpty) return null;
     return _buildMeal(rows.first);
   }
@@ -215,7 +242,9 @@ class AppDatabase {
   Future<List<Meal>> recentMeals({int limit = 100, DateTime? before}) async {
     final rows = await db.query(
       'meals',
-      where: before == null ? 'deleted_at IS NULL' : 'deleted_at IS NULL AND eaten_at < ?',
+      where: before == null
+          ? 'deleted_at IS NULL'
+          : 'deleted_at IS NULL AND eaten_at < ?',
       whereArgs: before == null ? null : [before.millisecondsSinceEpoch],
       orderBy: 'eaten_at DESC',
       limit: limit,
@@ -277,7 +306,9 @@ class AppDatabase {
         ),
         quantityG: (item['quantity_g'] as num).toDouble(),
         confidence: (item['confidence'] as num?)?.toDouble(),
-        portionSize: item['portion'] == null ? null : PortionSize.fromId(item['portion'] as String?),
+        portionSize: item['portion'] == null
+            ? null
+            : PortionSize.fromId(item['portion'] as String?),
         isEstimate: (item['is_estimate'] as int? ?? 0) == 1,
         sortOrder: (item['sort_order'] as int?) ?? 0,
       );
@@ -299,19 +330,19 @@ class AppDatabase {
   // Repas personnalises
   // -------------------------------------------------------------------------
 
-  Future<void> saveTemplate(String id, String name, List<MealItem> items) async {
+  Future<void> saveTemplate(
+    String id,
+    String name,
+    List<MealItem> items,
+  ) async {
     final now = DateTime.now().millisecondsSinceEpoch;
-    await db.insert(
-      'templates',
-      {
-        'id': id,
-        'name': name,
-        'items_json': jsonEncode(items.map((item) => item.toJson()).toList()),
-        'created_at': now,
-        'updated_at': now,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('templates', {
+      'id': id,
+      'name': name,
+      'items_json': jsonEncode(items.map((item) => item.toJson()).toList()),
+      'created_at': now,
+      'updated_at': now,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<List<MealTemplate>> templates() async {
@@ -321,7 +352,12 @@ class AppDatabase {
       return MealTemplate(
         id: row['id'] as String,
         name: row['name'] as String,
-        items: raw.map((item) => MealItem.fromJson((item as Map).cast<String, dynamic>())).toList(),
+        items: raw
+            .map(
+              (item) =>
+                  MealItem.fromJson((item as Map).cast<String, dynamic>()),
+            )
+            .toList(),
       );
     }).toList();
   }
@@ -334,18 +370,19 @@ class AppDatabase {
   // Favoris
   // -------------------------------------------------------------------------
 
-  Future<void> addFavorite(String id, String kind, String label, Map<String, dynamic> payload) async {
-    await db.insert(
-      'favorites',
-      {
-        'id': id,
-        'kind': kind,
-        'label': label,
-        'payload_json': jsonEncode(payload),
-        'created_at': DateTime.now().millisecondsSinceEpoch,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+  Future<void> addFavorite(
+    String id,
+    String kind,
+    String label,
+    Map<String, dynamic> payload,
+  ) async {
+    await db.insert('favorites', {
+      'id': id,
+      'kind': kind,
+      'label': label,
+      'payload_json': jsonEncode(payload),
+      'created_at': DateTime.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<List<Favorite>> favorites({String? kind}) async {
@@ -360,7 +397,8 @@ class AppDatabase {
         id: row['id'] as String,
         kind: row['kind'] as String,
         label: row['label'] as String,
-        payload: (jsonDecode(row['payload_json'] as String) as Map).cast<String, dynamic>(),
+        payload: (jsonDecode(row['payload_json'] as String) as Map)
+            .cast<String, dynamic>(),
       );
     }).toList();
   }
@@ -370,7 +408,13 @@ class AppDatabase {
   }
 
   Future<bool> isFavorite(String id) async {
-    final rows = await db.query('favorites', columns: ['id'], where: 'id = ?', whereArgs: [id], limit: 1);
+    final rows = await db.query(
+      'favorites',
+      columns: ['id'],
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
     return rows.isNotEmpty;
   }
 
@@ -379,30 +423,38 @@ class AppDatabase {
   // -------------------------------------------------------------------------
 
   Future<String?> readSetting(String key) async {
-    final rows = await db.query('settings', columns: ['value'], where: 'key = ?', whereArgs: [key], limit: 1);
+    final rows = await db.query(
+      'settings',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
     if (rows.isEmpty) return null;
     return rows.first['value'] as String?;
   }
 
   Future<void> writeSetting(String key, String value) async {
-    await db.insert(
-      'settings',
-      {'key': key, 'value': value},
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    await db.insert('settings', {
+      'key': key,
+      'value': value,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<DailyGoals> readGoals() async {
     final raw = await readSetting('daily_goals');
     if (raw == null || raw.isEmpty) return DailyGoals.none;
     try {
-      return DailyGoals.fromJson((jsonDecode(raw) as Map).cast<String, dynamic>());
+      return DailyGoals.fromJson(
+        (jsonDecode(raw) as Map).cast<String, dynamic>(),
+      );
     } on FormatException {
       return DailyGoals.none;
     }
   }
 
-  Future<void> writeGoals(DailyGoals goals) => writeSetting('daily_goals', jsonEncode(goals.toJson()));
+  Future<void> writeGoals(DailyGoals goals) =>
+      writeSetting('daily_goals', jsonEncode(goals.toJson()));
 
   /// Efface toutes les donnees locales. Utilise par la suppression de compte et
   /// par la remise a zero depuis les reglages.
@@ -419,20 +471,30 @@ class AppDatabase {
 
 /// Repas personnalise enregistre.
 class MealTemplate {
-  const MealTemplate({required this.id, required this.name, required this.items});
+  const MealTemplate({
+    required this.id,
+    required this.name,
+    required this.items,
+  });
 
   final String id;
   final String name;
   final List<MealItem> items;
 
-  NutritionValues get totals => NutritionValues.sum(items.map((item) => item.total));
+  NutritionValues get totals =>
+      NutritionValues.sum(items.map((item) => item.total));
 
   double get totalGrams => items.fold(0, (sum, item) => sum + item.quantityG);
 }
 
 /// Favori enregistre : aliment, produit ou repas personnalise.
 class Favorite {
-  const Favorite({required this.id, required this.kind, required this.label, required this.payload});
+  const Favorite({
+    required this.id,
+    required this.kind,
+    required this.label,
+    required this.payload,
+  });
 
   final String id;
 

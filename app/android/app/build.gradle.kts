@@ -30,7 +30,18 @@ android {
     // targetSdk 36 (Android 16) est le minimum impose par Google Play depuis le
     // 31 aout 2026 pour toute nouvelle application.
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+
+    // `ndkVersion` est volontairement absent.
+    //
+    // Le declarer — meme en reprenant la valeur par defaut de Flutter — oblige
+    // son greffon Gradle a installer la chaine NDK complete (plusieurs centaines
+    // de megaoctets) avant la moindre compilation, pour un outil qui ne servirait
+    // ici qu'a alleger les bibliotheques natives embarquees par le lecteur de
+    // code-barres. Cette application n'a aucun code natif a compiler.
+    //
+    // Sans cette ligne, AGP se contente d'avertir qu'il n'a pas pu alleger ces
+    // bibliotheques et les embarque telles quelles : le binaire est un peu plus
+    // gros, la compilation aboutit partout, y compris sur un poste sans NDK.
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

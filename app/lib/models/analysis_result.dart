@@ -60,24 +60,26 @@ class DetectedFood {
   }
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'estimatedWeightG': estimatedWeightG,
-        'confidence': confidence,
-        'matchedFoodId': matchedFoodId,
-        'matchedName': matchedName,
-        'per100g': per100g?.toJson(),
-      };
+    'name': name,
+    'estimatedWeightG': estimatedWeightG,
+    'confidence': confidence,
+    'matchedFoodId': matchedFoodId,
+    'matchedName': matchedName,
+    'per100g': per100g?.toJson(),
+  };
 
   factory DetectedFood.fromJson(Map<String, dynamic> json) => DetectedFood(
-        name: (json['name'] as String?) ?? 'Aliment',
-        estimatedWeightG: ((json['estimatedWeightG'] as num?) ?? 0).toDouble(),
-        confidence: ((json['confidence'] as num?) ?? 0.5).toDouble(),
-        matchedFoodId: json['matchedFoodId'] as String?,
-        matchedName: json['matchedName'] as String?,
-        per100g: json['per100g'] == null
-            ? null
-            : NutritionValues.fromJson((json['per100g'] as Map).cast<String, dynamic>()),
-      );
+    name: (json['name'] as String?) ?? 'Aliment',
+    estimatedWeightG: ((json['estimatedWeightG'] as num?) ?? 0).toDouble(),
+    confidence: ((json['confidence'] as num?) ?? 0.5).toDouble(),
+    matchedFoodId: json['matchedFoodId'] as String?,
+    matchedName: json['matchedName'] as String?,
+    per100g: json['per100g'] == null
+        ? null
+        : NutritionValues.fromJson(
+            (json['per100g'] as Map).cast<String, dynamic>(),
+          ),
+  );
 }
 
 /// Resultat complet d'une analyse de repas par photo.
@@ -89,7 +91,10 @@ class MealAnalysisResult {
     this.promptVersion,
   });
 
-  static const MealAnalysisResult empty = MealAnalysisResult(foods: [], overallConfidence: 0);
+  static const MealAnalysisResult empty = MealAnalysisResult(
+    foods: [],
+    overallConfidence: 0,
+  );
 
   final List<DetectedFood> foods;
   final double overallConfidence;
@@ -106,17 +111,22 @@ class MealAnalysisResult {
   bool get isLowConfidence => overallConfidence < 0.65;
 
   Map<String, dynamic> toJson() => {
-        'foods': foods.map((food) => food.toJson()).toList(),
-        'overallConfidence': overallConfidence,
-        'notes': notes,
-        'promptVersion': promptVersion,
-      };
+    'foods': foods.map((food) => food.toJson()).toList(),
+    'overallConfidence': overallConfidence,
+    'notes': notes,
+    'promptVersion': promptVersion,
+  };
 
-  factory MealAnalysisResult.fromJson(Map<String, dynamic> json) => MealAnalysisResult(
+  factory MealAnalysisResult.fromJson(Map<String, dynamic> json) =>
+      MealAnalysisResult(
         foods: ((json['foods'] as List?) ?? const [])
-            .map((item) => DetectedFood.fromJson((item as Map).cast<String, dynamic>()))
+            .map(
+              (item) =>
+                  DetectedFood.fromJson((item as Map).cast<String, dynamic>()),
+            )
             .toList(),
-        overallConfidence: ((json['overallConfidence'] as num?) ?? 0).toDouble(),
+        overallConfidence: ((json['overallConfidence'] as num?) ?? 0)
+            .toDouble(),
         notes: json['notes'] as String?,
         promptVersion: json['promptVersion'] as String?,
       );
@@ -162,15 +172,15 @@ class LabelExtraction {
   }
 
   Map<String, dynamic> toJson() => {
-        'per100g': per100g.toJson(),
-        'confidence': confidence,
-        'productName': productName,
-        'brand': brand,
-        'packageQuantity': packageQuantity,
-        'basis': basis,
-        'notes': notes,
-        'saturatedFat': saturatedFat,
-      };
+    'per100g': per100g.toJson(),
+    'confidence': confidence,
+    'productName': productName,
+    'brand': brand,
+    'packageQuantity': packageQuantity,
+    'basis': basis,
+    'notes': notes,
+    'saturatedFat': saturatedFat,
+  };
 
   factory LabelExtraction.fromJson(Map<String, dynamic> json) {
     final base = (json['per100g'] as Map?)?.cast<String, dynamic>() ?? const {};

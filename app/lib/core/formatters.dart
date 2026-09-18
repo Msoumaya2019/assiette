@@ -59,17 +59,23 @@ class Format {
 
   static String weekdayDayMonth(DateTime date) {
     final formatted = _weekday.format(date);
-    return formatted.isEmpty ? formatted : formatted[0].toUpperCase() + formatted.substring(1);
+    return formatted.isEmpty
+        ? formatted
+        : formatted[0].toUpperCase() + formatted.substring(1);
   }
 
   static String monthYear(DateTime date) {
     final formatted = _month.format(date);
-    return formatted.isEmpty ? formatted : formatted[0].toUpperCase() + formatted.substring(1);
+    return formatted.isEmpty
+        ? formatted
+        : formatted[0].toUpperCase() + formatted.substring(1);
   }
 
   static String fullDate(DateTime date) {
     final formatted = _dayMonthYear.format(date);
-    return formatted.isEmpty ? formatted : formatted[0].toUpperCase() + formatted.substring(1);
+    return formatted.isEmpty
+        ? formatted
+        : formatted[0].toUpperCase() + formatted.substring(1);
   }
 
   /// Libelle relatif : « Aujourd'hui », « Hier », puis la date.
@@ -87,7 +93,8 @@ class Format {
   }
 
   /// Fourchette de glucides : « 68–82 g ».
-  static String range(double low, double high) => '${number(low)}–${number(high)} g';
+  static String range(double low, double high) =>
+      '${number(low)}–${number(high)} g';
 
   /// Duree courte : « 3 s », « 1 min 12 s ».
   static String duration(Duration duration) {
@@ -97,7 +104,8 @@ class Format {
     return seconds == 0 ? '$minutes min' : '$minutes min $seconds s';
   }
 
-  static DateTime _dayOnly(DateTime date) => DateTime(date.year, date.month, date.day);
+  static DateTime _dayOnly(DateTime date) =>
+      DateTime(date.year, date.month, date.day);
 }
 
 /// Libelles francais des jours, utilises par les graphiques.

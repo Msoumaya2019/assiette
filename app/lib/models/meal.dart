@@ -19,9 +19,9 @@ enum PortionSize {
   final double factor;
 
   static PortionSize fromId(String? id) => PortionSize.values.firstWhere(
-        (portion) => portion.name == id,
-        orElse: () => PortionSize.medium,
-      );
+    (portion) => portion.name == id,
+    orElse: () => PortionSize.medium,
+  );
 }
 
 /// Comment le repas a ete constitue. Sert aux statistiques et a l'affichage.
@@ -43,9 +43,9 @@ enum MealSource {
   final String displayLabel;
 
   static MealSource fromId(String? id) => MealSource.values.firstWhere(
-        (source) => source.name == id,
-        orElse: () => MealSource.manual,
-      );
+    (source) => source.name == id,
+    orElse: () => MealSource.manual,
+  );
 }
 
 /// Un aliment dans un repas, avec sa quantite.
@@ -102,24 +102,26 @@ class MealItem {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'food': food.toJson(),
-        'quantityG': quantityG,
-        'confidence': confidence,
-        'portionSize': portionSize?.name,
-        'isEstimate': isEstimate,
-        'sortOrder': sortOrder,
-      };
+    'id': id,
+    'food': food.toJson(),
+    'quantityG': quantityG,
+    'confidence': confidence,
+    'portionSize': portionSize?.name,
+    'isEstimate': isEstimate,
+    'sortOrder': sortOrder,
+  };
 
   factory MealItem.fromJson(Map<String, dynamic> json) => MealItem(
-        id: json['id'] as String?,
-        food: Food.fromJson((json['food'] as Map).cast<String, dynamic>()),
-        quantityG: (json['quantityG'] as num).toDouble(),
-        confidence: (json['confidence'] as num?)?.toDouble(),
-        portionSize: json['portionSize'] == null ? null : PortionSize.fromId(json['portionSize'] as String?),
-        isEstimate: (json['isEstimate'] as bool?) ?? false,
-        sortOrder: (json['sortOrder'] as int?) ?? 0,
-      );
+    id: json['id'] as String?,
+    food: Food.fromJson((json['food'] as Map).cast<String, dynamic>()),
+    quantityG: (json['quantityG'] as num).toDouble(),
+    confidence: (json['confidence'] as num?)?.toDouble(),
+    portionSize: json['portionSize'] == null
+        ? null
+        : PortionSize.fromId(json['portionSize'] as String?),
+    isEstimate: (json['isEstimate'] as bool?) ?? false,
+    sortOrder: (json['sortOrder'] as int?) ?? 0,
+  );
 }
 
 /// Un repas : un ensemble d'aliments a un instant donne.
@@ -133,8 +135,8 @@ class Meal {
     this.notes,
     this.photoPath,
     this.isEstimate = true,
-  })  : id = id ?? _uuid.v4(),
-        items = items ?? <MealItem>[];
+  }) : id = id ?? _uuid.v4(),
+       items = items ?? <MealItem>[];
 
   final String id;
 
@@ -156,7 +158,8 @@ class Meal {
   final bool isEstimate;
 
   /// Total du repas, recalcule a chaque appel : jamais stocke en doublon.
-  NutritionValues get totals => NutritionValues.sum(items.map((item) => item.total));
+  NutritionValues get totals =>
+      NutritionValues.sum(items.map((item) => item.total));
 
   double get totalGrams => items.fold(0, (sum, item) => sum + item.quantityG);
 
@@ -204,38 +207,38 @@ class Meal {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'eatenAt': eatenAt.toIso8601String(),
-        'name': name,
-        'items': items.map((item) => item.toJson()).toList(),
-        'source': source.name,
-        'notes': notes,
-        'photoPath': photoPath,
-        'isEstimate': isEstimate,
-      };
+    'id': id,
+    'eatenAt': eatenAt.toIso8601String(),
+    'name': name,
+    'items': items.map((item) => item.toJson()).toList(),
+    'source': source.name,
+    'notes': notes,
+    'photoPath': photoPath,
+    'isEstimate': isEstimate,
+  };
 
   factory Meal.fromJson(Map<String, dynamic> json) => Meal(
-        id: json['id'] as String?,
-        eatenAt: DateTime.parse(json['eatenAt'] as String),
-        name: (json['name'] as String?) ?? 'Repas',
-        items: ((json['items'] as List?) ?? const [])
-            .map((item) => MealItem.fromJson((item as Map).cast<String, dynamic>()))
-            .toList(),
-        source: MealSource.fromId(json['source'] as String?),
-        notes: json['notes'] as String?,
-        photoPath: json['photoPath'] as String?,
-        isEstimate: (json['isEstimate'] as bool?) ?? true,
-      );
+    id: json['id'] as String?,
+    eatenAt: DateTime.parse(json['eatenAt'] as String),
+    name: (json['name'] as String?) ?? 'Repas',
+    items: ((json['items'] as List?) ?? const [])
+        .map((item) => MealItem.fromJson((item as Map).cast<String, dynamic>()))
+        .toList(),
+    source: MealSource.fromId(json['source'] as String?),
+    notes: json['notes'] as String?,
+    photoPath: json['photoPath'] as String?,
+    isEstimate: (json['isEstimate'] as bool?) ?? true,
+  );
 }
 
 /// Totaux agreges sur une periode, pour le tableau de bord.
 class NutritionSummary {
-  const NutritionSummary({
-    required this.totals,
-    required this.mealCount,
-  });
+  const NutritionSummary({required this.totals, required this.mealCount});
 
-  static const NutritionSummary empty = NutritionSummary(totals: NutritionValues.zero, mealCount: 0);
+  static const NutritionSummary empty = NutritionSummary(
+    totals: NutritionValues.zero,
+    mealCount: 0,
+  );
 
   final NutritionValues totals;
   final int mealCount;

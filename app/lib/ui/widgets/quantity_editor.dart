@@ -92,7 +92,11 @@ class _QuantityEditorState extends State<QuantityEditor> {
               if (widget.isEstimate)
                 Text(
                   'estimee',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: palette.carb),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: palette.carb,
+                  ),
                 ),
             ],
           ),
@@ -122,7 +126,10 @@ class _QuantityEditorState extends State<QuantityEditor> {
                         ),
                         Text(
                           'Appuyez pour saisir le poids reel',
-                          style: TextStyle(fontSize: 10, color: palette.mutedText),
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: palette.mutedText,
+                          ),
                         ),
                       ],
                     ),
@@ -167,7 +174,9 @@ class _QuantityEditorState extends State<QuantityEditor> {
             ],
           ),
 
-          if (widget.sourceLabel != null || widget.onReplace != null || widget.onRemove != null) ...[
+          if (widget.sourceLabel != null ||
+              widget.onReplace != null ||
+              widget.onRemove != null) ...[
             const SizedBox(height: AppSpacing.sm),
             const Divider(height: 1),
             Row(
@@ -190,7 +199,9 @@ class _QuantityEditorState extends State<QuantityEditor> {
                     onPressed: widget.onRemove,
                     icon: const Icon(Icons.delete_outline_rounded, size: 16),
                     label: const Text('Retirer'),
-                    style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+                    style: TextButton.styleFrom(
+                      foregroundColor: AppColors.danger,
+                    ),
                   ),
               ],
             ),
@@ -202,7 +213,11 @@ class _QuantityEditorState extends State<QuantityEditor> {
 }
 
 class _StepButton extends StatelessWidget {
-  const _StepButton({required this.icon, required this.onTap, required this.semanticLabel});
+  const _StepButton({
+    required this.icon,
+    required this.onTap,
+    required this.semanticLabel,
+  });
 
   final IconData icon;
   final VoidCallback onTap;
@@ -221,9 +236,14 @@ class _StepButton extends StatelessWidget {
 /// Boite de saisie du poids reel, en grammes.
 ///
 /// Retourne `null` si l'utilisateur annule.
-Future<double?> showQuantityDialog(BuildContext context, {required double initial}) {
+Future<double?> showQuantityDialog(
+  BuildContext context, {
+  required double initial,
+}) {
   final controller = TextEditingController(
-    text: initial == initial.roundToDouble() ? initial.round().toString() : initial.toStringAsFixed(1),
+    text: initial == initial.roundToDouble()
+        ? initial.round().toString()
+        : initial.toStringAsFixed(1),
   );
 
   return showDialog<double>(
@@ -238,11 +258,10 @@ Future<double?> showQuantityDialog(BuildContext context, {required double initia
             controller: controller,
             autofocus: true,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
-            decoration: const InputDecoration(
-              suffixText: 'g',
-              hintText: '180',
-            ),
+            inputFormatters: [
+              FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+            ],
+            decoration: const InputDecoration(suffixText: 'g', hintText: '180'),
             onSubmitted: (value) {
               final parsed = double.tryParse(value.replaceAll(',', '.'));
               if (parsed != null) Navigator.of(dialogContext).pop(parsed);
@@ -252,7 +271,11 @@ Future<double?> showQuantityDialog(BuildContext context, {required double initia
           Text(
             'Utilisez cette option lorsque vous avez pese l\'aliment : la valeur '
             'remplace l\'estimation et le total est recalcule.',
-            style: TextStyle(fontSize: 12, height: 1.4, color: context.palette.mutedText),
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.4,
+              color: context.palette.mutedText,
+            ),
           ),
         ],
       ),
@@ -263,7 +286,9 @@ Future<double?> showQuantityDialog(BuildContext context, {required double initia
         ),
         FilledButton(
           onPressed: () {
-            final parsed = double.tryParse(controller.text.replaceAll(',', '.'));
+            final parsed = double.tryParse(
+              controller.text.replaceAll(',', '.'),
+            );
             Navigator.of(dialogContext).pop(parsed);
           },
           child: const Text('Valider'),

@@ -48,7 +48,8 @@ class HistoryScreen extends ConsumerWidget {
               return EmptyState(
                 icon: Icons.receipt_long_outlined,
                 title: 'Aucun repas enregistre',
-                message: 'Vos repas apparaitront ici, jour par jour, avec leurs glucides.',
+                message:
+                    'Vos repas apparaitront ici, jour par jour, avec leurs glucides.',
                 action: FilledButton.icon(
                   onPressed: () => context.go(Routes.home),
                   icon: const Icon(Icons.photo_camera_rounded, size: 18),
@@ -92,13 +93,21 @@ class HistoryScreen extends ConsumerWidget {
   Map<DateTime, List<Meal>> _groupByDay(List<Meal> meals) {
     final grouped = <DateTime, List<Meal>>{};
     for (final meal in meals) {
-      final day = DateTime(meal.eatenAt.year, meal.eatenAt.month, meal.eatenAt.day);
+      final day = DateTime(
+        meal.eatenAt.year,
+        meal.eatenAt.month,
+        meal.eatenAt.day,
+      );
       grouped.putIfAbsent(day, () => []).add(meal);
     }
     return grouped;
   }
 
-  Future<void> _confirmDelete(BuildContext context, WidgetRef ref, Meal meal) async {
+  Future<void> _confirmDelete(
+    BuildContext context,
+    WidgetRef ref,
+    Meal meal,
+  ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -124,12 +133,16 @@ class HistoryScreen extends ConsumerWidget {
     if (confirmed != true) return;
     await ref.read(mealsProvider.notifier).delete(meal.id);
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Repas supprime.')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Repas supprime.')));
   }
 
-  Future<void> _duplicate(BuildContext context, WidgetRef ref, Meal meal) async {
+  Future<void> _duplicate(
+    BuildContext context,
+    WidgetRef ref,
+    Meal meal,
+  ) async {
     await ref.read(mealsProvider.notifier).duplicate(meal);
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -169,7 +182,10 @@ class _DaySection extends StatelessWidget {
                 Expanded(
                   child: Text(
                     Format.relativeDay(day),
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
                 Text(
@@ -196,7 +212,10 @@ class _DaySection extends StatelessWidget {
                     color: AppColors.danger.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
                   ),
-                  child: const Icon(Icons.delete_outline_rounded, color: AppColors.danger),
+                  child: const Icon(
+                    Icons.delete_outline_rounded,
+                    color: AppColors.danger,
+                  ),
                 ),
                 confirmDismiss: (_) async {
                   // onDelete est synchrone : le `await` n'aurait pas de sens ici.
@@ -220,8 +239,14 @@ class _DaySection extends StatelessWidget {
                       }
                     },
                     itemBuilder: (context) => const [
-                      PopupMenuItem(value: 'open', child: Text('Ouvrir et modifier')),
-                      PopupMenuItem(value: 'duplicate', child: Text('Dupliquer')),
+                      PopupMenuItem(
+                        value: 'open',
+                        child: Text('Ouvrir et modifier'),
+                      ),
+                      PopupMenuItem(
+                        value: 'duplicate',
+                        child: Text('Dupliquer'),
+                      ),
                       PopupMenuItem(value: 'delete', child: Text('Supprimer')),
                     ],
                   ),
@@ -236,7 +261,11 @@ class _DaySection extends StatelessWidget {
 
 /// Resume compact des glucides, reutilise dans plusieurs ecrans.
 class CompactCarbSummary extends StatelessWidget {
-  const CompactCarbSummary({super.key, required this.totals, required this.mealCount});
+  const CompactCarbSummary({
+    super.key,
+    required this.totals,
+    required this.mealCount,
+  });
 
   final NutritionValues totals;
   final int mealCount;

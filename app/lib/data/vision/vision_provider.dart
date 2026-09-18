@@ -77,7 +77,9 @@ abstract class VisionProvider {
 
 double _readDouble(Object? value, {double fallback = 0}) {
   if (value is num) return value.toDouble();
-  if (value is String) return double.tryParse(value.replaceAll(',', '.')) ?? fallback;
+  if (value is String) {
+    return double.tryParse(value.replaceAll(',', '.')) ?? fallback;
+  }
   return fallback;
 }
 
@@ -152,7 +154,10 @@ MealAnalysisResult parseMealAnalysis(String raw, {String? promptVersion}) {
       if (name.isEmpty) continue;
 
       final weight = _readDouble(entry['estimatedWeightG']);
-      final confidence = _readDouble(entry['confidence'], fallback: 0.5).clamp(0.0, 1.0);
+      final confidence = _readDouble(
+        entry['confidence'],
+        fallback: 0.5,
+      ).clamp(0.0, 1.0);
 
       foods.add(
         DetectedFood(
@@ -176,7 +181,9 @@ MealAnalysisResult parseMealAnalysis(String raw, {String? promptVersion}) {
   return MealAnalysisResult(
     foods: foods,
     overallConfidence: overall.clamp(0.0, 1.0),
-    notes: notes == null || notes.isEmpty ? null : (notes.length > 500 ? notes.substring(0, 500) : notes),
+    notes: notes == null || notes.isEmpty
+        ? null
+        : (notes.length > 500 ? notes.substring(0, 500) : notes),
     promptVersion: promptVersion,
   );
 }
@@ -212,7 +219,10 @@ LabelExtraction parseLabelExtraction(String raw, {String? promptVersion}) {
 
   return LabelExtraction(
     per100g: per100g,
-    confidence: _readDouble(decoded['confidence'], fallback: 0.5).clamp(0.0, 1.0),
+    confidence: _readDouble(
+      decoded['confidence'],
+      fallback: 0.5,
+    ).clamp(0.0, 1.0),
     productName: text(decoded['productName'], 120),
     brand: text(decoded['brand'], 80),
     packageQuantity: text(decoded['packageQuantity'], 40),

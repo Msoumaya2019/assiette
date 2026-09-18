@@ -63,7 +63,9 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen> {
 
     try {
       final service = ref.read(imageServiceProvider);
-      final photo = fromCamera ? await service.pickFromCamera() : await service.pickFromGallery();
+      final photo = fromCamera
+          ? await service.pickFromCamera()
+          : await service.pickFromGallery();
       if (!mounted) return;
       if (photo == null) {
         // L'utilisateur a annule : ce n'est pas une erreur.
@@ -77,7 +79,9 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen> {
     } on AppFailure catch (failure) {
       if (!mounted) return;
       setState(() {
-        _error = failure.hint == null ? failure.message : '${failure.message} — ${failure.hint}';
+        _error = failure.hint == null
+            ? failure.message
+            : '${failure.message} — ${failure.hint}';
         _busy = false;
       });
     } catch (error) {
@@ -112,14 +116,18 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen> {
         ? await imageService.persist(_photos.first, meal.id)
         : null;
 
-    ref.read(pendingCaptureProvider.notifier).set(
+    ref
+        .read(pendingCaptureProvider.notifier)
+        .set(
           PendingCapture(
             image: _photos.first,
             secondImage: _photos.length > 1 ? _photos[1] : null,
             portionHint: _portion?.name,
           ),
         );
-    ref.read(draftMealProvider.notifier).start(meal.copyWith(photoPath: photoPath));
+    ref
+        .read(draftMealProvider.notifier)
+        .start(meal.copyWith(photoPath: photoPath));
 
     if (!mounted) return;
     context.pushReplacement(Routes.analysis);
@@ -144,7 +152,10 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen> {
 
             if (_error != null) ...[
               const SizedBox(height: AppSpacing.md),
-              EstimateBanner(message: _error!, severity: EstimateSeverity.danger),
+              EstimateBanner(
+                message: _error!,
+                severity: EstimateSeverity.danger,
+              ),
             ],
 
             const SizedBox(height: AppSpacing.lg),
@@ -193,8 +204,8 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen> {
                 _photos.isEmpty
                     ? 'Ajoutez une photo'
                     : _photos.length == 1
-                        ? 'Analyser ce repas'
-                        : 'Analyser avec les 2 photos',
+                    ? 'Analyser ce repas'
+                    : 'Analyser avec les 2 photos',
               ),
             ),
           ],
@@ -205,7 +216,11 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen> {
 }
 
 class _EmptyCapture extends StatelessWidget {
-  const _EmptyCapture({required this.busy, required this.onCamera, required this.onGallery});
+  const _EmptyCapture({
+    required this.busy,
+    required this.onCamera,
+    required this.onGallery,
+  });
 
   final bool busy;
   final VoidCallback onCamera;
@@ -270,7 +285,8 @@ class _PhotoPreview extends StatelessWidget {
                     onRemove: () => onRemove(index),
                   ),
                 ),
-                if (index != photos.length - 1) const SizedBox(width: AppSpacing.sm),
+                if (index != photos.length - 1)
+                  const SizedBox(width: AppSpacing.sm),
               ],
               if (canAdd) ...[
                 if (photos.isNotEmpty) const SizedBox(width: AppSpacing.sm),
@@ -298,7 +314,11 @@ class _PhotoPreview extends StatelessWidget {
 }
 
 class _PhotoThumb extends StatelessWidget {
-  const _PhotoThumb({required this.photo, required this.index, required this.onRemove});
+  const _PhotoThumb({
+    required this.photo,
+    required this.index,
+    required this.onRemove,
+  });
 
   final CapturedImage photo;
   final int index;
@@ -340,7 +360,11 @@ class _PhotoThumb extends StatelessWidget {
             ),
             child: Text(
               index == 0 ? 'Angle 1' : 'Angle 2',
-              style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                fontSize: 10,
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ),
@@ -350,7 +374,11 @@ class _PhotoThumb extends StatelessWidget {
 }
 
 class _AddSecondPhoto extends StatelessWidget {
-  const _AddSecondPhoto({required this.enabled, required this.onCamera, required this.onGallery});
+  const _AddSecondPhoto({
+    required this.enabled,
+    required this.onCamera,
+    required this.onGallery,
+  });
 
   final bool enabled;
   final VoidCallback onCamera;
@@ -361,31 +389,31 @@ class _AddSecondPhoto extends StatelessWidget {
     return InkWell(
       onTap: enabled
           ? () => showModalBottomSheet<void>(
-                context: context,
-                builder: (sheetContext) => SafeArea(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ListTile(
-                        leading: const Icon(Icons.photo_camera_rounded),
-                        title: const Text('Prendre une seconde photo'),
-                        onTap: () {
-                          Navigator.of(sheetContext).pop();
-                          onCamera();
-                        },
-                      ),
-                      ListTile(
-                        leading: const Icon(Icons.photo_library_rounded),
-                        title: const Text('Choisir dans la galerie'),
-                        onTap: () {
-                          Navigator.of(sheetContext).pop();
-                          onGallery();
-                        },
-                      ),
-                    ],
-                  ),
+              context: context,
+              builder: (sheetContext) => SafeArea(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.photo_camera_rounded),
+                      title: const Text('Prendre une seconde photo'),
+                      onTap: () {
+                        Navigator.of(sheetContext).pop();
+                        onCamera();
+                      },
+                    ),
+                    ListTile(
+                      leading: const Icon(Icons.photo_library_rounded),
+                      title: const Text('Choisir dans la galerie'),
+                      onTap: () {
+                        Navigator.of(sheetContext).pop();
+                        onGallery();
+                      },
+                    ),
+                  ],
                 ),
-              )
+              ),
+            )
           : null,
       borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
       child: Container(
@@ -451,11 +479,17 @@ class _BigButton extends StatelessWidget {
             padding: const EdgeInsets.all(AppSpacing.lg),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-              border: primary ? null : Border.all(color: context.palette.cardBorder),
+              border: primary
+                  ? null
+                  : Border.all(color: context.palette.cardBorder),
             ),
             child: Row(
               children: [
-                Icon(icon, size: 30, color: primary ? colors.onPrimary : colors.primary),
+                Icon(
+                  icon,
+                  size: 30,
+                  color: primary ? colors.onPrimary : colors.primary,
+                ),
                 const SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Column(

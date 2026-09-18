@@ -43,10 +43,13 @@ class ProxyVisionProvider implements VisionProvider {
     final payload = <String, dynamic>{
       'imageBase64': base64Encode(request.image),
       'mimeType': request.mimeType,
-      if (request.hasSecondImage) 'secondImageBase64': base64Encode(request.secondImage!),
-      if (request.hasSecondImage) 'secondMimeType': request.secondMimeType ?? request.mimeType,
+      if (request.hasSecondImage)
+        'secondImageBase64': base64Encode(request.secondImage!),
+      if (request.hasSecondImage)
+        'secondMimeType': request.secondMimeType ?? request.mimeType,
       if (request.portionHint != null) 'portionHint': request.portionHint,
-      if (request.userHint != null && request.userHint!.trim().isNotEmpty) 'userHint': request.userHint!.trim(),
+      if (request.userHint != null && request.userHint!.trim().isNotEmpty)
+        'userHint': request.userHint!.trim(),
     };
 
     final decoded = await _post('analyze-meal', payload);
@@ -60,20 +63,27 @@ class ProxyVisionProvider implements VisionProvider {
     final payload = <String, dynamic>{
       'imageBase64': base64Encode(request.image),
       'mimeType': request.mimeType,
-      if (request.hasSecondImage) 'secondImageBase64': base64Encode(request.secondImage!),
-      if (request.hasSecondImage) 'secondMimeType': request.secondMimeType ?? request.mimeType,
+      if (request.hasSecondImage)
+        'secondImageBase64': base64Encode(request.secondImage!),
+      if (request.hasSecondImage)
+        'secondMimeType': request.secondMimeType ?? request.mimeType,
     };
 
     final decoded = await _post('analyze-label', payload);
     return parseLabelExtraction(jsonEncode(decoded));
   }
 
-  Future<Map<String, dynamic>> _post(String function, Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>> _post(
+    String function,
+    Map<String, dynamic> payload,
+  ) async {
     if (!isConfigured) {
       throw const MissingCredentialFailure();
     }
 
-    final uri = Uri.parse('${endpoint.replaceAll(RegExp(r'/+$'), '')}/$function');
+    final uri = Uri.parse(
+      '${endpoint.replaceAll(RegExp(r'/+$'), '')}/$function',
+    );
 
     try {
       final response = await _client
@@ -87,8 +97,12 @@ class ProxyVisionProvider implements VisionProvider {
           )
           .timeout(_timeout);
 
-      final decoded = response.body.isEmpty ? null : jsonDecode(utf8.decode(response.bodyBytes));
-      final map = decoded is Map ? decoded.cast<String, dynamic>() : <String, dynamic>{};
+      final decoded = response.body.isEmpty
+          ? null
+          : jsonDecode(utf8.decode(response.bodyBytes));
+      final map = decoded is Map
+          ? decoded.cast<String, dynamic>()
+          : <String, dynamic>{};
 
       if (response.statusCode == 200) return map;
 
@@ -101,7 +115,8 @@ class ProxyVisionProvider implements VisionProvider {
         case 413:
           throw const ProviderFailure(
             'Photo trop volumineuse',
-            hint: 'Reprenez la photo : l\'application la compresse automatiquement.',
+            hint:
+                'Reprenez la photo : l\'application la compresse automatiquement.',
           );
         case 415:
           throw const ProviderFailure(
@@ -109,11 +124,14 @@ class ProxyVisionProvider implements VisionProvider {
             hint: 'Utilisez une photo JPEG ou PNG.',
           );
         case 429:
-          throw RateLimitFailure(retryAfterS: (map['retryAfterS'] as num?)?.toInt());
+          throw RateLimitFailure(
+            retryAfterS: (map['retryAfterS'] as num?)?.toInt(),
+          );
         default:
           if (response.statusCode >= 500) {
             throw ProviderFailure(
-              serverMessage ?? 'Le service d\'analyse est momentanement indisponible',
+              serverMessage ??
+                  'Le service d\'analyse est momentanement indisponible',
               hint: 'Reessayez dans quelques instants.',
               statusCode: response.statusCode,
             );

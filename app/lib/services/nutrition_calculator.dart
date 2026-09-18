@@ -4,14 +4,19 @@ import '../models/nutrition_values.dart';
 
 /// Une entree du tableau de bord : une date et les totaux correspondants.
 class DailyBucket {
-  const DailyBucket({required this.date, required this.totals, required this.mealCount});
+  const DailyBucket({
+    required this.date,
+    required this.totals,
+    required this.mealCount,
+  });
 
   final DateTime date;
   final NutritionValues totals;
   final int mealCount;
 
   /// Jour calendaire, sans composante horaire.
-  static DateTime dayOf(DateTime date) => DateTime(date.year, date.month, date.day);
+  static DateTime dayOf(DateTime date) =>
+      DateTime(date.year, date.month, date.day);
 }
 
 /// Calculs nutritionnels agreges.
@@ -32,7 +37,11 @@ class NutritionCalculator {
   }
 
   /// Repas compris entre deux instants, bornes incluses a la seconde pres.
-  static List<Meal> between(Iterable<Meal> meals, DateTime start, DateTime end) {
+  static List<Meal> between(
+    Iterable<Meal> meals,
+    DateTime start,
+    DateTime end,
+  ) {
     return meals.where((meal) {
       final at = meal.eatenAt;
       return !at.isBefore(start) && !at.isAfter(end);
@@ -42,14 +51,19 @@ class NutritionCalculator {
   /// Repas d'un jour calendaire donne.
   static List<Meal> forDay(Iterable<Meal> meals, DateTime day) {
     final start = DateTime(day.year, day.month, day.day);
-    final end = start.add(const Duration(days: 1)).subtract(const Duration(microseconds: 1));
+    final end = start
+        .add(const Duration(days: 1))
+        .subtract(const Duration(microseconds: 1));
     return between(meals, start, end);
   }
 
   /// Totaux du jour.
   static NutritionSummary summaryForDay(Iterable<Meal> meals, DateTime day) {
     final selected = forDay(meals, day);
-    return NutritionSummary(totals: totalOf(selected), mealCount: selected.length);
+    return NutritionSummary(
+      totals: totalOf(selected),
+      mealCount: selected.length,
+    );
   }
 
   /// Serie journaliere sur les [days] derniers jours, du plus ancien au plus recent.
@@ -66,7 +80,11 @@ class NutritionCalculator {
 
     // Regroupement en une passe : la liste des repas peut devenir longue.
     final grouped = <DateTime, List<Meal>>{};
-    for (final meal in between(meals, start, end.add(const Duration(days: 1)))) {
+    for (final meal in between(
+      meals,
+      start,
+      end.add(const Duration(days: 1)),
+    )) {
       final key = DailyBucket.dayOf(meal.eatenAt);
       grouped.putIfAbsent(key, () => <Meal>[]).add(meal);
     }
@@ -98,9 +116,17 @@ class NutritionCalculator {
     for (var i = 0; i < weeks; i++) {
       final weekStart = firstMonday.add(Duration(days: i * 7));
       final weekEnd = weekStart.add(const Duration(days: 7));
-      final items = between(meals, weekStart, weekEnd.subtract(const Duration(microseconds: 1)));
+      final items = between(
+        meals,
+        weekStart,
+        weekEnd.subtract(const Duration(microseconds: 1)),
+      );
       buckets.add(
-        DailyBucket(date: weekStart, totals: totalOf(items), mealCount: items.length),
+        DailyBucket(
+          date: weekStart,
+          totals: totalOf(items),
+          mealCount: items.length,
+        ),
       );
     }
     return buckets;
@@ -134,8 +160,10 @@ class NutritionCalculator {
   }
 
   /// Progression vers les objectifs du jour.
-  static List<GoalProgress> progress(DailyGoals goals, NutritionSummary summary) =>
-      GoalProgress.from(goals, summary.totals);
+  static List<GoalProgress> progress(
+    DailyGoals goals,
+    NutritionSummary summary,
+  ) => GoalProgress.from(goals, summary.totals);
 
   /// Repartition des glucides par repas, pour un graphique en anneau.
   static Map<String, double> carbsByMeal(Iterable<Meal> meals) {
@@ -170,6 +198,9 @@ class NutritionCalculator {
     final margin = weight > 0 ? weightedMargin / weight : defaultMargin;
     final absolute = totalCarbs * margin;
 
-    return ((totalCarbs - absolute).clamp(0, double.infinity), totalCarbs + absolute);
+    return (
+      (totalCarbs - absolute).clamp(0, double.infinity),
+      totalCarbs + absolute,
+    );
   }
 }
