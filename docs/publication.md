@@ -13,18 +13,40 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Code source complet, analysé sans avertissement | prêt |
 | 142 tests de l'application, tous verts | prêt |
 | 13 tests du serveur, tous verts | prêt |
-| APK de test produit et signature vérifiée | prêt |
-| AAB pour Google Play | à produire |
+| Dépôt public | https://github.com/Msoumaya2019/assiette |
+| Flux `ci.yml` — analyse, 142 tests, 6 contrôles | **vert**, 3 exécutions |
+| Flux Android — APK et AAB | **vert**, artefacts vérifiés |
+| Flux iOS — IPA non signée | **vert**, artefact vérifié |
+| Déclenchement par étiquette `v*` | **vert** |
 | Icônes et écran de démarrage (Android et iOS) | prêt |
 | Politique de confidentialité | `docs/confidentialite.md` |
 | Attributions Ciqual et Open Food Facts | `app/assets/legal/ATTRIBUTION.md` |
 | Clés d'API absentes du binaire (appel via serveur) | prêt |
-| Dépôt public | https://github.com/Msoumaya2019/assiette |
-| Flux `ci.yml` — analyse, 142 tests, 6 contrôles | **vert** |
-| Flux Android — APK et AAB | en cours de vérification |
-| Flux iOS — IPA non signée | en cours de vérification |
+| Signature release Android (clé d'envoi) | **à configurer** |
 | Compte Google Play, compte Apple Developer | **à créer** |
-| Clé du fournisseur d'analyse (DeepSeek) | **à fournir** |
+| Projet Supabase (mode serveur) | **à créer** |
+| Clé du fournisseur d'analyse (DeepSeek) | **fournie**, à placer |
+
+### Artefacts vérifiés
+
+Produits par `Android — APK et AAB` (7 min 22 s) et `iOS — build et IPA`
+(8 min 4 s), puis **ouverts et contrôlés**, pas seulement lus dans le journal du
+flux :
+
+| Artefact | Taille | Vérification |
+| --- | --- | --- |
+| `app-release-…-debug-key.apk` | 82 227 529 octets | 531 entrées, intégrité saine, 18 bibliothèques natives, signature vérifiée (schéma v2, 1 signataire) |
+| `app-release-…-debug-key.aab` | 70 368 198 octets | 549 entrées, intégrité saine, 18 bibliothèques natives |
+| `Assiette-…-non-signee.ipa` | 15 841 456 octets | 133 entrées, intégrité saine, `Payload/Runner.app` complet |
+
+Le contenu de l'IPA confirme la cible iOS relevée plus haut : `MinimumOSVersion`
+vaut bien **15.5**, et l'identifiant `io.github.axox934.assiette` est identique
+côté Android et côté iOS. Les deux textes de justification d'accès (appareil
+photo, photothèque) sont présents.
+
+L'APK et l'AAB portent `debug-key` dans leur nom parce qu'aucune clé de
+signature release n'est encore configurée : ils sont installables, mais pas
+publiables en l'état sur le Play Store.
 
 ---
 
@@ -52,17 +74,28 @@ export APPDATA="C:\\Users\\mchik\\AppData\\Roaming"
 La portée `workflow` est présente sur le jeton, sans quoi GitHub refuse de
 recevoir les fichiers de `.github/workflows/`.
 
-### 2.2 Fournir la clé du service d'analyse
+### 2.2 Placer la clé du service d'analyse — **clé créée, destination à choisir**
 
-**ACTION REQUISE DE TA PART**
+La clé DeepSeek existe. Elle n'a **jamais** sa place dans l'application, dans le
+dépôt, ni dans la conversation. Deux destinations possibles, selon l'usage.
 
-Pourquoi : l'analyse d'une photo par le modèle de vision coûte de l'argent et
-exige une clé qui t'appartient. Cette clé ne doit jamais se trouver dans
-l'application : elle se place dans le coffre de secrets du serveur.
+**Mode personnel — utilisable tout de suite, sans backend.** L'application
+demande la clé dans ses réglages et la conserve dans le trousseau du système
+(Keychain sur iOS, Keystore sur Android). Aucun serveur, aucun coût
+d'hébergement. C'est le mode par défaut tant que `ANALYSIS_ENDPOINT` n'est pas
+compilé. Convient pour un usage personnel.
 
-Étape 1 : crée un compte sur `platform.deepseek.com`, ajoute un moyen de
-paiement, puis crée une clé d'API et garde-la de côté. Ne me l'envoie pas dans
-la conversation : nous la saisirons directement dans le coffre de secrets.
+**Mode serveur — nécessaire pour publier.** La clé est détenue par une fonction
+serveur, et l'application ne la connaît pas. C'est le mode prévu pour une
+application distribuée, puisque l'utilisateur n'a alors aucune clé à saisir. Il
+demande un projet Supabase, qui n'existe pas encore.
+
+Nom exact attendu par le serveur, lu dans `backend/supabase/functions/` :
+
+| Variable | Rôle |
+| --- | --- |
+| `DEEPSEEK_API_KEY` | la clé, lue par `analyze-meal` et `analyze-label` |
+| `ALLOWED_ORIGIN` | origine autorisée pour le CORS. **Sans elle, le CORS reste fermé** — c'est volontaire : la fonction est facturée et sans authentification |
 
 ### 2.3 Créer le compte Google Play
 
