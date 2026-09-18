@@ -19,7 +19,10 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Politique de confidentialité | `docs/confidentialite.md` |
 | Attributions Ciqual et Open Food Facts | `app/assets/legal/ATTRIBUTION.md` |
 | Clés d'API absentes du binaire (appel via serveur) | prêt |
-| Flux GitHub Actions : analyse, tests, APK, AAB, iOS | écrit, **non encore exécuté** |
+| Dépôt public | https://github.com/Msoumaya2019/assiette |
+| Flux `ci.yml` — analyse, 142 tests, 6 contrôles | **vert** |
+| Flux Android — APK et AAB | en cours de vérification |
+| Flux iOS — IPA non signée | en cours de vérification |
 | Compte Google Play, compte Apple Developer | **à créer** |
 | Clé du fournisseur d'analyse (DeepSeek) | **à fournir** |
 
@@ -30,20 +33,24 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 Ces étapes engagent une identité ou une carte bancaire : elles ne peuvent pas
 être automatisées.
 
-### 2.1 Autoriser l'outil en ligne de commande GitHub
+### 2.1 Autoriser l'outil en ligne de commande GitHub — **fait**
 
-**ACTION REQUISE DE TA PART**
+L'autorisation a été donnée le 18 septembre 2026, sur le compte
+`Msoumaya2019`. Le dépôt public a été créé :
 
-Pourquoi : les flux de compilation continue sont écrits mais n'ont jamais
-tourné. Tant qu'ils n'ont pas tourné, on ne sait pas s'ils fonctionnent, et le
-dépôt public ne peut pas être créé.
+**https://github.com/Msoumaya2019/assiette**
 
-Étape 1 : dans un terminal, lance `gh auth login`, choisis « GitHub.com », puis
-« HTTPS », puis « Login with a web browser ». Colle le code affiché sur la page
-qui s'ouvre et autorise l'accès.
+Note pour la suite : dans un terminal Git Bash, `gh` ne trouve pas son dossier
+de configuration si `APPDATA` n'est pas défini — `gh auth status` répond alors
+« not logged into any GitHub hosts » alors que l'autorisation est bien
+enregistrée. Il faut l'exporter avant tout appel :
 
-Ensuite, je créerai le dépôt public, je pousserai le code et je lancerai les
-trois flux jusqu'à ce qu'ils passent au vert.
+```bash
+export APPDATA="C:\\Users\\mchik\\AppData\\Roaming"
+```
+
+La portée `workflow` est présente sur le jeton, sans quoi GitHub refuse de
+recevoir les fichiers de `.github/workflows/`.
 
 ### 2.2 Fournir la clé du service d'analyse
 
@@ -221,4 +228,80 @@ s'arrête s'il manque, plutôt que de laisser Flutter en fabriquer un autre.
 Le projet a été validé avec Java 21, le JBR fourni par Android Studio. Le bytecode
 d'AGP 9.1.0 est en Java 11, donc 17 suffirait, mais les flux utilisent 21 pour
 rester identiques à l'environnement de développement.
+
+### 7.4 `flutter test` ne tourne pas sous Windows sans Visual Studio
+
+Sur le poste Windows, `flutter test` échoue en une seconde sur :
+
+```
+%PROGRAMFILES(X86)% environment variable not found.
+  #1 VisualStudio._vswherePath (package:flutter_tools/src/windows/visual_studio.dart:264:7)
+  #7 VisualStudio.clPath       (package:flutter_tools/src/windows/visual_studio.dart:194:12)
+  #12 _setupHooks              (package:flutter_tools/src/isolated/native_assets/native_assets.dart:273:25)
+```
+
+Ce n'est ni un défaut du projet ni une régression : les paquets `objective_c` et
+`sqlite3` déclarent des *hooks* de ressources natives, que Flutter exécute avant
+les tests. Sous Windows, leur mise en place réclame MSVC (`cl.exe`), que
+`flutter_tools` localise via `vswhere.exe` — absent si Visual Studio n'est pas
+installé, et la variable `PROGRAMFILES(X86)` n'est même pas définie dans le
+shell.
+
+Conséquence pratique : **la suite de tests se vérifie sur l'exécuteur Linux, pas
+en local.** C'est le cas : `ci.yml` exécute `flutter test` sur `ubuntu-latest` et
+les 142 tests y passent. En local, `dart format` et `flutter analyze` restent
+disponibles et suffisent à valider une modification de code Dart.
+
+### 7.5 Avertissement de dépréciation Node 20
+
+Les flux émettent un avertissement : `actions/checkout@v4` et
+`actions/upload-artifact@v4` visent Node.js 20, que GitHub force désormais sur
+Node.js 24. Les actions continuent de fonctionner — GitHub les met à niveau
+automatiquement. À reprendre le jour où ces versions cesseront d'être acceptées.
+
+---
+
+## 8. La chaîne de garde
+
+Six contrôles tournent à chaque `push` dans `ci.yml`. Chacun lit une propriété
+que **rien d'autre ne lit** : c'est ce qui justifie sa présence, et c'est aussi
+pourquoi aucun ne doit être retiré sans être remplacé.
+
+| Contrôle | Ce qu'il attrape |
+| --- | --- |
+| `tools/check_no_secrets.py` | un secret qui aurait été committé — le dépôt est public |
+| `tools/check_prompt_sync.py` | un prompt modifié d'un côté et pas de l'autre |
+| `tools/check_fins_de_ligne.py` | un blob CRLF dans l'index, ou une copie de travail hors `eol=lf` |
+| `tools/check_ios.py` | 92 vérifications iOS : icônes, storyboard, `Info.plist`, cible, Podfile |
+| `tools/check_adresses_du_depot.py` | une adresse GitHub du code qui désigne un autre dépôt |
+| `tools/check_workflows.py` | YAML invalide, action non épinglée, `permissions` absentes, `run:` qui ne passe pas `bash -n` |
+
+### Chaque contrôle a été falsifié
+
+Un contrôle qui n'a jamais échoué ne prouve rien : il peut regarder au mauvais
+endroit et compter zéro défaut aussi tranquillement qu'un contrôle juste. Les
+bancs vivent dans `tools/bancs/` — **dans le dépôt**, pas dans un dossier
+temporaire, pour qu'ils soient rejouables.
+
+```bash
+python3 tools/bancs/falsifier_fins_de_ligne.py    # 6 cas
+python3 tools/bancs/falsifier_ios.py              # 6 cas
+python3 tools/bancs/falsifier_adresses.py         # 4 cas
+```
+
+Chaque banc inclut un **témoin négatif** — un `.bat` en CRLF conforme à son
+attribut n'est pas signalé, citer `flutter/flutter` reste permis. Sans lui, rien
+ne prouve que le contrôle **distingue**, plutôt qu'il ne compte.
+
+`tools/bancs/banc.py` est le harnais partagé. Sa méthode `muter()` **lève une
+exception** quand son ancre ne correspond pas : une mutation qui ne mute pas est
+une erreur du banc, pas un résultat. Sans cette garantie, un banc peut conclure
+« non détecté » alors que la mutation n'a jamais eu lieu — ce qui est arrivé.
+
+### Réparer
+
+```bash
+python3 tools/normaliser_fins_de_ligne.py             # mesure, ne touche à rien
+python3 tools/normaliser_fins_de_ligne.py --appliquer
+```
 
