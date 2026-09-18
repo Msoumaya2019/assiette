@@ -54,15 +54,16 @@ jobs:
         working-directory: app
         run: flutter test
 
-      - name: Installer CocoaPods
+      # Le Podfile est versionne (app/ios/Podfile), donc l'etape n'est pas
+      # conditionnelle : son absence serait un defaut du depot, pas un cas
+      # normal. La cible iOS minimale y est fixee a 15.5, exigee par
+      # `mobile_scanner` ; en dessous, `pod install` refuse de resoudre.
+      - name: Installer les dependances natives iOS
         working-directory: app
         run: |
           set -euo pipefail
-          if [ -f ios/Podfile ]; then
-            cd ios && pod install --repo-update
-          else
-            echo "Pas de Podfile : aucune dependance native iOS."
-          fi
+          test -f ios/Podfile || { echo "Podfile absent : app/ios/Podfile doit etre versionne."; exit 1; }
+          cd ios && pod install --repo-update
 
       # ---------------------------------------------------------------------
       # Mode non signe (par defaut)

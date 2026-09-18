@@ -15,10 +15,8 @@
 import { deepSeekChat, extractJson, DeepSeekError } from "../_shared/deepseek.ts";
 import { MEAL_SYSTEM_PROMPT, buildMealUserPrompt, PROMPT_VERSION } from "../_shared/meal_prompt.ts";
 import { corsHeaders, jsonResponse } from "../_shared/http.ts";
+import { MAX_IMAGE_BYTES, tailleBase64, typeAccepte } from "../_shared/images.ts";
 import { checkRateLimit } from "../_shared/rate_limit.ts";
-
-const MAX_IMAGE_BYTES = 6 * 1024 * 1024; // 6 Mo par image (les images sont compressees cote app)
-const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 interface AnalyzeRequest {
   imageBase64?: string;
@@ -75,7 +73,7 @@ function normalize(raw: ModelOutput): { foods: AnalyzedFood[]; overallConfidence
 
 Deno.serve(async (request: Request): Promise<Response> => {
   if (request.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders() });
   }
   if (request.method !== "POST") {
     return jsonResponse({ error: "method_not_allowed" }, 405);
@@ -105,13 +103,19 @@ Deno.serve(async (request: Request): Promise<Response> => {
   if (!body.imageBase64) {
     return jsonResponse({ error: "missing_image", message: "Aucune image fournie." }, 400);
   }
-  if (!ALLOWED_MIME.has(mimeType)) {
+  if (!typeAccepte(mimeType)) {
     return jsonResponse({ error: "unsupported_media", message: "Format d'image non pris en charge." }, 415);
   }
-
-  const approxBytes = Math.floor((body.imageBase64.length * 3) / 4);
-  if (approxBytes > MAX_IMAGE_BYTES) {
+  if (tailleBase64(body.imageBase64) > MAX_IMAGE_BYTES) {
     return jsonResponse({ error: "image_too_large", message: "Image trop volumineuse." }, 413);
+  }
+
+  // La seconde image passe par le meme plafond que la premiere. Il n'etait
+  // auparavant applique qu'a celle-ci : une seconde image de plusieurs dizaines
+  // de megaoctets etait transmise telle quelle au fournisseur, avec le cout et
+  // la latence que cela suppose, sans qu'aucun controle ne l'arrete.
+  if (body.secondImageBase64 && tailleBase64(body.secondImageBase64) > MAX_IMAGE_BYTES) {
+    return jsonResponse({ error: "image_too_large", message: "Seconde image trop volumineuse." }, 413);
   }
 
   const blocks: Record<string, unknown>[] = [
@@ -131,7 +135,11 @@ Deno.serve(async (request: Request): Promise<Response> => {
 
   if (body.secondImageBase64) {
     const secondMime = (body.secondMimeType ?? mimeType).toLowerCase();
-    if (ALLOWED_MIME.has(secondMime)) {
+    // Type non pris en charge : on ecarte la seconde image plutot que de refuser
+    // la requete entiere. Un iPhone peut fournir un HEIC, et une analyse
+    // « rapide » qui aboutit vaut mieux qu'un echec complet. Le plafond de
+    // taille, lui, reste bloquant : une image enorme n'est jamais legitime.
+    if (typeAccepte(secondMime)) {
       blocks.push({
         type: "image_url",
         image_url: { url: `data:${secondMime};base64,${body.secondImageBase64}`, detail: "high" },

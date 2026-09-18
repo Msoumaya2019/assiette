@@ -31,17 +31,18 @@ android {
     // 31 aout 2026 pour toute nouvelle application.
     compileSdk = flutter.compileSdkVersion
 
-    // `ndkVersion` est volontairement absent.
+    // Le NDK est obligatoire, et cette ligne le dit.
     //
-    // Le declarer — meme en reprenant la valeur par defaut de Flutter — oblige
-    // son greffon Gradle a installer la chaine NDK complete (plusieurs centaines
-    // de megaoctets) avant la moindre compilation, pour un outil qui ne servirait
-    // ici qu'a alleger les bibliotheques natives embarquees par le lecteur de
-    // code-barres. Cette application n'a aucun code natif a compiler.
+    // `path_provider_android` depend de `jni`, qui compile du C++ par CMake et
+    // produit `libdartjni.so` pour chaque architecture. Sans NDK, la compilation
+    // s'arrete sur « Android sdkmanager did not install NDK » : laisser cette
+    // ligne absente ne l'evite donc pas, Flutter applique sa propre valeur par
+    // defaut et reclame le meme paquet.
     //
-    // Sans cette ligne, AGP se contente d'avertir qu'il n'a pas pu alleger ces
-    // bibliotheques et les embarque telles quelles : le binaire est un peu plus
-    // gros, la compilation aboutit partout, y compris sur un poste sans NDK.
+    // On reprend `flutter.ndkVersion` plutot que d'ecrire la version en clair :
+    // une seule source de verite, qui suit les montees de version de Flutter.
+    // Flutter 3.47.4 exige 28.2.13676358.
+    ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

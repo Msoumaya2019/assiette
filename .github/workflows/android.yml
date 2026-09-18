@@ -31,11 +31,16 @@ jobs:
       - name: Recuperer le depot
         uses: actions/checkout@v4
 
-      - name: Installer Java 17
+      # Java 21, et non 17 : c'est la version avec laquelle la compilation a ete
+      # validee sur le poste de developpement (JBR 21 fourni par Android Studio).
+      # Le bytecode d'AGP 9.1.0 est en Java 11, donc 17 suffirait, mais faire
+      # tourner l'integration continue sur une autre version de Java que celle
+      # utilisee en local reintroduit une difference que l'on ne verrait qu'ici.
+      - name: Installer Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
 
       - name: Installer Flutter
         uses: subosito/flutter-action@v2
@@ -43,6 +48,45 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
+
+      # ---------------------------------------------------------------------
+      # Le NDK est indispensable : `path_provider_android` depend de `jni`, qui
+      # compile du C++ via CMake et produit `libdartjni.so`. Sans le NDK, la
+      # compilation echoue sur « Android sdkmanager did not install NDK ».
+      #
+      # L'image ubuntu-latest le fournit aujourd'hui, mais s'en remettre a elle
+      # reviendrait a dependre d'un detail qui peut changer sans prevenir. On lit
+      # donc la version exigee a la source — l'extension Gradle de Flutter — et
+      # on ne l'installe que si elle manque. Une seule source de verite : celle
+      # de Flutter lui-meme, jamais une valeur recopiee ici.
+      # ---------------------------------------------------------------------
+      - name: Verifier le NDK exige par Flutter
+        run: |
+          set -euo pipefail
+          FLUTTER_ROOT="$(dirname "$(dirname "$(command -v flutter)")")"
+          EXTENSION="$FLUTTER_ROOT/packages/flutter_tools/gradle/src/main/kotlin/FlutterExtension.kt"
+
+          if [ ! -f "$EXTENSION" ]; then
+            echo "::warning::Fichier introuvable : $EXTENSION — controle du NDK ignore."
+            exit 0
+          fi
+
+          NDK_REQUIS="$(sed -n 's/.*val ndkVersion: String = "\([^"]*\)".*/\1/p' "$EXTENSION" | head -1)"
+          if [ -z "$NDK_REQUIS" ]; then
+            echo "::warning::Version du NDK illisible dans $EXTENSION — controle ignore."
+            exit 0
+          fi
+
+          echo "Flutter ${{ env.FLUTTER_VERSION }} exige le NDK $NDK_REQUIS"
+          if [ -f "$ANDROID_HOME/ndk/$NDK_REQUIS/source.properties" ]; then
+            echo "Deja present : $ANDROID_HOME/ndk/$NDK_REQUIS"
+            exit 0
+          fi
+
+          echo "Absent : installation via sdkmanager."
+          SDKM="$(command -v sdkmanager || echo "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager")"
+          yes | "$SDKM" "ndk;$NDK_REQUIS"
+          test -f "$ANDROID_HOME/ndk/$NDK_REQUIS/source.properties"
 
       - name: Installer les dependances
         working-directory: app

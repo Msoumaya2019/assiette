@@ -58,6 +58,35 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  serveur:
+    name: Serveur (Edge Functions)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Recuperer le depot
+        uses: actions/checkout@v4
+
+      - name: Installer Deno
+        uses: denoland/setup-deno@v2
+        with:
+          # Deno 2 : `Deno.serve` y est stable, aucun indicateur supplementaire
+          # n'est necessaire. C'est aussi la version des Edge Functions Supabase.
+          deno-version: v2.x
+
+      - name: Verification des types
+        run: deno check supabase/functions/analyze-meal/index.ts supabase/functions/analyze-label/index.ts
+
+      # Les tests interrogent le gestionnaire par de vraies requetes HTTP : ils
+      # ont besoin d'ouvrir un port, d'ou `--allow-net`, et de definir une cle
+      # factice pour franchir le controle de configuration, d'ou `--allow-env`.
+      # Aucun appel au fournisseur n'est declenche.
+      - name: Tests du serveur
+        run: deno test --allow-net --allow-env tests/
+
   validite-workflows:
     name: Validation des workflows
     runs-on: ubuntu-latest

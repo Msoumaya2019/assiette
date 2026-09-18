@@ -11,8 +11,10 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Élément | État |
 | --- | --- |
 | Code source complet, analysé sans avertissement | prêt |
-| 136 tests automatiques, tous verts | prêt |
-| APK et AAB produits par `flutter build` | prêt |
+| 142 tests de l'application, tous verts | prêt |
+| 13 tests du serveur, tous verts | prêt |
+| APK de test produit et signature vérifiée | prêt |
+| AAB pour Google Play | à produire |
 | Icônes et écran de démarrage (Android et iOS) | prêt |
 | Politique de confidentialité | `docs/confidentialite.md` |
 | Attributions Ciqual et Open Food Facts | `app/assets/legal/ATTRIBUTION.md` |
@@ -184,3 +186,39 @@ embarqués dans l'application.
 | Compte Apple Developer | 99 $ par an |
 
 Aucun de ces montants n'est engagé tant que les comptes ne sont pas créés.
+
+---
+
+## 7. Prérequis de compilation, vérifiés
+
+Ces trois points ne se devinent pas : chacun a fait échouer une compilation avant
+d'être identifié. Ils valent pour toute machine, y compris les serveurs de
+compilation.
+
+### 7.1 Le NDK Android est obligatoire
+
+`path_provider_android` dépend de `jni`, qui compile du C++ par CMake et produit
+`libdartjni.so` pour chaque architecture. Sans le NDK, la compilation s'arrête sur
+`Android sdkmanager did not install NDK`.
+
+Flutter 3.47.4 exige la version `28.2.13676358`, déclarée dans
+`packages/flutter_tools/gradle/src/main/kotlin/FlutterExtension.kt` du SDK. Le flux
+Android lit cette valeur à la source et n'installe le NDK que s'il manque : il n'y
+a donc aucune version recopiée à maintenir.
+
+### 7.2 Cible iOS minimale : 15.5
+
+Le greffon `mobile_scanner` déclare `platform = :ios, '15.5.0'` dans son podspec.
+En dessous, `pod install` refuse de résoudre la dépendance. La valeur est fixée à
+deux endroits, qui doivent rester d'accord : `app/ios/Podfile` (ligne `platform`)
+et `app/ios/Runner.xcodeproj/project.pbxproj` (`IPHONEOS_DEPLOYMENT_TARGET`).
+
+Le Podfile est versionné. Son absence n'est pas un cas normal : le flux iOS
+s'arrête s'il manque, plutôt que de laisser Flutter en fabriquer un autre.
+
+### 7.3 Java 21
+
+Le projet a été validé avec Java 21, le JBR fourni par Android Studio. Le bytecode
+d'AGP 9.1.0 est en Java 11, donc 17 suffirait, mais les flux utilisent 21 pour
+rester identiques à l'environnement de développement.
+

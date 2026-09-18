@@ -192,7 +192,12 @@ class SettingsScreen extends ConsumerWidget {
                 children: [
                   SwitchListTile(
                     value: settings.mealRemindersEnabled,
-                    onChanged: notifier.setMealReminders,
+                    onChanged: (value) => _basculerRappel(
+                      context,
+                      ref,
+                      valeur: value,
+                      appliquer: notifier.setMealReminders,
+                    ),
                     title: const Text('Rappel pour renseigner un repas'),
                     subtitle: const Text(
                       'Une notification discrete, desactivable a tout moment',
@@ -201,7 +206,12 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                   SwitchListTile(
                     value: settings.dailySummaryEnabled,
-                    onChanged: notifier.setDailySummary,
+                    onChanged: (value) => _basculerRappel(
+                      context,
+                      ref,
+                      valeur: value,
+                      appliquer: notifier.setDailySummary,
+                    ),
                     title: const Text('Resume de la journee'),
                     contentPadding: EdgeInsets.zero,
                   ),
@@ -325,6 +335,47 @@ class SettingsScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  /// Active ou desactive un rappel, en demandant d'abord l'autorisation.
+  ///
+  /// Android 13 et les versions suivantes, comme iOS, exigent une autorisation
+  /// explicite pour afficher une notification. Sans cette demande, le reglage
+  /// s'activait, la notification etait bien programmee, et rien n'arrivait
+  /// jamais — sans que rien ne l'explique. Le reglage reste donc desactive tant
+  /// que l'autorisation n'a pas ete accordee, ce qui rend le refus visible.
+  ///
+  /// Desactiver ne demande evidemment aucune autorisation : c'est le seul chemin
+  /// qui ne s'interrompt pas.
+  Future<void> _basculerRappel(
+    BuildContext context,
+    WidgetRef ref, {
+    required bool valeur,
+    required Future<void> Function(bool) appliquer,
+  }) async {
+    if (!valeur) {
+      await appliquer(false);
+      return;
+    }
+
+    final accordee = await ref
+        .read(notificationServiceProvider)
+        .requestPermission();
+
+    if (!accordee) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Assiette n\'est pas autorisee a afficher des notifications. '
+            'Autorisez-les dans les reglages du telephone pour activer ce rappel.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    await appliquer(true);
   }
 
   Future<void> _confirmErase(BuildContext context, WidgetRef ref) async {

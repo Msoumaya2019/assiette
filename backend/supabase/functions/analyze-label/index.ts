@@ -11,10 +11,8 @@
 import { deepSeekChat, extractJson, DeepSeekError } from "../_shared/deepseek.ts";
 import { LABEL_SYSTEM_PROMPT, buildLabelUserPrompt, LABEL_PROMPT_VERSION } from "../_shared/label_prompt.ts";
 import { corsHeaders, jsonResponse } from "../_shared/http.ts";
+import { MAX_IMAGE_BYTES, tailleBase64, typeAccepte } from "../_shared/images.ts";
 import { checkRateLimit } from "../_shared/rate_limit.ts";
-
-const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
-const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 const NUMERIC_FIELDS = [
   "energyKcal",
@@ -65,7 +63,7 @@ function normalize(raw: Record<string, unknown>): Record<string, unknown> {
 }
 
 Deno.serve(async (request: Request): Promise<Response> => {
-  if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders() });
   if (request.method !== "POST") return jsonResponse({ error: "method_not_allowed" }, 405);
 
   const apiKey = Deno.env.get("DEEPSEEK_API_KEY");
@@ -88,10 +86,16 @@ Deno.serve(async (request: Request): Promise<Response> => {
   if (!body.imageBase64) return jsonResponse({ error: "missing_image" }, 400);
 
   const mimeType = (body.mimeType ?? "image/jpeg").toLowerCase();
-  if (!ALLOWED_MIME.has(mimeType)) return jsonResponse({ error: "unsupported_media" }, 415);
+  if (!typeAccepte(mimeType)) return jsonResponse({ error: "unsupported_media" }, 415);
 
-  const approxBytes = Math.floor((body.imageBase64.length * 3) / 4);
-  if (approxBytes > MAX_IMAGE_BYTES) return jsonResponse({ error: "image_too_large" }, 413);
+  if (tailleBase64(body.imageBase64) > MAX_IMAGE_BYTES) {
+    return jsonResponse({ error: "image_too_large" }, 413);
+  }
+
+  // Meme regle que dans `analyze-meal` : le plafond s'applique aux deux images.
+  if (body.secondImageBase64 && tailleBase64(body.secondImageBase64) > MAX_IMAGE_BYTES) {
+    return jsonResponse({ error: "image_too_large" }, 413);
+  }
 
   const blocks: Record<string, unknown>[] = [
     { type: "text", text: buildLabelUserPrompt(Boolean(body.secondImageBase64)) },
@@ -100,7 +104,9 @@ Deno.serve(async (request: Request): Promise<Response> => {
 
   if (body.secondImageBase64) {
     const secondMime = (body.secondMimeType ?? mimeType).toLowerCase();
-    if (ALLOWED_MIME.has(secondMime)) {
+    // Type non pris en charge : la seconde image est ecartee, la requete
+    // aboutit. Meme raisonnement que dans `analyze-meal`.
+    if (typeAccepte(secondMime)) {
       blocks.push({
         type: "image_url",
         image_url: { url: `data:${secondMime};base64,${body.secondImageBase64}`, detail: "high" },
