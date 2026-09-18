@@ -11,13 +11,13 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Élément | État |
 | --- | --- |
 | Code source complet, analysé sans avertissement | prêt |
-| 142 tests de l'application, tous verts | prêt |
-| 13 tests du serveur, tous verts | prêt |
+| 151 tests de l'application, tous verts | prêt |
+| 18 tests du serveur, tous verts | prêt |
 | Dépôt public | https://github.com/Msoumaya2019/assiette |
-| Flux `ci.yml` — analyse, 142 tests, 6 contrôles | **vert**, 3 exécutions |
+| Flux `ci.yml` — analyse, 151 tests, 6 contrôles | **vert**, 4 exécutions |
 | Flux Android — APK et AAB | **vert**, artefacts vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
-| Déclenchement par étiquette `v*` | **vert** |
+| Déclenchement par étiquette `v*` | **vert** (`v0.1.0`, `v0.1.1`) |
 | Icônes et écran de démarrage (Android et iOS) | prêt |
 | Politique de confidentialité | `docs/confidentialite.md` |
 | Attributions Ciqual et Open Food Facts | `app/assets/legal/ATTRIBUTION.md` |
