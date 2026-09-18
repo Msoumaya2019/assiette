@@ -33,6 +33,7 @@ from __future__ import annotations
 import hashlib
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 RACINE = Path(__file__).resolve().parent.parent.parent
@@ -42,6 +43,16 @@ class AncreIntrouvable(Exception):
     """La mutation n'a pas pu etre appliquee : le banc serait muet, donc faux."""
 
 
+class MesureImpossible(Exception):
+    """Le controle n'a pas pu tourner : le resultat ne prouverait rien.
+
+    A ne pas confondre avec un defaut non detecte. Une mutation qui casse la
+    compilation rend, elle aussi, un code de sortie non nul — et un banc qui ne
+    distingue pas les deux conclut « non detecte » sur une mutation qui n'a
+    jamais ete mesuree.
+    """
+
+
 class Fichier:
     """Un fichier suivi par le banc : son contenu d'origine et son empreinte."""
 
@@ -49,6 +60,8 @@ class Fichier:
         self.chemin = chemin
         self.origine = chemin.read_bytes()
         self.sha = hashlib.sha256(self.origine).hexdigest()
+        # Renseigne par `Banc.supprimer` : l'endroit ou le fichier a ete deplace.
+        self.deplace: Path | None = None
 
     def muter(self, ancien: bytes, nouveau: bytes, occurrences: int | None = None) -> None:
         """Remplace `ancien` par `nouveau`. Leve si l'ancre ne correspond pas."""
@@ -144,10 +157,18 @@ class Banc:
         return chemin
 
     def supprimer(self, chemin_relatif: str) -> None:
-        """Supprime un fichier suivi, en gardant de quoi le remettre."""
+        """Rend un fichier absent, en le **renommant**.
+
+        Renommer plutot que supprimer : la suppression passe par le mecanisme de
+        corbeille du systeme, qui peut echouer. Un echec en pleine mutation
+        laisse alors le fichier ni supprime ni restaure, et **le depot reste
+        mutile** — c'est arrive sur une icone iOS. Un renommage est atomique, ne
+        depend d'aucun service, et se defait a l'identique.
+        """
         chemin = RACINE / chemin_relatif
         fichier = Fichier(chemin)
-        chemin.unlink()
+        fichier.deplace = chemin.with_name(chemin.name + ".banc-deplace")
+        chemin.rename(fichier.deplace)
         self.supprimes.append(fichier)
 
     # --- execution -------------------------------------------------------
@@ -177,17 +198,36 @@ class Banc:
         try:
             appliquer()
         except AncreIntrouvable as erreur:
-            print(f"\nBANC INVALIDE — cas « {libelle} »", file=sys.stderr)
-            print(f"  {erreur}", file=sys.stderr)
-            print(
-                "  La mutation n'a pas eu lieu : le banc ne prouverait rien. "
+            self._invalide(
+                libelle,
+                erreur,
+                "La mutation n'a pas eu lieu : le banc ne prouverait rien. "
                 "Corriger l'ancre, pas le controle.",
-                file=sys.stderr,
             )
-            self.restaurer()
+            raise SystemExit(2)
+        except Exception as erreur:  # noqa: BLE001
+            # Toute autre panne pendant la mutation doit restaurer. Sans cela le
+            # banc laisse le depot mutile, et la panne se lit plus tard, ailleurs
+            # — c'est arrive sur une icone iOS laissee supprimee.
+            self._invalide(
+                libelle,
+                erreur,
+                "La mutation a echoue en cours de route : le banc ne prouverait "
+                "rien. Le depot a ete restaure.",
+            )
             raise SystemExit(2)
 
-        resultat = self.executer()
+        try:
+            resultat = self.executer()
+        except MesureImpossible as erreur:
+            self._invalide(
+                libelle,
+                erreur,
+                "La mesure n'a pas pu tourner : le banc ne prouverait rien. "
+                "Corriger la mutation, pas le controle.",
+            )
+            raise SystemExit(2)
+
         present = marqueur in resultat.texte
         self.restaurer()
 
@@ -199,18 +239,34 @@ class Banc:
 
         self.lignes.append((libelle, marqueur, verdict, reussi))
 
+    def _invalide(self, libelle: str, erreur: BaseException, conseil: str) -> None:
+        """Signale un banc qui ne prouve rien, et remet le depot en etat."""
+        print(f"\nBANC INVALIDE — cas « {libelle} »", file=sys.stderr)
+        print(f"  {type(erreur).__name__} : {erreur}", file=sys.stderr)
+        print(f"  {conseil}", file=sys.stderr)
+        self.restaurer()
+
     def restaurer(self) -> None:
         for fichier in self.fichiers.values():
             if not fichier.restaurer():
                 raise SystemExit(f"restauration impossible : {fichier.chemin}")
         for fichier in self.supprimes:
-            fichier.chemin.write_bytes(fichier.origine)
+            if fichier.deplace is not None and fichier.deplace.exists():
+                fichier.deplace.rename(fichier.chemin)
             if hashlib.sha256(fichier.chemin.read_bytes()).hexdigest() != fichier.sha:
                 raise SystemExit(f"restauration impossible : {fichier.chemin}")
         self.supprimes.clear()
         for chemin in self.crees:
-            if chemin.exists():
+            if not chemin.exists():
+                continue
+            try:
                 chemin.unlink()
+            except OSError:
+                # La suppression passe par la corbeille du systeme, qui peut
+                # refuser (mesure : `SHFileOperationW: 0x2`). Deplacer hors de
+                # l'arbre obtient le meme effet sans dependre d'un service : le
+                # fichier n'a aucune valeur, l'arbre doit rester propre.
+                chemin.rename(Path(tempfile.gettempdir()) / f"banc-{chemin.name}")
         self.crees.clear()
 
         if self.index_a_reinitialiser:

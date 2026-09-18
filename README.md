@@ -265,9 +265,13 @@ python tools/build_ciqual.py
 ## Tests
 
 ```bash
-cd app
-flutter test
+python tools/lancer_tests_flutter.py    # toute la suite
 ```
+
+Sous Windows, ce lanceur pose les deux réglages que Flutter réclame et écarte la
+boucle locale du mandataire ; le pourquoi est documenté dans
+`docs/publication.md` §7.4. La CI, elle, exécute `flutter test` directement sur
+`ubuntu-latest`.
 
 Couverture actuelle :
 
@@ -275,23 +279,30 @@ Couverture actuelle :
   totaux de glucides, fourchette d'incertitude, objectifs ;
 - analyse syntaxique des réponses du modèle (JSON encadré, valeurs aberrantes,
   nombres en texte, virgule décimale, listes tronquées) ;
+- **requête réellement transmise au fournisseur** : champ `thinking`, température,
+  modèle, format JSON, image en data URL, en-tête d'autorisation, et absence de la
+  clé dans le corps ;
 - lecture des réponses Open Food Facts (deux formats de schéma, cache, erreurs 404 /
   429 / 503) ;
 - recherche Ciqual (accents, ligatures, classement, appariement approximatif).
 
 ## Notes d'environnement
 
-**Windows / Git Bash.** Le lanceur `flutter.bat` ne fonctionne pas dans cet
-environnement : il se bloque sans rien produire. Deux causes, deux contournements :
+**Windows / Git Bash.** Des variables que Git Bash n'expose pas font échouer
+Flutter, chacune avec un message qui ne dit pas sa cause :
 
-1. `flutter.bat` n'aboutit pas — appeler directement le snapshot :
-   `dart <flutter>/bin/cache/flutter_tools.snapshot <commande>`
-2. Le paquet Dart `process` lit `PATHEXT` sans garde. Git Bash ne l'expose pas, d'où
-   un `Null check operator used on a null value`. Il faut exporter
-   `PATHEXT=".COM;.EXE;.BAT;.CMD"`.
+1. `PATHEXT` — le paquet Dart `process` le lit sans garde : `Null check operator
+   used on a null value`. Exporter `PATHEXT=".COM;.EXE;.BAT;.CMD"`.
+2. `PROGRAMFILES(X86)` — `flutter test` s'arrête dessus, et le message **accuse
+   Visual Studio**. Fournir la variable suffit : Visual Studio n'est pas
+   nécessaire, le SDK ignorant explicitement un `vswhere.exe` introuvable.
+3. `HTTP_PROXY` sans `NO_PROXY` — le processus de test ne peut plus rejoindre son
+   propre port d'écoute, et **tous** les fichiers échouent d'un coup, avec un
+   message qui désigne le WebSocket.
 
-Un lanceur prêt à l'emploi se trouve dans `.workbuddy-ai/` (hors dépôt). Sur macOS et
-Linux, `flutter` fonctionne normalement.
+`tools/lancer_tests_flutter.py` et `tools/environnement_flutter.py` posent les
+deux derniers réglages ; `docs/publication.md` §7.4 détaille le diagnostic. Sur
+macOS et Linux, `flutter` fonctionne normalement.
 
 ---
 

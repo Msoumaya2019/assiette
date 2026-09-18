@@ -143,11 +143,19 @@ class DeepSeekVisionProvider implements VisionProvider {
   }
 
   /// Appel `chat/completions`, avec reprise sur contenu vide.
+  ///
+  /// Le mode reflexion du fournisseur est **desactive explicitement**. Il est
+  /// actif par defaut cote fournisseur, facture des jetons de sortie
+  /// supplementaires a chaque analyse, et rend `temperature` inoperant : dans
+  /// ce mode le fournisseur ignore ce champ en silence. On n'envoie donc
+  /// `temperature` que lorsqu'il est reellement pris en compte, pour ne pas
+  /// laisser croire au lecteur qu'il regle le determinisme.
   Future<String> _chat({
     required String systemPrompt,
     required List<Map<String, dynamic>> userBlocks,
     required int maxTokens,
     required double temperature,
+    bool thinking = false,
   }) async {
     final uri = Uri.parse('$baseUrl/chat/completions');
     final body = jsonEncode({
@@ -158,7 +166,8 @@ class DeepSeekVisionProvider implements VisionProvider {
       ],
       'response_format': {'type': 'json_object'},
       'max_tokens': maxTokens,
-      'temperature': temperature,
+      'thinking': {'type': thinking ? 'enabled' : 'disabled'},
+      if (!thinking) 'temperature': temperature,
     });
 
     Object? lastError;

@@ -262,9 +262,9 @@ Le projet a été validé avec Java 21, le JBR fourni par Android Studio. Le byt
 d'AGP 9.1.0 est en Java 11, donc 17 suffirait, mais les flux utilisent 21 pour
 rester identiques à l'environnement de développement.
 
-### 7.4 `flutter test` ne tourne pas sous Windows sans Visual Studio
+### 7.4 `flutter test` sous Windows : deux obstacles d'environnement, tous deux levés
 
-Sur le poste Windows, `flutter test` échoue en une seconde sur :
+Sur le poste Windows, `flutter test` échouait d'abord en une seconde sur :
 
 ```
 %PROGRAMFILES(X86)% environment variable not found.
@@ -273,17 +273,41 @@ Sur le poste Windows, `flutter test` échoue en une seconde sur :
   #12 _setupHooks              (package:flutter_tools/src/isolated/native_assets/native_assets.dart:273:25)
 ```
 
-Ce n'est ni un défaut du projet ni une régression : les paquets `objective_c` et
-`sqlite3` déclarent des *hooks* de ressources natives, que Flutter exécute avant
-les tests. Sous Windows, leur mise en place réclame MSVC (`cl.exe`), que
-`flutter_tools` localise via `vswhere.exe` — absent si Visual Studio n'est pas
-installé, et la variable `PROGRAMFILES(X86)` n'est même pas définie dans le
-shell.
+Le message **accuse Visual Studio, mais la cause est autre** : les paquets
+`objective_c` et `sqlite3` déclarent des *hooks* de ressources natives, et
+`flutter_tools` appelle `VisualStudio.clPath`. Ce getter commence par lire la
+variable d'environnement `PROGRAMFILES(X86)` et **lève un `throwToolExit` si elle
+est absente** — avant même de chercher `vswhere.exe`. Or elle n'est pas exposée
+dans ce shell.
 
-Conséquence pratique : **la suite de tests se vérifie sur l'exécuteur Linux, pas
-en local.** C'est le cas : `ci.yml` exécute `flutter test` sur `ubuntu-latest` et
-les 142 tests y passent. En local, `dart format` et `flutter analyze` restent
-disponibles et suffisent à valider une modification de code Dart.
+Fournir la variable suffit à passer : `vswhere.exe` reste introuvable, mais le
+SDK ignore explicitement ce cas (`on ProcessException`, `visual_studio.dart:369`).
+Ce n'est donc pas l'absence de Visual Studio qui bloquait, c'est l'absence de la
+variable.
+
+Le premier obstacle franchi, un second apparaît, sans rapport avec le premier :
+
+```
+Unable to connect to flutter_tester process:
+WebSocketException: Invalid WebSocket upgrade request
+```
+
+`flutter_tester` démarre puis ouvre un port d'écoute local ; le processus de test
+doit s'y reconnecter. L'environnement définit `HTTP_PROXY` et `HTTPS_PROXY` sans
+`NO_PROXY`, donc le trafic vers `127.0.0.1` part vers le proxy, qui répond `400`.
+
+**Conséquence pratique : `flutter test` tourne en local.** Les deux réglages sont
+encapsulés dans `tools/lancer_tests_flutter.py`, qui les pose et transmet la
+cible :
+
+```bash
+python tools/lancer_tests_flutter.py                        # toute la suite
+python tools/lancer_tests_flutter.py test/data/mon_test.dart
+```
+
+`ci.yml` continue d'exécuter `flutter test` sur `ubuntu-latest`, où aucun des
+deux réglages n'est nécessaire. Le chemin Linux reste la référence ; le chemin
+Windows sert à boucler vite pendant le développement.
 
 ### 7.5 Avertissement de dépréciation Node 20
 
@@ -317,9 +341,11 @@ bancs vivent dans `tools/bancs/` — **dans le dépôt**, pas dans un dossier
 temporaire, pour qu'ils soient rejouables.
 
 ```bash
-python3 tools/bancs/falsifier_fins_de_ligne.py    # 6 cas
-python3 tools/bancs/falsifier_ios.py              # 6 cas
-python3 tools/bancs/falsifier_adresses.py         # 4 cas
+python3 tools/bancs/falsifier_fins_de_ligne.py         # 6 cas
+python3 tools/bancs/falsifier_ios.py                   # 6 cas
+python3 tools/bancs/falsifier_adresses.py              # 4 cas
+python3 tools/bancs/falsifier_client_deepseek.py       # 2 cas — serveur (Deno)
+python3 tools/bancs/falsifier_client_deepseek_dart.py  # 6 cas — application (Flutter)
 ```
 
 Chaque banc inclut un **témoin négatif** — un `.bat` en CRLF conforme à son
@@ -331,10 +357,28 @@ exception** quand son ancre ne correspond pas : une mutation qui ne mute pas est
 une erreur du banc, pas un résultat. Sans cette garantie, un banc peut conclure
 « non détecté » alors que la mutation n'a jamais eu lieu — ce qui est arrivé.
 
+Le harnais connaît une seconde confusion, tout aussi trompeuse : **une mutation
+qui casse la compilation** rend un code de sortie non nul sans qu'aucun test
+n'ait échoué. Le banc des tests Flutter compte donc les tests réellement
+exécutés et lève `MesureImpossible` si le total attendu n'est pas atteint, au
+lieu d'annoncer un trou de couverture là où il n'y a qu'une mutation fautive.
+Même chose si le rapport JSON ne contient aucun test nommé en échec.
+
 ### Réparer
 
 ```bash
 python3 tools/normaliser_fins_de_ligne.py             # mesure, ne touche à rien
 python3 tools/normaliser_fins_de_ligne.py --appliquer
 ```
+
+### Lancer les tests Flutter en local
+
+```bash
+python tools/lancer_tests_flutter.py                        # toute la suite
+python tools/lancer_tests_flutter.py test/data/mon_test.dart
+```
+
+`tools/environnement_flutter.py` porte les deux réglages que la machine réclame,
+et pourquoi (voir §7.4). Le script les applique sans passer par `env`, qui avale
+la sortie dans ce bac à sable.
 

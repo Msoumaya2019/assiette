@@ -32,6 +32,26 @@ SCRIPT = RACINE / "tools" / "check_fins_de_ligne.py"
 CIBLE = "tools/check_prompt_sync.py"
 
 
+def etat_suivi() -> set[str]:
+    """Les modifications suivies vues par git, hors fichiers non suivis.
+
+    Repere pris **avant** et **apres** la campagne. Exiger un ensemble vide
+    serait un controle faux : un auteur travaille avec des modifications en
+    cours, et le banc declarerait alors « index divergent » en accusant sa
+    propre campagne d'avoir abime l'index — alors qu'il n'a rien abime.
+    """
+    resultat = subprocess.run(
+        ["git", "status", "--short", "--", "app", "backend", "tools", "docs"],
+        cwd=RACINE,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return {
+        ligne for ligne in resultat.stdout.splitlines() if not ligne.startswith("??")
+    }
+
+
 def principal() -> int:
     banc = Banc(SCRIPT)
 
@@ -39,6 +59,7 @@ def principal() -> int:
     # prouver intacte. Mesurer `app/` y ajouterait les artefacts de compilation,
     # qui ne sont jamais touches ici.
     avant = empreinte_arbre(RACINE / "tools")
+    index_avant = etat_suivi()
 
     # --- etat initial : le controle doit etre vert -----------------------
     initial = banc.etat_initial()
@@ -156,19 +177,17 @@ def principal() -> int:
         return code
 
     # --- l'index doit avoir ete reconstruit a l'identique ------------------
-    index_propre = subprocess.run(
-        ["git", "status", "--short", "--", "app", "backend", "tools", "docs"],
-        cwd=RACINE,
-        capture_output=True,
-        text=True,
-        check=False,
-    ).stdout
-    suivis = [
-        ligne for ligne in index_propre.splitlines() if not ligne.startswith("??")
-    ]
-    print(f"index reconstruit                 : {'conforme' if not suivis else 'DIVERGENT'}")
-    if suivis:
-        for ligne in suivis:
+    #
+    # Le critere est la comparaison avec l'etat d'avant, pas la vacuite : le
+    # cas « blob indexe en CRLF » ecrit dans l'index, et la campagne doit le
+    # rendre tel qu'elle l'a trouve — qu'il ait ete vide ou non.
+    index_apres = etat_suivi()
+    print(
+        f"index reconstruit                 : "
+        f"{'conforme' if index_apres == index_avant else 'DIVERGENT'}"
+    )
+    if index_apres != index_avant:
+        for ligne in sorted(index_apres ^ index_avant):
             print(f"  - {ligne}", file=sys.stderr)
         return 1
 
