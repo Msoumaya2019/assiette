@@ -1,0 +1,66 @@
+name: assiette
+description: >-
+  Estimer les glucides et les valeurs nutritionnelles d'un repas a partir d'une
+  photo, d'un code-barres ou d'une recherche manuelle.
+publish_to: "none"
+
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.9.0 <4.0.0"
+  flutter: ">=3.35.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # Etat applicatif
+  flutter_riverpod: ^2.6.1
+
+  # Navigation
+  go_router: ^14.6.2
+
+  # Stockage local
+  sqflite: ^2.4.1
+  path: ^1.9.0
+  path_provider: ^2.1.5
+  flutter_secure_storage: ^9.2.2
+
+  # Capture et image.
+  # Le redimensionnement (1600 px, JPEG 85) est fait nativement par image_picker :
+  # inutile d'embarquer en plus une bibliotheque de traitement d'image.
+  image_picker: ^1.1.2
+
+  # Reseau
+  http: ^1.2.2
+
+  # Code-barres
+  mobile_scanner: ^6.0.2
+
+  # Graphiques
+  fl_chart: ^0.69.2
+
+  # Notifications
+  flutter_local_notifications: ^18.0.1
+  timezone: ^0.10.0
+
+  # Divers
+  intl: ^0.20.2
+  uuid: ^4.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  sqflite_common_ffi: ^2.3.4+4
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/nutrition/
+    - assets/legal/
+
+  fonts: []

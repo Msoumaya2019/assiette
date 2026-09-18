@@ -1,0 +1,35 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  errors:
+    # Une dependance non utilisee ou une variable morte doit faire echouer
+    # l'analyse : c'est le genre de residu qui s'accumule sans controle.
+    unused_import: error
+    unused_local_variable: error
+    unused_element: error
+
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+    - "build/**"
+    - android/**
+    - ios/**
+
+linter:
+  rules:
+    # Robustesse
+    avoid_print: true
+    prefer_final_locals: true
+    avoid_slow_async_io: true
+    cancel_subscriptions: true
+    close_sinks: true
+
+    # Lisibilite
+    always_declare_return_types: true
+    prefer_single_quotes: true
+    directives_ordering: true
+    sort_child_properties_last: true
+    require_trailing_commas: true
+
+    # Securite : rien de sensible ne doit trainer dans les journaux
+    avoid_dynamic_calls: true

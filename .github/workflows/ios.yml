@@ -1,0 +1,173 @@
+name: iOS — build et IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Mode de compilation"
+        required: true
+        default: "non-signe"
+        type: choice
+        options:
+          - non-signe
+          - signe
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: "3.47.4"
+
+jobs:
+  build:
+    name: Compilation iOS
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Recuperer le depot
+        uses: actions/checkout@v4
+
+      - name: Installer Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Installer les dependances
+        working-directory: app
+        run: flutter pub get
+
+      - name: Analyse statique
+        working-directory: app
+        run: flutter analyze --no-fatal-infos
+
+      - name: Tests
+        working-directory: app
+        run: flutter test
+
+      - name: Installer CocoaPods
+        working-directory: app
+        run: |
+          set -euo pipefail
+          if [ -f ios/Podfile ]; then
+            cd ios && pod install --repo-update
+          else
+            echo "Pas de Podfile : aucune dependance native iOS."
+          fi
+
+      # ---------------------------------------------------------------------
+      # Mode non signe (par defaut)
+      # Produit une IPA non signee, signable ensuite par l'utilisateur avec
+      # eSign, Sideloadly ou AltStore. Aucun compte Apple Developer requis.
+      # ---------------------------------------------------------------------
+      - name: Compiler la version iOS sans signature
+        if: ${{ github.event.inputs.mode != 'signe' }}
+        working-directory: app
+        run: |
+          flutter build ios --release --no-codesign \
+            --dart-define=APP_ENV=production \
+            --dart-define=SUPABASE_URL=${{ vars.SUPABASE_URL }} \
+            --dart-define=SUPABASE_ANON_KEY=${{ vars.SUPABASE_ANON_KEY }} \
+            --dart-define=ANALYSIS_ENDPOINT=${{ vars.ANALYSIS_ENDPOINT }}
+
+      - name: Empaqueter l'IPA non signee
+        if: ${{ github.event.inputs.mode != 'signe' }}
+        working-directory: app
+        run: |
+          set -euo pipefail
+          APP_PATH="build/ios/iphoneos/Runner.app"
+          test -d "$APP_PATH"
+          rm -rf ../artifacts Payload
+          mkdir -p ../artifacts Payload
+          cp -R "$APP_PATH" Payload/
+          zip -qry "../artifacts/Assiette-${GITHUB_REF_NAME//\//-}-non-signee.ipa" Payload
+          rm -rf Payload
+          ls -lh ../artifacts
+
+      # ---------------------------------------------------------------------
+      # Mode signe (necessite un compte Apple Developer + secrets)
+      # ---------------------------------------------------------------------
+      - name: Importer le certificat et le profil de provisionnement
+        if: ${{ github.event.inputs.mode == 'signe' }}
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          : "${CERTIFICATE_BASE64:?secret IOS_DISTRIBUTION_CERTIFICATE_BASE64 manquant}"
+          : "${PROVISIONING_PROFILE_BASE64:?secret IOS_PROVISIONING_PROFILE_BASE64 manquant}"
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+          PROFILE_PATH="$RUNNER_TEMP/profile.mobileprovision"
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+
+          echo "$CERTIFICATE_BASE64" | base64 -d > "$CERT_PATH"
+          echo "$PROVISIONING_PROFILE_BASE64" | base64 -d > "$PROFILE_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp "$PROFILE_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/
+
+      - name: Compiler et exporter l'IPA signee
+        if: ${{ github.event.inputs.mode == 'signe' }}
+        working-directory: app
+        env:
+          TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+          EXPORT_METHOD: ${{ secrets.IOS_EXPORT_METHOD || 'app-store' }}
+        run: |
+          set -euo pipefail
+          cat > ios/ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>${EXPORT_METHOD}</string>
+            <key>teamID</key><string>${TEAM_ID}</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>stripSwiftSymbols</key><true/>
+            <key>compileBitcode</key><false/>
+          </dict>
+          </plist>
+          EOF
+          flutter build ipa --release \
+            --export-options-plist=ios/ExportOptions.plist \
+            --dart-define=APP_ENV=production \
+            --dart-define=SUPABASE_URL=${{ vars.SUPABASE_URL }} \
+            --dart-define=SUPABASE_ANON_KEY=${{ vars.SUPABASE_ANON_KEY }} \
+            --dart-define=ANALYSIS_ENDPOINT=${{ vars.ANALYSIS_ENDPOINT }}
+          mkdir -p ../artifacts
+          cp build/ios/ipa/*.ipa ../artifacts/
+          ls -lh ../artifacts
+
+      - name: Publier l'IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipa-ios
+          path: artifacts/*.ipa
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publier les symboles de debogage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-dsym
+          path: app/build/ios/iphoneos/Runner.app.dSYM
+          if-no-files-found: ignore
+          retention-days: 14

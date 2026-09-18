@@ -1,0 +1,81 @@
+# ---------------------------------------------------------------------------
+# Secrets et configuration locale — NE JAMAIS COMMITER
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.p12
+*.mobileprovision
+*.keystore
+*.jks
+key.properties
+*.pem
+*.key
+google-services.json
+GoogleService-Info.plist
+AuthKey_*.p8
+secrets/
+local.properties
+
+# ---------------------------------------------------------------------------
+# Flutter / Dart
+# ---------------------------------------------------------------------------
+app/.dart_tool/
+app/.packages
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/build/
+app/.pub-cache/
+app/.pub/
+app/pubspec.lock.bak
+**/generated_plugin_registrant.dart
+*.iml
+
+# ---------------------------------------------------------------------------
+# Android
+# ---------------------------------------------------------------------------
+app/android/.gradle/
+app/android/local.properties
+app/android/app/debug/
+app/android/app/profile/
+app/android/app/release/
+app/android/key.properties
+app/android/**/*.jks
+app/android/**/*.keystore
+app/android/.cxx/
+app/android/captures/
+
+# ---------------------------------------------------------------------------
+# iOS / macOS
+# ---------------------------------------------------------------------------
+app/ios/Pods/
+app/ios/.symlinks/
+app/ios/Flutter/Flutter.framework
+app/ios/Flutter/Flutter.podspec
+app/ios/Flutter/Generated.xcconfig
+app/ios/Flutter/flutter_export_environment.sh
+app/ios/Runner/GeneratedPluginRegistrant.*
+app/ios/Podfile.lock
+app/ios/*.ipa
+app/ios/*.xcarchive
+**/xcuserdata/
+**/*.xcworkspace/xcuserdata/
+.DS_Store
+
+# ---------------------------------------------------------------------------
+# Outils et divers
+# ---------------------------------------------------------------------------
+# Fichier d'etat ecrit par l'outil Flutter a la racine du depot.
+.flutter_tool_state
+app/ios/Flutter/ephemeral/
+.idea/
+.vscode/*
+!.vscode/settings.json
+*.log
+*.tmp
+*.bak
+.workbuddy-ai/
+__pycache__/
+*.pyc
+coverage/
+htmlcov/

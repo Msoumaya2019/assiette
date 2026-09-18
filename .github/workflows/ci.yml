@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyse-et-tests:
+    name: Analyse et tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Recuperer le depot
+        uses: actions/checkout@v4
+
+      - name: Installer Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.47.4
+          channel: stable
+          cache: true
+
+      - name: Verifier l'absence de secrets commites
+        run: python3 tools/check_no_secrets.py
+
+      - name: Verifier la synchronisation des prompts
+        run: python3 tools/check_prompt_sync.py
+
+      - name: Installer les dependances
+        working-directory: app
+        run: flutter pub get
+
+      - name: Verifier le formatage
+        working-directory: app
+        run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Analyse statique
+        working-directory: app
+        run: flutter analyze --no-fatal-infos
+
+      - name: Tests unitaires et de widgets
+        working-directory: app
+        run: flutter test --coverage
+
+      - name: Publier la couverture
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: couverture
+          path: app/coverage/lcov.info
+          if-no-files-found: ignore
+          retention-days: 7
+
+  validite-workflows:
+    name: Validation des workflows
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verifier la syntaxe des workflows
+        run: python3 tools/check_workflows.py

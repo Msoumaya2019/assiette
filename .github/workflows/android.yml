@@ -1,0 +1,136 @@
+name: Android — APK et AAB
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_name:
+        description: "Nom de version (ex : 0.2.0). Vide = version du pubspec."
+        required: false
+        default: ""
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: "3.47.4"
+
+jobs:
+  build:
+    name: Compilation Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Recuperer le depot
+        uses: actions/checkout@v4
+
+      - name: Installer Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Installer Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Installer les dependances
+        working-directory: app
+        run: flutter pub get
+
+      - name: Analyse statique
+        working-directory: app
+        run: flutter analyze --no-fatal-infos
+
+      - name: Tests
+        working-directory: app
+        run: flutter test
+
+      # ---------------------------------------------------------------------
+      # Signature release.
+      # Si les secrets de signature sont presents, l'APK/AAB est signe avec la
+      # vraie cle de release. Sinon Flutter signe avec la cle de debug, ce qui
+      # reste installable pour un usage personnel.
+      # ---------------------------------------------------------------------
+      - name: Preparer la signature release
+        id: signature
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_BASE64:-}" ] || [ -z "${KEYSTORE_PASSWORD:-}" ] || [ -z "${KEY_ALIAS:-}" ]; then
+            echo "Aucun secret de signature : compilation signee avec la cle de debug."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Secrets de signature detectes : compilation signee en release."
+          echo "$KEYSTORE_BASE64" | base64 -d > app/android/app/upload-keystore.jks
+          cat > app/android/key.properties <<EOF
+          storeFile=upload-keystore.jks
+          storePassword=${KEYSTORE_PASSWORD}
+          keyAlias=${KEY_ALIAS}
+          keyPassword=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}
+          EOF
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Compiler l'APK release
+        working-directory: app
+        run: |
+          flutter build apk --release \
+            --dart-define=APP_ENV=production \
+            --dart-define=SUPABASE_URL=${{ vars.SUPABASE_URL }} \
+            --dart-define=SUPABASE_ANON_KEY=${{ vars.SUPABASE_ANON_KEY }} \
+            --dart-define=ANALYSIS_ENDPOINT=${{ vars.ANALYSIS_ENDPOINT }}
+
+      - name: Compiler l'AAB release
+        working-directory: app
+        run: |
+          flutter build appbundle --release \
+            --dart-define=APP_ENV=production \
+            --dart-define=SUPABASE_URL=${{ vars.SUPABASE_URL }} \
+            --dart-define=SUPABASE_ANON_KEY=${{ vars.SUPABASE_ANON_KEY }} \
+            --dart-define=ANALYSIS_ENDPOINT=${{ vars.ANALYSIS_ENDPOINT }}
+
+      - name: Renommer les artefacts
+        working-directory: app
+        run: |
+          set -euo pipefail
+          SUFFIX="${{ steps.signature.outputs.signed == 'true' && 'signe' || 'debug-key' }}"
+          VERSION="${GITHUB_REF_NAME//\//-}"
+          mkdir -p ../artifacts
+          cp build/app/outputs/flutter-apk/app-release.apk "../artifacts/app-release-${VERSION}-${SUFFIX}.apk"
+          cp build/app/outputs/bundle/release/app-release.aab "../artifacts/app-release-${VERSION}-${SUFFIX}.aab"
+          ls -lh ../artifacts
+
+      - name: Publier l'APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-android
+          path: artifacts/*.apk
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Publier l'AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: aab-android
+          path: artifacts/*.aab
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Nettoyer les fichiers de signature
+        if: always()
+        run: rm -f app/android/app/upload-keystore.jks app/android/key.properties

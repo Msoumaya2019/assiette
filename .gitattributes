@@ -1,0 +1,13 @@
+# Normalisation des fins de ligne.
+#
+# Sans ce fichier, `core.autocrlf=true` (le defaut sous Windows) reecrit tout en
+# CRLF dans la copie de travail. La meme revision produirait alors un contenu
+# different sous Windows et sous Linux, et les controles d'integration continue
+# sensibles aux octets — `dart format --set-exit-if-changed` en tete — echoueraient
+# d'un environnement a l'autre sans qu'aucun code n'ait change.
+
+* text=auto eol=lf
+
+# Les scripts Windows ont besoin de CRLF pour etre lus par cmd.exe.
+*.bat text eol=crlf
+*.cmd text eol=crlf

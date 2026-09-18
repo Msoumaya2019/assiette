@@ -1,0 +1,22 @@
+# Modele de configuration de signature Android.
+#
+# A COPIER vers `app/android/key.properties`, puis remplir avec vos valeurs.
+# Le fichier `key.properties` lui-meme n'est JAMAIS versionne (voir .gitignore).
+#
+# Pour creer le keystore (une seule fois, a conserver precieusement) :
+#
+#   keytool -genkey -v \
+#     -keystore ~/assiette-release.jks \
+#     -storetype JKS \
+#     -keyalg RSA -keysize 2048 -validity 10000 \
+#     -alias assiette
+#
+# En integration continue, ces quatre valeurs sont fournies par des secrets
+# GitHub (voir .github/workflows/android.yml) et le fichier est ecrit
+# temporairement puis supprime en fin de build.
+
+storePassword=VOTRE_MOT_DE_PASSE_DE_KEYSTORE
+keyPassword=VOTRE_MOT_DE_PASSE_DE_CLE
+keyAlias=assiette
+# Chemin absolu, ou relatif a app/android/
+storeFile=/chemin/vers/assiette-release.jks
