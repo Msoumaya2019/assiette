@@ -61,11 +61,16 @@ class AppConfig {
   static const String providerModel = 'deepseek-flash';
 
   /// Identifiant envoye a Open Food Facts. Exige par leur politique d'usage.
+  ///
+  /// L'adresse doit pointer vers un depot qui existe : leur politique demande
+  /// de pouvoir identifier l'auteur de l'application. Une adresse morte revient
+  /// a ne pas repondre.
   static const String openFoodFactsUserAgent =
-      'Assiette/0.1 (https://github.com/axox934)';
+      'Assiette/0.1 (https://github.com/Msoumaya2019/assiette)';
 
   /// URL d'assistance, affichee dans les parametres et les fiches de store.
-  static const String supportUrl = 'https://github.com/axox934/assiette/issues';
+  static const String supportUrl =
+      'https://github.com/Msoumaya2019/assiette/issues';
 
   /// Version de la politique de confidentialite acceptee par l'utilisateur.
   static const String privacyPolicyVersion = '1.0';

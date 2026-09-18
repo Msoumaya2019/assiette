@@ -52,6 +52,12 @@ jobs:
       - name: Verifier la coherence du projet iOS
         run: python3 tools/check_ios.py
 
+      # Les adresses annoncees par l'application sortent dans le binaire : lien
+      # d'assistance, identifiant Open Food Facts. Elles pointaient vers un depot
+      # inexistant, et rien ne le signalait.
+      - name: Verifier les adresses du depot
+        run: python3 tools/check_adresses_du_depot.py
+
       - name: Installer les dependances
         working-directory: app
         run: flutter pub get
