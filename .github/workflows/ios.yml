@@ -35,6 +35,13 @@ jobs:
       - name: Recuperer le depot
         uses: actions/checkout@v4
 
+      # En premier, et avant `pod install` : le controle lit le projet tel qu'il
+      # est commite, sans Xcode. Le placer ici fait echouer la compilation en
+      # quelques secondes sur une configuration incoherente, plutot qu'apres
+      # l'installation des greffons.
+      - name: Verifier la coherence du projet iOS
+        run: python3 tools/check_ios.py
+
       - name: Installer Flutter
         uses: subosito/flutter-action@v2
         with:

@@ -38,6 +38,20 @@ jobs:
       - name: Verifier la synchronisation des prompts
         run: python3 tools/check_prompt_sync.py
 
+      # `git ls-files --eol` est le seul endroit ou l'on voit qu'une copie de
+      # travail viole `.gitattributes`. Ici, le cote indexe compte : un clone
+      # frais respecte toujours l'attribut, donc un blob CRLF dans l'index est
+      # le seul defaut visible depuis un executeur Linux — et il voyage partout.
+      - name: Verifier les fins de ligne
+        run: python3 tools/check_fins_de_ligne.py
+
+      # Le projet iOS ne peut pas etre compile sous Windows. Ce controle lit les
+      # fichiers du projet sans Xcode : icones, storyboard, Info.plist, cible de
+      # deploiement, Podfile. Il ne remplace pas une compilation, mais il attrape
+      # la configuration avant qu'elle ne coute un cycle de 20 minutes.
+      - name: Verifier la coherence du projet iOS
+        run: python3 tools/check_ios.py
+
       - name: Installer les dependances
         working-directory: app
         run: flutter pub get
