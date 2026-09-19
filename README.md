@@ -199,10 +199,9 @@ Trois flux, déclenchables manuellement depuis l'onglet *Actions* :
 | `ios.yml` | IPA non signé (installable via eSign / Sideloadly) ou IPA signé | macOS |
 
 Les fichiers produits sont téléchargeables dans la section **Artifacts** de
-l'exécution. Un tag `v*` déclenche Android automatiquement.
+l'exécution. Un tag `v*` déclenche les trois flux.
 
-Signature Android en CI — secrets à définir dans *Settings → Secrets and variables →
-Actions* :
+Signature Android en CI — les quatre secrets sont **déjà en place** :
 
 | Secret | Contenu |
 |---|---|
@@ -211,12 +210,36 @@ Actions* :
 | `ANDROID_KEY_ALIAS` | Alias de la clé |
 | `ANDROID_KEY_PASSWORD` | Mot de passe de la clé |
 
+La clé vit **hors du dépôt**, dans `%USERPROFILE%\assiette-signature`. Elle a été
+créée sans que son mot de passe apparaisse jamais sur une ligne de commande :
+
+```bash
+python tools/creer_cle_signature.py       # rejoue les fichiers dérivés, ne recrée pas la clé
+python tools/publier_cle_signature.py     # dépose les quatre secrets
+```
+
+**Ce dossier doit être sauvegardé hors de cette machine.** Le Play Store identifie
+une application par son nom de paquet *et* sa clé : une clé perdue oblige à
+publier une nouvelle application, et les personnes qui ont installé la première ne
+recevront plus de mise à jour.
+
 Sans ces secrets, la CI produit une APK signée avec la clé de débogage et l'indique
 explicitement dans le journal.
 
 Signature iOS — secrets supplémentaires, à ajouter seulement le jour où un compte
 Apple Developer existe : `IOS_CERTIFICATE_BASE64`, `IOS_CERTIFICATE_PASSWORD`,
 `IOS_PROVISIONING_PROFILE_BASE64`, `KEYCHAIN_PASSWORD`.
+
+### Publier une version
+
+```bash
+python tools/publier_une_version.py v0.1.3 --essai   # vérifie, ne publie rien
+python tools/publier_une_version.py v0.1.3           # publie
+```
+
+Le script confronte le nom de chaque artefact à la version que le binaire déclare,
+et **refuse de publier** si les deux divergent — le contrôle est avant la
+publication, et il est bloquant. Détail dans `docs/publication.md` §9.
 
 ## Intégration continue
 
@@ -384,4 +407,5 @@ macOS et Linux, `flutter` fonctionne normalement.
 | Réglages, thème clair/sombre, confidentialité | Écrit |
 | Notifications (rappels de repas, résumé du soir) | Écrit, testé |
 | Compte et synchronisation | Schéma serveur prêt, interface à brancher |
-| Publication App Store / Play Store | Non entamée — volontairement |
+| APK et AAB signés, IPA non signée | Produits et vérifiés — release `v0.1.2` |
+| Envoi sur l'App Store / le Play Store | Non entamé — demande un compte Google Play et un compte Apple Developer |

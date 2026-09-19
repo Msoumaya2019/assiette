@@ -14,10 +14,11 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | 167 tests de l'application, tous verts | prêt |
 | 18 tests du serveur, tous verts | prêt |
 | Dépôt public | https://github.com/Msoumaya2019/assiette |
-| Flux `ci.yml` — analyse, 167 tests, 6 contrôles | **vert**, 4 exécutions |
-| Flux Android — APK et AAB | **vert**, artefacts vérifiés |
+| Flux `ci.yml` — analyse, 167 tests, 7 contrôles | **vert** |
+| Flux Android — APK et AAB | **vert**, artefacts signés et vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
-| Déclenchement par étiquette `v*` | **vert** (`v0.1.0`, `v0.1.1`) |
+| Déclenchement par étiquette `v*` | **vert** (`v0.1.0`, `v0.1.1`, `v0.1.2`) |
+| Dernière version publiée | **`v0.1.2`** — APK signé, AAB signé, IPA |
 | Icônes et écran de démarrage (Android et iOS) | prêt |
 | Politique de confidentialité | `docs/confidentialite.md` |
 | Attributions Ciqual et Open Food Facts | `app/assets/legal/ATTRIBUTION.md` |
@@ -29,32 +30,37 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 
 ### Artefacts vérifiés
 
-Produits par `Android — APK et AAB` (7 min 22 s) et `iOS — build et IPA`
-(8 min 4 s), puis **ouverts et contrôlés**, pas seulement lus dans le journal du
-flux :
+Produits par `Android — APK et AAB` et `iOS — build et IPA`, puis **ouverts et
+contrôlés**, pas seulement lus dans le journal du flux :
 
-| Artefact | Taille | Vérification |
+| Version | Artefact | Vérification |
 | --- | --- | --- |
-| `app-release-…-debug-key.apk` | 82 227 529 octets | 531 entrées, intégrité saine, 18 bibliothèques natives, signature vérifiée (schéma v2, 1 signataire) |
-| `app-release-…-debug-key.aab` | 70 368 198 octets | 549 entrées, intégrité saine, 18 bibliothèques natives |
-| `Assiette-…-non-signee.ipa` | 15 841 456 octets | 133 entrées, intégrité saine, `Payload/Runner.app` complet |
+| `v0.1.2` | `app-release-0.1.2+6-signe.apk` | déclare `0.1.2` / `6`, signé avec la clé de release (`CN=Assiette`, empreinte `22518e30…`) |
+| `v0.1.2` | `app-release-0.1.2+6-signe.aab` | 549 entrées, signé (`META-INF/ASSIETTE.RSA`) |
+| `v0.1.2` | `Assiette-0.1.2+5-non-signee.ipa` | déclare `0.1.2` / `5`, `MinimumOSVersion` 15.5 |
+| `v0.1.1` | `app-release-…-debug-key.apk` | 82 227 529 octets, 531 entrées, 18 bibliothèques natives, signé de la clé de débogage |
+| `v0.1.1` | `Assiette-v0.1.1-non-signee.ipa` | 133 entrées, `io.github.axox934.assiette` — **se déclarait `0.1.0`** |
 
-Le contenu de l'IPA confirme la cible iOS relevée plus haut : `MinimumOSVersion`
-vaut bien **15.5**, et l'identifiant `io.github.axox934.assiette` est identique
-côté Android et côté iOS. Les deux textes de justification d'accès (appareil
-photo, photothèque) sont présents.
+La ligne `v0.1.1` de l'IPA est le défaut qui a motivé tout le travail de version :
+le fichier était en ligne, téléchargeable, et faux sur lui-même.
 
-L'APK et l'AAB portent `debug-key` dans leur nom parce qu'aucune clé de
-signature release n'est encore configurée : ils sont installables, mais pas
-publiables en l'état sur le Play Store.
+Depuis `v0.1.2`, les artefacts Android sont signés avec la vraie clé : ils sont
+publiables sur le Play Store. Les précédents portaient `debug-key`.
+
+Le contenu de l'IPA confirme la cible iOS : `MinimumOSVersion` vaut **15.5**, et
+l'identifiant `io.github.axox934.assiette` est identique côté Android et côté iOS.
+Les deux textes de justification d'accès (appareil photo, photothèque) sont présents.
 
 **Ce que l'ouverture de l'IPA a appris, et qui a été corrigé depuis.** Le fichier
 s'appelait `Assiette-v0.1.1-non-signee.ipa` et son `Info.plist` déclarait
 `CFBundleShortVersionString` = `0.1.0`, `CFBundleVersion` = `1`. Le nom venait du
 tag Git, la version venait de `app/pubspec.yaml` (`0.1.0+1`). Rien ne permettait
-donc de savoir ce qui avait été installé. Les artefacts de `v0.1.1` restent en
-ligne tels quels — on ne réécrit pas une publication —, mais les suivants
-déclareront la version de leur tag, et leur nom portera la même valeur. Voir §8.
+donc de savoir ce qui avait été installé.
+
+Les artefacts de `v0.1.1` restent en ligne tels quels — on ne réécrit pas une
+publication, et une version publiée doit rester celle que des gens ont pu
+télécharger. Les suivants déclarent la version de leur tag, et leur nom porte la
+même valeur. Voir §8 pour le mécanisme, et §9 pour la publication.
 
 ---
 
@@ -503,3 +509,50 @@ python tools/lancer_tests_flutter.py test/data/mon_test.dart
 et pourquoi (voir §7.4). Le script les applique sans passer par `env`, qui avale
 la sortie dans ce bac à sable.
 
+
+---
+
+## 9. Publier une version
+
+Une version se publie en trois gestes, et le troisième est celui qui compte.
+
+### 1. Monter la version du projet
+
+Dans `app/pubspec.yaml`, la ligne `version:`. Elle doit dire **la même chose que le
+tag** qu'on s'apprête à poser. Le tag reste la source de vérité, mais un pubspec
+qui le contredit fait diverger les compilations de branche et celles de tag, sans
+que rien ne le signale.
+
+### 2. Poser le tag, et le pousser
+
+```bash
+git tag -a v0.1.3 -m "Assiette v0.1.3"
+git push origin v0.1.3
+```
+
+Le `push` du tag déclenche les trois flux — `ci.yml`, `android.yml`, `ios.yml` —
+et c'est tout. Le numéro de compilation est `GITHUB_RUN_NUMBER` : Android exige un
+`versionCode` strictement croissant à chaque envoi sur le Play Store, et reprendre
+le numéro du pubspec ferait refuser le deuxième envoi d'un même tag.
+
+### 3. Publier, après vérification
+
+```bash
+python tools/publier_une_version.py v0.1.3 --essai   # vérifie, ne publie rien
+python tools/publier_une_version.py v0.1.3           # publie
+```
+
+Le script télécharge les artefacts du tag, **confronte le nom de chacun à la
+version que le binaire déclare**, et refuse de publier si les deux divergent. La
+vérification est avant la publication, et elle est bloquante : un binaire faux qui
+n'est pas publié ne coûte rien, un binaire faux qui l'est coûte la confiance de la
+personne qui l'installe.
+
+Il rédige aussi les notes de version : ce qui a changé depuis le tag précédent, et
+**ce qui a été contrôlé** dans chaque fichier. Un AAB n'est pas vérifiable de la
+même façon — son manifeste est en protobuf, pas en binaire Android classique — et
+le script l'écrit noir sur blanc plutôt que de laisser croire à un contrôle qui
+n'a pas eu lieu.
+
+Les fichiers restent dans `artefacts-a-publier/`, ignoré par git : un binaire
+committé est un binaire que personne ne remplace.

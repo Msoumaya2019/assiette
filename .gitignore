@@ -79,3 +79,8 @@ __pycache__/
 *.pyc
 coverage/
 htmlcov/
+
+# Artefacts telecharges par `tools/publier_une_version.py` avant publication.
+# Ils font plusieurs dizaines de Mo et ne doivent jamais entrer dans le depot :
+# un binaire committe est un binaire que personne ne remplace.
+artefacts-a-publier/
