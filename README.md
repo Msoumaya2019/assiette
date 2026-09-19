@@ -220,16 +220,48 @@ Apple Developer existe : `IOS_CERTIFICATE_BASE64`, `IOS_CERTIFICATE_PASSWORD`,
 
 ## Intégration continue
 
-Avant chaque compilation, la CI exécute trois contrôles :
+Avant chaque compilation, la CI exécute six contrôles :
 
 - `tools/check_no_secrets.py` — refuse tout fichier ou motif ressemblant à un secret
   (clés d'API, keystores, `.env`, certificats, jetons).
 - `tools/check_prompt_sync.py` — vérifie que les prompts d'analyse, présents en deux
   copies (Dart pour le mode personnel, TypeScript pour le mode proxy), portent le
   même numéro de version.
-- `tools/check_workflows.py` — valide la structure des flux de travail.
+- `tools/check_fins_de_ligne.py` — vérifie que les fins de ligne réelles
+  correspondent à l'attribut `eol` déclaré dans `.gitattributes`.
+- `tools/check_ios.py` — vérifie la cohérence du projet iOS (identifiant, cible
+  minimale, permissions, icônes), que Windows ne peut pas compiler.
+- `tools/check_adresses_du_depot.py` — vérifie que les adresses sortant dans le
+  binaire désignent bien ce dépôt.
+- `tools/verifier_version_build.py` — éprouve la logique qui décide de la version
+  publiée, laquelle ne tourne sinon que sur un tag.
 
-Puis `dart format --set-exit-if-changed`, `flutter analyze` et `flutter test`.
+Puis `dart format --set-exit-if-changed`, `flutter analyze` et `flutter test`, et,
+dans un travail séparé, `tools/check_workflows.py` — qui valide la structure des
+flux de travail, la présence des scripts qu'ils appellent, et le fait que
+`android.yml` et `ios.yml` tirent la version du même endroit.
+
+### La version publiée vient du tag, et d'un seul endroit
+
+Le nom d'un artefact venait du tag Git, la version inscrite dans le binaire venait
+de `app/pubspec.yaml`. Le tag `v0.1.1` a donc produit une IPA nommée `v0.1.1` dont
+l'`Info.plist` déclarait `0.1.0` : deux sources de vérité, et rien pour dire
+laquelle croyait la personne qui installe le fichier.
+
+`tools/version_build.sh` est désormais le point unique qui décide, pour les deux
+plateformes. Sur un tag, la version est celle du tag ; sur une branche, celle du
+pubspec ; `workflow_dispatch` accepte une version saisie à la main. Le nom du
+fichier porte exactement ce que le binaire déclare.
+
+Une valeur qui ne serait pas des chiffres séparés par des points est refusée. Ce
+n'est pas une coquetterie : pour iOS, Flutter retire **en silence** tout caractère
+hors `[0-9.]` avant d'écrire `CFBundleShortVersionString`, si bien qu'un tag
+`release-2.0` donnerait `2.0.0` sur iOS et `release-2.0` sur Android. Un refus
+nommé vaut mieux qu'une divergence muette.
+
+```bash
+python tools/verifier_version_build.py    # 11 cas, hors GitHub Actions
+```
 
 ## Sources de données et licences
 
@@ -273,6 +305,23 @@ boucle locale du mandataire ; le pourquoi est documenté dans
 `docs/publication.md` §7.4. La CI, elle, exécute `flutter test` directement sur
 `ubuntu-latest`.
 
+Les contrôles et les scripts qui décident de la version publiée sont éprouvés hors
+CI, sur cette machine :
+
+```bash
+python tools/verifier_version_build.py    # 11 cas sur tools/version_build.sh
+python tools/lancer_bancs.py              # les sept bancs de falsification
+```
+
+Un banc de falsification retire un garde-fou à la fois et vérifie que le contrôle
+tombe. Un contrôle qui n'a jamais échoué ne prouve rien : il peut regarder au
+mauvais endroit et compter zéro défaut tout aussi tranquillement qu'un contrôle
+juste. `docs/publication.md` §8 liste les bancs.
+
+`lancer_bancs.py` lit chaque code de sortie **directement**, sans tube : lire
+`$?` après un `| tail` rend le code du tube, pas celui de la commande, ce qui a
+déjà fait annoncer trois bancs verts alors que l'un d'eux avait planté.
+
 Couverture actuelle :
 
 - calculs nutritionnels, changement de portion, absence de dérive d'arrondi,
@@ -282,6 +331,10 @@ Couverture actuelle :
 - **requête réellement transmise au fournisseur** : champ `thinking`, température,
   modèle, format JSON, image en data URL, en-tête d'autorisation, et absence de la
   clé dans le corps ;
+- **mode proxy** : adresse visée, image transmise en base64 avec son type, seconde
+  image, indices facultatifs envoyés seulement s'ils existent, jeton de session, et
+  l'absence de toute clé dans le corps ; traduction des refus du serveur (401, 413,
+  415, 429 avec délai, 500) ;
 - lecture des réponses Open Food Facts (deux formats de schéma, cache, erreurs 404 /
   429 / 503) ;
 - recherche Ciqual (accents, ligatures, classement, appariement approximatif).
@@ -316,6 +369,6 @@ macOS et Linux, `flutter` fonctionne normalement.
 | Recherche, code-barres, étiquettes | Écrit |
 | Historique, favoris, repas types, statistiques, objectifs | Écrit |
 | Réglages, thème clair/sombre, confidentialité | Écrit |
-| Notifications | À implémenter |
+| Notifications (rappels de repas, résumé du soir) | Écrit, testé |
 | Compte et synchronisation | Schéma serveur prêt, interface à brancher |
 | Publication App Store / Play Store | Non entamée — volontairement |

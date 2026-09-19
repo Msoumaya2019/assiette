@@ -11,10 +11,10 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Élément | État |
 | --- | --- |
 | Code source complet, analysé sans avertissement | prêt |
-| 151 tests de l'application, tous verts | prêt |
+| 167 tests de l'application, tous verts | prêt |
 | 18 tests du serveur, tous verts | prêt |
 | Dépôt public | https://github.com/Msoumaya2019/assiette |
-| Flux `ci.yml` — analyse, 151 tests, 6 contrôles | **vert**, 4 exécutions |
+| Flux `ci.yml` — analyse, 167 tests, 6 contrôles | **vert**, 4 exécutions |
 | Flux Android — APK et AAB | **vert**, artefacts vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
 | Déclenchement par étiquette `v*` | **vert** (`v0.1.0`, `v0.1.1`) |
@@ -47,6 +47,14 @@ photo, photothèque) sont présents.
 L'APK et l'AAB portent `debug-key` dans leur nom parce qu'aucune clé de
 signature release n'est encore configurée : ils sont installables, mais pas
 publiables en l'état sur le Play Store.
+
+**Ce que l'ouverture de l'IPA a appris, et qui a été corrigé depuis.** Le fichier
+s'appelait `Assiette-v0.1.1-non-signee.ipa` et son `Info.plist` déclarait
+`CFBundleShortVersionString` = `0.1.0`, `CFBundleVersion` = `1`. Le nom venait du
+tag Git, la version venait de `app/pubspec.yaml` (`0.1.0+1`). Rien ne permettait
+donc de savoir ce qui avait été installé. Les artefacts de `v0.1.1` restent en
+ligne tels quels — on ne réécrit pas une publication —, mais les suivants
+déclareront la version de leur tag, et leur nom portera la même valeur. Voir §8.
 
 ---
 
@@ -320,7 +328,8 @@ automatiquement. À reprendre le jour où ces versions cesseront d'être accept�
 
 ## 8. La chaîne de garde
 
-Six contrôles tournent à chaque `push` dans `ci.yml`. Chacun lit une propriété
+Sept contrôles tournent à chaque `push` : six dans `ci.yml` (travail « Analyse et
+tests »), et `check_workflows.py` dans un travail séparé. Chacun lit une propriété
 que **rien d'autre ne lit** : c'est ce qui justifie sa présence, et c'est aussi
 pourquoi aucun ne doit être retiré sans être remplacé.
 
@@ -331,7 +340,38 @@ pourquoi aucun ne doit être retiré sans être remplacé.
 | `tools/check_fins_de_ligne.py` | un blob CRLF dans l'index, ou une copie de travail hors `eol=lf` |
 | `tools/check_ios.py` | 92 vérifications iOS : icônes, storyboard, `Info.plist`, cible, Podfile |
 | `tools/check_adresses_du_depot.py` | une adresse GitHub du code qui désigne un autre dépôt |
-| `tools/check_workflows.py` | YAML invalide, action non épinglée, `permissions` absentes, `run:` qui ne passe pas `bash -n` |
+| `tools/verifier_version_build.py` | une régression dans la logique qui décide de la version publiée |
+| `tools/check_workflows.py` | YAML invalide, action non épinglée, `permissions` absentes, `run:` qui ne passe pas `bash -n`, script du dépôt appelé mais absent, et un flux qui ne tire plus la version du même endroit que l'autre |
+
+### La version publiée, décidée à un seul endroit
+
+Le nom d'un artefact venait du tag Git, la version inscrite dans le binaire venait
+de `app/pubspec.yaml`. Le tag `v0.1.1` a donc produit une IPA nommée `v0.1.1` dont
+l'`Info.plist` déclarait `0.1.0`. Deux sources de vérité, et rien pour dire laquelle
+croyait la personne qui installe le fichier.
+
+`tools/version_build.sh` est le point unique qui décide, pour les deux plateformes :
+le tag fait foi, sinon une version saisie à la main, sinon le pubspec. Il est
+éprouvé hors GitHub, ce qui compte puisqu'il ne s'exécute en vrai que sur un tag —
+donc sur une version qu'on ne peut pas rejouer sans en créer un autre.
+
+```bash
+python tools/verifier_version_build.py           # 11 cas
+python tools/bancs/falsifier_version_build.py    # 6 mutations + 1 témoin négatif
+```
+
+Deux points valent d'être notés.
+
+**Un refus ne vaut que s'il nomme sa cause.** Le contrôle exige le message, pas
+seulement le code de sortie. Sans cela, le cas « pubspec absent » réussissait alors
+que son garde-fou avait disparu du script : un garde-fou situé plus loin attrapait
+le vide laissé derrière, et le cas ne distinguait donc rien.
+
+**Une version qui n'est pas des chiffres séparés par des points est refusée.** Pour
+iOS, Flutter retire *en silence* tout caractère hors `[0-9.]` avant d'écrire
+`CFBundleShortVersionString` (`build_info.dart`, `validatedBuildNameForPlatform`) :
+un tag `release-2.0` donnerait `2.0.0` sur iOS et `release-2.0` sur Android. Un
+refus nommé vaut mieux qu'une divergence muette.
 
 ### Chaque contrôle a été falsifié
 
@@ -346,11 +386,14 @@ python3 tools/bancs/falsifier_ios.py                   # 6 cas
 python3 tools/bancs/falsifier_adresses.py              # 4 cas
 python3 tools/bancs/falsifier_client_deepseek.py       # 2 cas — serveur (Deno)
 python3 tools/bancs/falsifier_client_deepseek_dart.py  # 6 cas — application (Flutter)
+python3 tools/bancs/falsifier_proxy_dart.py            # 6 cas — mode proxy (Flutter)
+python3 tools/bancs/falsifier_version_build.py         # 6 cas — version publiée
 ```
 
 Chaque banc inclut un **témoin négatif** — un `.bat` en CRLF conforme à son
-attribut n'est pas signalé, citer `flutter/flutter` reste permis. Sans lui, rien
-ne prouve que le contrôle **distingue**, plutôt qu'il ne compte.
+attribut n'est pas signalé, citer `flutter/flutter` reste permis, reformuler un
+commentaire ne déclenche rien. Sans lui, rien ne prouve que le contrôle
+**distingue**, plutôt qu'il ne compte.
 
 `tools/bancs/banc.py` est le harnais partagé. Sa méthode `muter()` **lève une
 exception** quand son ancre ne correspond pas : une mutation qui ne mute pas est
@@ -363,6 +406,15 @@ n'ait échoué. Le banc des tests Flutter compte donc les tests réellement
 exécutés et lève `MesureImpossible` si le total attendu n'est pas atteint, au
 lieu d'annoncer un trou de couverture là où il n'y a qu'une mutation fautive.
 Même chose si le rapport JSON ne contient aucun test nommé en échec.
+
+Enfin, **un banc interrompu doit rendre le dépôt intact**. `SIGTERM` ne lève
+aucune exception, et `KeyboardInterrupt` hérite de `BaseException` et non
+d'`Exception` : ni l'un ni l'autre ne traversait un `except Exception`. Mesure :
+un banc tué en pleine mutation a laissé `tools/version_build.sh` **amputé de son
+garde-fou**, et comme le fichier n'était pas encore suivi par git, aucun
+`git checkout` ne pouvait le rendre. Le harnais arme désormais une restauration
+d'urgence : gestionnaire de signal, `atexit`, et capture de `BaseException`
+autour des deux phases à risque.
 
 ### Réparer
 

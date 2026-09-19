@@ -25,12 +25,26 @@ Le harnais travaille **au niveau octet**, avec des ancres ASCII, et prouve la
 restauration par empreinte SHA-256 — jamais par `git diff`, qui normalise les
 fins de ligne et masquerait justement la difference.
 
+Le troisieme piege : etre interrompu
+------------------------------------
+
+Un banc tue par un signal en pleine mutation laissait le fichier mute. Mesure :
+`tools/version_build.sh` s'est retrouve **ampute de son garde-fou**, et comme il
+n'etait pas encore suivi par git, aucun `git checkout` ne pouvait le rendre.
+
+`SIGTERM` ne leve aucune exception par defaut, et `KeyboardInterrupt` herite de
+`BaseException`, pas d'`Exception` : un `except Exception` laisse donc passer les
+deux. Le harnais arme desormais une restauration d'urgence — gestionnaire de
+signal, `atexit`, et capture de `BaseException` autour des deux phases a risque.
+
 Usage : voir `tools/bancs/falsifier_fins_de_ligne.py`.
 """
 
 from __future__ import annotations
 
+import atexit
 import hashlib
+import signal
 import subprocess
 import sys
 import tempfile
@@ -140,6 +154,64 @@ class Banc:
         # sans jamais toucher la copie de travail, qu'un `reset` mixte laisse
         # intacte.
         self.index_a_reinitialiser = False
+        self._armer_restauration_d_urgence()
+
+    # --- restauration d'urgence ------------------------------------------
+
+    def _armer_restauration_d_urgence(self) -> None:
+        """Restaure meme si le processus est interrompu.
+
+        Mesure, et non precaution theorique : un banc tue par un signal en
+        pleine mutation a laisse `tools/version_build.sh` **ampute de son
+        garde-fou**, sans restauration. Le fichier n'etait pas encore suivi par
+        git, donc aucun `git checkout` ne pouvait le rendre : il a fallu le
+        reecrire a la main, en se fiant au souvenir de ce qu'il contenait.
+
+        Les deux voies d'interruption ne sont pas les memes :
+
+          - `SIGTERM` ne leve rien du tout par defaut : le processus meurt, et
+            aucun `except` ne s'execute. Il faut un gestionnaire de signal.
+          - `SIGINT` (Ctrl+C) leve `KeyboardInterrupt`, qui herite de
+            `BaseException` et non d'`Exception` : un `except Exception` le
+            laisse donc passer. `cas()` attrape desormais `BaseException`.
+
+        `atexit` couvre le troisieme cas : une sortie normale non prevue.
+        """
+        atexit.register(self.restaurer_en_silence)
+
+        for numero in (signal.SIGTERM, signal.SIGINT):
+            try:
+                signal.signal(numero, self._sur_signal(numero))
+            except (ValueError, OSError):
+                # Hors du fil principal, ou signal non installable sur la
+                # plateforme. `atexit` reste en place.
+                continue
+
+    def _sur_signal(self, numero: int):
+        """Fabrique le gestionnaire : restaure, puis rend la main au systeme."""
+
+        def gestionnaire(_signature, _cadre) -> None:
+            print(
+                f"\ninterruption ({signal.Signals(numero).name}) — restauration du depot",
+                file=sys.stderr,
+            )
+            self.restaurer_en_silence()
+            # 128 + numero : la convention des shells pour « tue par un signal ».
+            sys.exit(128 + numero)
+
+        return gestionnaire
+
+    def restaurer_en_silence(self) -> None:
+        """Restaure sans jamais lever : utilisable depuis un signal ou `atexit`.
+
+        `restaurer()` peut lever pour signaler un echec de restauration. Depuis
+        un gestionnaire de signal, lever remplacerait l'interruption par une
+        autre panne et masquerait la cause. On rapporte, et on continue.
+        """
+        try:
+            self.restaurer()
+        except BaseException as erreur:  # noqa: BLE001
+            print(f"restauration incomplete : {erreur}", file=sys.stderr)
 
     # --- preparation -----------------------------------------------------
 
@@ -216,6 +288,14 @@ class Banc:
                 "rien. Le depot a ete restaure.",
             )
             raise SystemExit(2)
+        except BaseException as erreur:  # noqa: BLE001
+            # `KeyboardInterrupt` et `SystemExit` heritent de `BaseException`,
+            # pas d'`Exception` : un Ctrl+C en pleine mutation traversait donc
+            # les deux `except` ci-dessus sans restaurer. Le gestionnaire de
+            # signal couvre le cas, mais autant remettre le depot en etat ici
+            # aussi, pendant que le contexte est encore lisible.
+            self.restaurer_en_silence()
+            raise
 
         try:
             resultat = self.executer()
@@ -227,6 +307,11 @@ class Banc:
                 "Corriger la mutation, pas le controle.",
             )
             raise SystemExit(2)
+        except BaseException:
+            # Le fichier est encore mute a cet instant : on le rend avant de
+            # laisser filer l'interruption, quelle qu'elle soit.
+            self.restaurer_en_silence()
+            raise
 
         present = marqueur in resultat.texte
         self.restaurer()

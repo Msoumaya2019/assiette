@@ -72,6 +72,21 @@ jobs:
           test -f ios/Podfile || { echo "Podfile absent : app/ios/Podfile doit etre versionne."; exit 1; }
           cd ios && pod install --repo-update
 
+      # Meme source de verite que `android.yml`, et pour la meme raison : l'IPA
+      # etait nommee d'apres le tag (`v0.1.1`) alors que son `Info.plist`
+      # declarait `0.1.0`, la valeur du pubspec. Deux binaires d'un meme tag
+      # annoncaient donc deux versions differentes. La logique est partagee, et
+      # eprouvee hors GitHub par `python3 tools/verifier_version_build.py`.
+      #
+      # `flutter build ios` et `flutter build ipa` acceptent tous deux ces
+      # options : elles sont declarees par `_BuildIOSSubCommand`, la classe de
+      # base commune aux deux commandes dans le SDK Flutter. Verifie a la
+      # source, pas suppose — une option inconnue ferait echouer la compilation
+      # apres l'installation des greffons.
+      - name: Determiner la version
+        id: version
+        run: bash tools/version_build.sh app/pubspec.yaml
+
       # ---------------------------------------------------------------------
       # Mode non signe (par defaut)
       # Produit une IPA non signee, signable ensuite par l'utilisateur avec
@@ -82,6 +97,8 @@ jobs:
         working-directory: app
         run: |
           flutter build ios --release --no-codesign \
+            --build-name=${{ steps.version.outputs.name }} \
+            --build-number=${{ steps.version.outputs.number }} \
             --dart-define=APP_ENV=production \
             --dart-define=SUPABASE_URL=${{ vars.SUPABASE_URL }} \
             --dart-define=SUPABASE_ANON_KEY=${{ vars.SUPABASE_ANON_KEY }} \
@@ -90,6 +107,8 @@ jobs:
       - name: Empaqueter l'IPA non signee
         if: ${{ github.event.inputs.mode != 'signe' }}
         working-directory: app
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
           APP_PATH="build/ios/iphoneos/Runner.app"
@@ -97,7 +116,7 @@ jobs:
           rm -rf ../artifacts Payload
           mkdir -p ../artifacts Payload
           cp -R "$APP_PATH" Payload/
-          zip -qry "../artifacts/Assiette-${GITHUB_REF_NAME//\//-}-non-signee.ipa" Payload
+          zip -qry "../artifacts/Assiette-${VERSION}-non-signee.ipa" Payload
           rm -rf Payload
           ls -lh ../artifacts
 
@@ -154,6 +173,8 @@ jobs:
           </plist>
           EOF
           flutter build ipa --release \
+            --build-name=${{ steps.version.outputs.name }} \
+            --build-number=${{ steps.version.outputs.number }} \
             --export-options-plist=ios/ExportOptions.plist \
             --dart-define=APP_ENV=production \
             --dart-define=SUPABASE_URL=${{ vars.SUPABASE_URL }} \

@@ -130,10 +130,31 @@ jobs:
           EOF
           echo "signed=true" >> "$GITHUB_OUTPUT"
 
+      # Le nom de l'artefact venait du tag, la version inscrite dans le binaire
+      # venait du pubspec : le tag v0.1.1 a produit un binaire qui s'annoncait
+      # 0.1.0, et rien ne permettait de savoir ce qui avait ete installe. Le tag
+      # fait desormais foi, et sur une branche on reprend la version du projet.
+      #
+      # La logique vit dans `tools/version_build.sh`, partagee avec `ios.yml` :
+      # recopiee dans les deux flux, elle divergerait, et la divergence ne se
+      # verrait qu'a la publication — deux binaires du meme tag annoncant deux
+      # versions. Elle est eprouvee hors GitHub par
+      # `python3 tools/verifier_version_build.py`.
+      #
+      # `BUILD_NAME_IMPOSE` branche l'option saisie a la main : elle etait
+      # declaree en entree du flux, decrite a l'utilisateur, et jamais lue.
+      - name: Determiner la version
+        id: version
+        env:
+          BUILD_NAME_IMPOSE: ${{ inputs.build_name }}
+        run: bash tools/version_build.sh app/pubspec.yaml
+
       - name: Compiler l'APK release
         working-directory: app
         run: |
           flutter build apk --release \
+            --build-name=${{ steps.version.outputs.name }} \
+            --build-number=${{ steps.version.outputs.number }} \
             --dart-define=APP_ENV=production \
             --dart-define=SUPABASE_URL=${{ vars.SUPABASE_URL }} \
             --dart-define=SUPABASE_ANON_KEY=${{ vars.SUPABASE_ANON_KEY }} \
@@ -143,17 +164,25 @@ jobs:
         working-directory: app
         run: |
           flutter build appbundle --release \
+            --build-name=${{ steps.version.outputs.name }} \
+            --build-number=${{ steps.version.outputs.number }} \
             --dart-define=APP_ENV=production \
             --dart-define=SUPABASE_URL=${{ vars.SUPABASE_URL }} \
             --dart-define=SUPABASE_ANON_KEY=${{ vars.SUPABASE_ANON_KEY }} \
             --dart-define=ANALYSIS_ENDPOINT=${{ vars.ANALYSIS_ENDPOINT }}
 
+      # Le nom du fichier porte desormais exactement ce que le binaire declare
+      # (`0.1.1+42`), et non plus le nom de la ref Git. Sur un declenchement
+      # manuel depuis `main`, l'ancien nom donnait `app-release-main-debug-key.apk` :
+      # un nom de branche la ou on attend une version, donc un fichier impossible
+      # a comparer a ce qu'il contient.
       - name: Renommer les artefacts
         working-directory: app
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
           SUFFIX="${{ steps.signature.outputs.signed == 'true' && 'signe' || 'debug-key' }}"
-          VERSION="${GITHUB_REF_NAME//\//-}"
           mkdir -p ../artifacts
           cp build/app/outputs/flutter-apk/app-release.apk "../artifacts/app-release-${VERSION}-${SUFFIX}.apk"
           cp build/app/outputs/bundle/release/app-release.aab "../artifacts/app-release-${VERSION}-${SUFFIX}.aab"

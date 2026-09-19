@@ -17,7 +17,9 @@ Ce qu'il verifie :
   6. `permissions` est declare, en racine ou dans le job ;
   7. la liste des flux attendus est close, dans les DEUX sens : un flux attendu
      absent echoue, un flux present mais non declare echoue aussi ;
-  8. chaque script `run:` est accepte par `bash -n`, analyse sans execution.
+  8. chaque script `run:` est accepte par `bash -n`, analyse sans execution ;
+  9. chaque script du depot appele par un flux existe reellement ;
+ 10. `android.yml` et `ios.yml` tirent la version du MEME endroit.
 
 Ce qu'il ne voit PAS : `bash -n` n'evalue aucune expansion. Une faute de frappe
 dans `${CHEMIN}` ou `${{ secrets.X }}` n'est signalee ni ici, ni par un
@@ -29,6 +31,17 @@ Pourquoi la liste close du point 7 : un controle qui decouvre ses sujets par
 le controle annoncerait « tous les flux sont valides ». Or rien d'autre dans la
 chaine ne lit `.github/workflows` : c'est ici, et seulement ici, que la
 disparition se verrait.
+
+Pourquoi le point 9 : `bash -n` analyse la syntaxe d'un script, pas la presence
+du fichier qu'il appelle. Un `bash tools/version_build.sh` vers un script
+renomme passe `bash -n` sans broncher, puis echoue dans le flux — apres
+l'installation du SDK, sur un message qui ne nomme pas la cause.
+
+Pourquoi le point 10 : le nom de l'artefact venait du tag et la version inscrite
+dans le binaire venait du pubspec, si bien que le tag `v0.1.1` a produit des
+binaires qui s'annoncaient `0.1.0`. La logique vit maintenant dans un script
+partage, et ce point verifie que les deux flux l'appellent bien : recopiee, elle
+divergerait, et la divergence ne se verrait qu'a la publication.
 
 Usage : python3 tools/check_workflows.py
 """
@@ -48,6 +61,16 @@ WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 # Liste close. Ajouter un flux est un geste delibere : il faut le declarer ici.
 FLUX_ATTENDUS = ["android.yml", "ci.yml", "ios.yml"]
 
+# Un appel a un script du depot, dans une etape `run:`. Le motif exige un
+# interpreteur devant le chemin : sans cela il accrocherait aussi les chemins
+# cites dans un commentaire ou un `test -f`.
+MOTIF_SCRIPT_DEPOT = re.compile(r"\b(?:bash|sh|python3?)\s+(tools/[A-Za-z0-9_./-]+)")
+
+# Le point unique qui decide de la version des deux plateformes, et les flux qui
+# doivent l'appeler.
+SCRIPT_VERSION = "tools/version_build.sh"
+FLUX_AVEC_VERSION = ["android.yml", "ios.yml"]
+
 # Marqueurs ASCII : un banc s'y accroche sans dependre de l'encodage ni de la
 # reformulation d'une phrase.
 MARQUEURS = {
@@ -63,6 +86,8 @@ MARQUEURS = {
     "script": "[script-invalide]",
     "flux-absent": "[flux-absent]",
     "flux-non-declare": "[flux-non-declare]",
+    "script-depot-absent": "[script-depot-absent]",
+    "version-non-partagee": "[version-non-partagee]",
 }
 
 try:
@@ -246,6 +271,18 @@ def verifier_flux(
                         f"{nom} : job '{nom_job}', {libelle} refuse par bash -n — {erreur}",
                     )
 
+                # `bash -n` valide la syntaxe, pas la presence du fichier
+                # appele. Un script renomme passerait ici, puis echouerait dans
+                # le flux, apres l'installation du SDK.
+                for reference in MOTIF_SCRIPT_DEPOT.findall(script):
+                    rapport.verifie()
+                    if not (ROOT / reference).is_file():
+                        rapport.defaut(
+                            "script-depot-absent",
+                            f"{nom} : {libelle} appelle '{reference}', "
+                            "qui n'existe pas dans le depot",
+                        )
+
 
 def main() -> int:
     if not WORKFLOWS_DIR.is_dir():
@@ -286,6 +323,15 @@ def main() -> int:
     if bash is None:
         print("bash introuvable : les scripts 'run' ne seront pas analyses.", file=sys.stderr)
 
+    # Le script de version doit exister avant que quiconque l'appelle : sans ce
+    # controle, une suppression se lirait comme « aucun flux ne l'appelle »,
+    # donc comme un accord rompu, et non comme un fichier manquant.
+    rapport.verifie()
+    if not (ROOT / SCRIPT_VERSION).is_file():
+        rapport.defaut(
+            "script-depot-absent", f"{SCRIPT_VERSION} est absent du depot"
+        )
+
     for nom in presents:
         chemin = WORKFLOWS_DIR / nom
         rapport.verifie()
@@ -296,6 +342,26 @@ def main() -> int:
             rapport.defaut("yaml", f"{nom} : YAML invalide — {erreur}")
             continue
         verifier_flux(chemin, document, rapport, bash)
+
+    # --- accord entre les deux flux de publication -------------------------
+    #
+    # Le tag etait la source du nom, le pubspec celle de la version inscrite :
+    # deux binaires d'un meme tag annoncaient deux versions. Les deux flux
+    # doivent desormais passer par le meme script. L'un des deux qui
+    # retournerait a une logique locale rouvrirait exactement ce defaut, et rien
+    # d'autre ne le verrait — le flux resterait vert.
+    for nom in FLUX_AVEC_VERSION:
+        rapport.verifie()
+        chemin = WORKFLOWS_DIR / nom
+        if not chemin.is_file():
+            # Deja signale par la liste close du point 7.
+            continue
+        if SCRIPT_VERSION not in chemin.read_text(encoding="utf-8"):
+            rapport.defaut(
+                "version-non-partagee",
+                f"{nom} n'appelle pas {SCRIPT_VERSION} : sa version pourrait "
+                "diverger de celle de l'autre plateforme pour un meme tag",
+            )
 
     if rapport.defauts:
         print("Workflows invalides :", file=sys.stderr)

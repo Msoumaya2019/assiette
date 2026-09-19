@@ -58,6 +58,14 @@ jobs:
       - name: Verifier les adresses du depot
         run: python3 tools/check_adresses_du_depot.py
 
+      # `tools/version_build.sh` decide de la version inscrite dans l'APK, l'AAB
+      # et l'IPA. Il ne s'execute en vrai que dans les flux de publication, sur un
+      # tag — donc sur une version qu'on ne peut pas rejouer sans en creer un
+      # autre. Une regression de sa logique n'apparaitrait qu'a ce moment-la. Ici,
+      # elle tombe a chaque push, en quelques secondes.
+      - name: Verifier la logique de version publiee
+        run: python3 tools/verifier_version_build.py
+
       - name: Installer les dependances
         working-directory: app
         run: flutter pub get
