@@ -22,7 +22,7 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Politique de confidentialité | `docs/confidentialite.md` |
 | Attributions Ciqual et Open Food Facts | `app/assets/legal/ATTRIBUTION.md` |
 | Clés d'API absentes du binaire (appel via serveur) | prêt |
-| Signature release Android (clé d'envoi) | **à configurer** |
+| Signature release Android (clé d'envoi) | **faite** — clé créée, 4 secrets déposés, sauvegarde à faire |
 | Compte Google Play, compte Apple Developer | **à créer** |
 | Projet Supabase (mode serveur) | **à créer** |
 | Clé du fournisseur d'analyse (DeepSeek) | **fournie**, à placer |
@@ -210,6 +210,61 @@ conservées. C'est exactement ce que décrit la politique de confidentialité.
 Sans ces secrets, les flux produisent tout de même un **APK signé avec la clé de
 débogage** et un **IPA non signé** — utilisable pour tester, pas pour publier.
 
+### Les quatre secrets Android sont en place
+
+La clé de signature a été créée, et les quatre secrets déposés. Elle vit **hors du
+dépôt**, dans `%USERPROFILE%\assiette-signature`, et rien de ce qui s'y trouve n'a
+jamais traversé une conversation.
+
+| Fichier | Contenu |
+| --- | --- |
+| `assiette-release.jks` | la clé |
+| `assiette-release.jks.base64` | la même, encodée, pour GitHub |
+| `mot-de-passe.txt` | le mot de passe, commun au magasin et à la clé |
+| `empreinte-sha256.txt` | l'empreinte SHA-256, à comparer avec ce que Play affiche |
+| `LIRE-MOI.txt` | ce qu'il faut faire de ces fichiers |
+
+```bash
+python3 tools/creer_cle_signature.py       # rejoue les fichiers dérivés, ne recrée pas la clé
+python3 tools/publier_cle_signature.py     # dépose les quatre secrets
+```
+
+Trois choix qui méritent d'être notés.
+
+**Le mot de passe n'apparaît nulle part.** Il est tiré au hasard — 40 caractères,
+environ 238 bits — écrit dans un fichier, et `keytool` le lit depuis ce fichier
+(`-storepass:file`). La ligne de commande d'un processus est lisible par tout
+autre processus de la machine : un mot de passe qu'on y passe est un mot de passe
+rendu public. Le script ne l'affiche jamais, et `publier_cle_signature.py` envoie
+les valeurs à GitHub par l'entrée standard, sans passer par `--body`.
+
+**Le mot de passe du magasin et celui de la clé sont le même.** Ce n'est pas de la
+paresse : le format PKCS#12, que `keytool` produit par défaut depuis Java 9,
+n'accepte pas deux mots de passe distincts et **ignore silencieusement**
+`-keypass`. En tenir deux laisserait croire à une séparation qui n'existe pas.
+
+**La validité est de 10 000 jours** (jusqu'en 2054). Le Play Store exige une clé
+valide au moins jusqu'au 22 octobre 2033 ; viser cette date de justesse obligerait
+à demander une réinitialisation, qui n'est pas garantie d'aboutir.
+
+Le dossier de signature est **hors du dépôt**, et `check_no_secrets.py` refuse de
+toute façon les suffixes `.jks`, `.keystore`, `.p12` : une clé qui atterrirait dans
+le dépôt public serait détectée avant d'être poussée.
+
+Empreinte SHA-256 de la clé, à comparer le jour où Play affichera la sienne :
+
+```
+22:51:8E:30:0D:F1:23:80:6F:87:BA:09:86:05:BD:C1:
+2E:4E:55:D5:AB:1F:86:CD:A8:58:6B:8F:E1:CF:B1:23
+```
+
+**À faire par toi :** copier `%USERPROFILE%\assiette-signature` sur un support que
+tu gardes — clé USB, disque externe, ou gestionnaire de mots de passe. Une clé
+perdue ne se remplace pas : le Play Store identifie une application par son nom de
+paquet **et** sa clé, donc une clé perdue oblige à publier une nouvelle
+application, et les personnes qui ont installé la première ne recevront plus de
+mise à jour.
+
 ### Variables (onglet Variables)
 
 | Variable | Rôle |
@@ -359,6 +414,20 @@ donc sur une version qu'on ne peut pas rejouer sans en créer un autre.
 python tools/verifier_version_build.py           # 11 cas
 python tools/bancs/falsifier_version_build.py    # 6 mutations + 1 témoin négatif
 ```
+
+Et, sur un binaire réellement produit, le seul contrôle qui lit la valeur
+**inscrite** — tous les autres vérifient la valeur passée à la compilation :
+
+```bash
+python tools/verifier_version_binaire.py app-release-0.1.0+1-debug-key.apk
+python tools/verifier_version_binaire.py Assiette-0.1.0+1-non-signee.ipa
+```
+
+Il lit `versionName`/`versionCode` dans l'APK (`aapt2 dump badging`) et
+`CFBundleShortVersionString`/`CFBundleVersion` dans l'`Info.plist` de l'IPA, puis
+refuse un fichier dont le nom annonce autre chose. Falsifié sur le vrai fichier
+défectueux : confronté à `Assiette-v0.1.1-non-signee.ipa`, qui déclare `0.1.0`, il
+répond `NOM ET CONTENU DIVERGENT` et sort en erreur.
 
 Deux points valent d'être notés.
 

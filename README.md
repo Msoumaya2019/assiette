@@ -322,6 +322,19 @@ juste. `docs/publication.md` §8 liste les bancs.
 `$?` après un `| tail` rend le code du tube, pas celui de la commande, ce qui a
 déjà fait annoncer trois bancs verts alors que l'un d'eux avait planté.
 
+Après avoir téléchargé un APK ou un IPA, son nom et son contenu se vérifient :
+
+```bash
+python tools/verifier_version_binaire.py app-release-0.1.0+1-debug-key.apk
+python tools/verifier_version_binaire.py Assiette-0.1.0+1-non-signee.ipa
+```
+
+Ce contrôle lit la version inscrite dans le binaire — `versionName`/`versionCode`
+pour Android, `CFBundleShortVersionString`/`CFBundleVersion` pour iOS — et refuse
+un fichier dont le nom annonce autre chose. C'est le seul contrôle qui voie la
+valeur **inscrite** : tous les autres vérifient la valeur **passée** à la
+compilation.
+
 Couverture actuelle :
 
 - calculs nutritionnels, changement de portion, absence de dérive d'arrondi,
