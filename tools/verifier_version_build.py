@@ -21,6 +21,12 @@ Ce qu'il verifie, et pourquoi chacun de ces cas
                               plus loin avec une erreur qui ne nomme pas la cause)
   8. tag non numerique     -> refus franc (`release-2.0`, `1.2.3-beta`, `../x`)
 
+Le cas 2 ne fige pas la valeur : il l'attend **telle qu'elle est ecrite** dans
+`app/pubspec.yaml`. La figer obligerait a modifier ce controle a chaque montee de
+version, et un controle qu'on edite a chaque fois finit par etre edite sans
+attention. Ce qu'il mesure est ce qui compte : que le script lise le pubspec, et
+pas qu'il rende une constante.
+
 Le cas 8 merite un mot. Pour iOS, Flutter retire **en silence** tout caractere
 hors `[0-9.]` avant d'ecrire `CFBundleShortVersionString` (`build_info.dart`,
 `validatedBuildNameForPlatform`). Un tag `release-2.0` donnerait donc `2.0.0`
@@ -35,7 +41,8 @@ qu'un garde-fou situe plus loin attrapait le vide laisse derriere.
 
 Ce que ce controle ne peut PAS voir : ce que Flutter fait de `--build-name`
 une fois recu. Il verifie la valeur **passee**, pas la valeur **inscrite**. La
-seule preuve de la seconde est d'ouvrir un binaire livre.
+seule preuve de la seconde est d'ouvrir un binaire livre —
+`tools/verifier_version_binaire.py` le fait, sur un APK ou un IPA produit.
 
 Usage : python3 tools/verifier_version_build.py
 """
@@ -43,6 +50,7 @@ Usage : python3 tools/verifier_version_build.py
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -161,12 +169,37 @@ def cas(
     return True
 
 
+def version_du_pubspec() -> tuple[str, str]:
+    """Lit la version declaree dans `app/pubspec.yaml`.
+
+    Le cas « branche » ne fige pas la valeur : il l'attend **telle qu'elle est
+    ecrite** dans le pubspec. Figer `0.1.0` obligerait a modifier ce controle a
+    chaque montee de version — et un controle qu'on edite a chaque fois finit par
+    etre edite sans attention, puis a ne plus rien verifier.
+
+    Ce que le cas mesure alors est ce qui compte vraiment : que le script lise le
+    pubspec correctement, et pas qu'il rende une constante.
+    """
+    contenu = (RACINE / "app" / "pubspec.yaml").read_text(encoding="utf-8")
+    ligne = re.search(r"^version:\s*([0-9][0-9.]*)\+([0-9][0-9]*)\s*$", contenu, re.MULTILINE)
+    if ligne is None:
+        raise Echec("ligne `version:` illisible dans app/pubspec.yaml")
+    return ligne.group(1), ligne.group(2)
+
+
 def main() -> int:
     if not SCRIPT.is_file():
         print(f"introuvable : {SCRIPT}", file=sys.stderr)
         return 1
 
-    print(f"Controle de {SCRIPT.name} sur ses cas nominaux et ses cas limites.\n")
+    try:
+        nom_pubspec, numero_pubspec = version_du_pubspec()
+    except Echec as probleme:
+        print(probleme, file=sys.stderr)
+        return 1
+
+    print(f"Controle de {SCRIPT.name} sur ses cas nominaux et ses cas limites.")
+    print(f"Version lue dans app/pubspec.yaml : {nom_pubspec}+{numero_pubspec}\n")
 
     resultats = [
         cas(
@@ -177,7 +210,11 @@ def main() -> int:
         cas(
             "branche : version du pubspec",
             {"GITHUB_REF_TYPE": "branch", "GITHUB_REF_NAME": "main", "GITHUB_RUN_NUMBER": "7"},
-            {"name": "0.1.0", "number": "1", "version": "0.1.0+1"},
+            {
+                "name": nom_pubspec,
+                "number": numero_pubspec,
+                "version": f"{nom_pubspec}+{numero_pubspec}",
+            },
         ),
         cas(
             "version imposee a la main",
