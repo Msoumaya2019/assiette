@@ -19,7 +19,9 @@ Ce qu'il verifie :
      absent echoue, un flux present mais non declare echoue aussi ;
   8. chaque script `run:` est accepte par `bash -n`, analyse sans execution ;
   9. chaque script du depot appele par un flux existe reellement ;
- 10. `android.yml` et `ios.yml` tirent la version du MEME endroit.
+ 10. `android.yml` et `ios.yml` tirent la version du MEME endroit ;
+ 11. toute commande `flutter build` qui compile un `APP_ENV` recoit aussi un
+     `APP_VERSION`, et cette valeur vient de `steps.version.outputs.version`.
 
 Ce qu'il ne voit PAS : `bash -n` n'evalue aucune expansion. Une faute de frappe
 dans `${CHEMIN}` ou `${{ secrets.X }}` n'est signalee ni ici, ni par un
@@ -42,6 +44,16 @@ dans le binaire venait du pubspec, si bien que le tag `v0.1.1` a produit des
 binaires qui s'annoncaient `0.1.0`. La logique vit maintenant dans un script
 partage, et ce point verifie que les deux flux l'appellent bien : recopiee, elle
 divergerait, et la divergence ne se verrait qu'a la publication.
+
+Pourquoi le point 11 : le point 10 garantit que le binaire porte la bonne
+version ; il ne dit rien de ce que l'application **affiche**. L'ecran des
+reglages annoncait `0.1.0` ecrit en dur alors que le binaire etait `0.1.2` — le
+seul endroit ou l'utilisateur peut lire la version de ce qu'il a installe
+mentait. Le `--dart-define` relie les deux, mais rien n'oblige une commande de
+compilation a le passer : la suivante pourrait l'oublier et l'ecran se
+remettrait a mentir sans qu'aucun flux ne rougisse. Ce point rend l'oubli
+impossible, et refuse en plus une valeur recopiee en dur — recopiee, elle
+finirait par diverger, ce qui est precisement l'histoire de ce defaut.
 
 Usage : python3 tools/check_workflows.py
 """
@@ -71,6 +83,20 @@ MOTIF_SCRIPT_DEPOT = re.compile(r"\b(?:bash|sh|python3?)\s+(tools/[A-Za-z0-9_./-
 SCRIPT_VERSION = "tools/version_build.sh"
 FLUX_AVEC_VERSION = ["android.yml", "ios.yml"]
 
+# La version telle que l'application l'affiche, et la seule source acceptee.
+# Une valeur litterale (`APP_VERSION=0.1.2`) est refusee : elle ne serait reliee
+# a rien, donc elle mentirait au premier oubli de mise a jour.
+#
+# Le motif accepte une expression GitHub **entiere** avant de se rabattre sur
+# une suite sans espace : `${{ steps.version.outputs.version }}` contient une
+# espace, si bien qu'un `\S+` seul n'en capturait que `${{`. Mesure faite : le
+# controle refusait alors les quatre commandes pourtant correctes — un controle
+# qui crie a tort finit par etre contourne, pas ecoute.
+MOTIF_DEFINE_VERSION = re.compile(
+    r"--dart-define=APP_VERSION=(?P<valeur>\$\{\{[^}]*\}\}|\S+)"
+)
+VALEUR_VERSION_ATTENDUE = "${{ steps.version.outputs.version }}"
+
 # Marqueurs ASCII : un banc s'y accroche sans dependre de l'encodage ni de la
 # reformulation d'une phrase.
 MARQUEURS = {
@@ -88,6 +114,7 @@ MARQUEURS = {
     "flux-non-declare": "[flux-non-declare]",
     "script-depot-absent": "[script-depot-absent]",
     "version-non-partagee": "[version-non-partagee]",
+    "version-non-injectee": "[version-non-injectee]",
 }
 
 try:
@@ -155,6 +182,38 @@ def syntaxe_bash_valide(script: str, bash: str) -> tuple[bool, str]:
 
     detail = (resultat.stderr or resultat.stdout or "").strip().splitlines()
     return False, detail[0] if detail else "refuse par bash -n"
+
+
+def commandes_de_compilation(script: str) -> list[str]:
+    """Reconstitue chaque commande `flutter build …` avec ses continuations.
+
+    Une commande est decoupee sur plusieurs lignes par des barres obliques
+    inverses : la lire ligne a ligne ferait manquer le `--dart-define` pose
+    trois lignes plus bas, et le controle signalerait un oubli qui n'existe
+    pas. Une commande se termine a la premiere ligne qui ne se continue pas.
+    """
+    commandes: list[str] = []
+    courante: list[str] | None = None
+
+    for ligne in script.splitlines():
+        if courante is None:
+            if "flutter build" not in ligne:
+                continue
+            courante = [ligne]
+        else:
+            courante.append(ligne)
+
+        if not ligne.rstrip().endswith("\\"):
+            commandes.append("\n".join(courante))
+            courante = None
+
+    if courante is not None:
+        # Derniere ligne du bloc qui se termine par une continuation : le script
+        # est de toute facon refuse par `bash -n`, mais ne rien rendre ici
+        # ferait disparaitre la commande du compte sans le dire.
+        commandes.append("\n".join(courante))
+
+    return commandes
 
 
 def verifier_flux(
@@ -281,6 +340,38 @@ def verifier_flux(
                             "script-depot-absent",
                             f"{nom} : {libelle} appelle '{reference}', "
                             "qui n'existe pas dans le depot",
+                        )
+
+                # Une commande qui compile un environnement doit aussi compiler
+                # la version : c'est la seule chose qui relie ce que l'ecran
+                # affiche a ce que le paquet declare.
+                for numero, commande in enumerate(
+                    commandes_de_compilation(script), start=1
+                ):
+                    rapport.verifie()
+
+                    if "--dart-define=APP_ENV=" not in commande:
+                        continue
+
+                    trouve = MOTIF_DEFINE_VERSION.search(commande)
+                    if trouve is None:
+                        rapport.defaut(
+                            "version-non-injectee",
+                            f"{nom} : {libelle}, compilation n°{numero} recoit "
+                            "un APP_ENV mais aucun APP_VERSION — l'ecran des "
+                            "reglages annoncerait une version sans rapport avec "
+                            "le binaire installe",
+                        )
+                        continue
+
+                    valeur = trouve.group("valeur")
+                    if valeur != VALEUR_VERSION_ATTENDUE:
+                        rapport.defaut(
+                            "version-non-injectee",
+                            f"{nom} : {libelle}, compilation n°{numero} passe "
+                            f"APP_VERSION={valeur} au lieu de "
+                            f"{VALEUR_VERSION_ATTENDUE} — une valeur recopiee "
+                            "n'est reliee a aucune source, donc elle divergera",
                         )
 
 

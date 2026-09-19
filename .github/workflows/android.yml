@@ -156,6 +156,7 @@ jobs:
             --build-name=${{ steps.version.outputs.name }} \
             --build-number=${{ steps.version.outputs.number }} \
             --dart-define=APP_ENV=production \
+            --dart-define=APP_VERSION=${{ steps.version.outputs.version }} \
             --dart-define=SUPABASE_URL=${{ vars.SUPABASE_URL }} \
             --dart-define=SUPABASE_ANON_KEY=${{ vars.SUPABASE_ANON_KEY }} \
             --dart-define=ANALYSIS_ENDPOINT=${{ vars.ANALYSIS_ENDPOINT }}
@@ -167,6 +168,7 @@ jobs:
             --build-name=${{ steps.version.outputs.name }} \
             --build-number=${{ steps.version.outputs.number }} \
             --dart-define=APP_ENV=production \
+            --dart-define=APP_VERSION=${{ steps.version.outputs.version }} \
             --dart-define=SUPABASE_URL=${{ vars.SUPABASE_URL }} \
             --dart-define=SUPABASE_ANON_KEY=${{ vars.SUPABASE_ANON_KEY }} \
             --dart-define=ANALYSIS_ENDPOINT=${{ vars.ANALYSIS_ENDPOINT }}

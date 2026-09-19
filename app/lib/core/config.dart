@@ -27,6 +27,25 @@ class AppConfig {
   /// Nom affiche de l'application.
   static const String appName = 'Assiette';
 
+  /// Version de l'application, telle qu'inscrite dans le binaire.
+  ///
+  /// Fournie a la compilation par `--dart-define=APP_VERSION=…`, alimentee par
+  /// `tools/version_build.sh` — le meme script qui decide de la version de
+  /// l'APK, de l'AAB et de l'IPA. L'ecran des reglages affiche donc exactement
+  /// ce que le systeme lit dans le paquet installe.
+  ///
+  /// Recopier la version ici aurait l'air plus simple, et c'est ce qui avait ete
+  /// fait : l'ecran annoncait `0.1.0` alors que le binaire etait `0.1.2`. Une
+  /// valeur recopiee finit par mentir, parce que rien ne la relie a la source.
+  ///
+  /// Hors compilation par les flux — un `flutter run` local — la valeur vaut
+  /// `dev`, ce qui est exact : cette compilation-la ne porte aucun numero de
+  /// version.
+  static const String version = String.fromEnvironment(
+    'APP_VERSION',
+    defaultValue: 'dev',
+  );
+
   /// Identifiant de version, utile pour les rapports d'erreur.
   static const String buildChannel = String.fromEnvironment(
     'APP_ENV',

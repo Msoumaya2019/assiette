@@ -316,7 +316,8 @@ class SettingsScreen extends ConsumerWidget {
                     leading: const Icon(Icons.info_outline_rounded, size: 20),
                     title: const Text('Version'),
                     subtitle: Text(
-                      '${AppConfig.appName} 0.1.0 — compilation ${AppConfig.buildChannel}',
+                      '${AppConfig.appName} ${AppConfig.version} — '
+                      'compilation ${AppConfig.buildChannel}',
                       style: const TextStyle(fontSize: 12),
                     ),
                   ),
