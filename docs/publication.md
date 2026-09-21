@@ -14,7 +14,8 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | 314 tests de l'application, tous verts | prêt |
 | 18 tests du serveur, tous verts | prêt |
 | Dépôt public | https://github.com/Msoumaya2019/assiette |
-| Flux `ci.yml` — analyse, 314 tests, 7 contrôles | **vert** |
+| Flux `ci.yml` — analyse, 314 tests, 9 contrôles | **vert** |
+| Flux `ci.yml` — migrations Supabase exécutées sur un vrai PostgreSQL | **vert** (27 épreuves) |
 | Flux Android — APK et AAB | **vert**, artefacts signés et vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
 | Déclenchement par étiquette `v*` | **vert** (`v0.1.0`, `v0.1.1`, `v0.1.2`, `v0.1.3`, `v0.1.4`) |
