@@ -160,10 +160,14 @@ jobs:
       - name: Recuperer le depot
         uses: actions/checkout@v4
 
-      # Node 22 plutot que le Node 20 preinstalle : les actions qui s'appuient
-      # sur Node 20 ont commence a emettre un avertissement de depreciation sur
-      # les executeurs recents, et un avertissement qu'on apprend a ignorer
-      # finit par cacher autre chose.
+      # `setup-node` epingle l'interpreteur qui execute le script, pour que le
+      # verdict ne depende pas du Node livre par l'executeur.
+      #
+      # A ne pas confondre avec l'avertissement de depreciation Node 20 : mesure
+      # faite, il nomme les actions elles-memes (`actions/checkout@v4`,
+      # `actions/setup-node@v4`) et apparait dans **toutes** les taches, y
+      # compris celles qui n'ont aucun Node. Ce choix ne le fait donc ni
+      # apparaitre ni disparaitre — il n'est pas la pour ca.
       - name: Installer Node
         uses: actions/setup-node@v4
         with:

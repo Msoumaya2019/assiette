@@ -423,6 +423,19 @@ Les flux émettent un avertissement : `actions/checkout@v4` et
 Node.js 24. Les actions continuent de fonctionner — GitHub les met à niveau
 automatiquement. À reprendre le jour où ces versions cesseront d'être acceptées.
 
+La liste des actions nommées s'allonge au fil des exécutions —
+`actions/setup-node@v4` et `actions/setup-python@v5` y figurent désormais aussi.
+
+**Ce que cet avertissement ne dit pas, et qui a failli être écrit à tort.**
+L'ajout de la tâche `migrations` a d'abord été accompagné d'un commentaire
+affirmant qu'épingler `node-version: "22"` faisait disparaître l'avertissement.
+C'est faux, et la mesure le dit : il apparaît dans **toutes** les tâches, y
+compris « Analyse et tests » et « Serveur », qui n'ont aucun Node installé par ce
+moyen. Il porte sur le **moteur des actions**, pas sur l'interpréteur du travail.
+Épingler Node reste utile — pour que le verdict ne dépende pas du Node livré par
+l'exécuteur — mais ce n'est pas la même raison, et confondre les deux ferait
+chercher une correction qui n'existe pas de ce côté.
+
 ### 7.6 Le Kotlin intégré d'AGP 9 divise l'écosystème des greffons
 
 Le projet utilise **AGP 9.1.0**. Or AGP 9 fait du « Kotlin intégré » (*built-in
