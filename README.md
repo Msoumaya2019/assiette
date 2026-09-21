@@ -508,5 +508,5 @@ macOS et Linux, `flutter` fonctionne normalement.
 | Base locale en schéma v2 (migration v1 → v2 éprouvée) | Écrit, testé |
 | Notifications (rappels de repas, résumé du soir) | Écrit, testé |
 | Compte et synchronisation | Schéma serveur prêt, interface à brancher |
-| APK et AAB signés, IPA non signée | Produits et vérifiés — release `v0.1.3` |
+| APK et AAB signés, IPA non signée | Produits et vérifiés — release `v0.1.4` (la `v0.1.3` est fautive, ne pas l'installer) |
 | Envoi sur l'App Store / le Play Store | Non entamé — demande un compte Google Play et un compte Apple Developer |

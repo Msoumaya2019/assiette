@@ -17,8 +17,9 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Flux `ci.yml` — analyse, 314 tests, 7 contrôles | **vert** |
 | Flux Android — APK et AAB | **vert**, artefacts signés et vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
-| Déclenchement par étiquette `v*` | **vert** (`v0.1.0`, `v0.1.1`, `v0.1.2`, `v0.1.3`) |
-| Dernière version publiée | **`v0.1.3`** — APK signé, AAB signé, IPA (portions nommées, suivi du poids) |
+| Déclenchement par étiquette `v*` | **vert** (`v0.1.0`, `v0.1.1`, `v0.1.2`, `v0.1.3`, `v0.1.4`) |
+| Dernière version publiée | **`v0.1.4`** — APK signé, AAB signé, IPA (portions nommées, suivi du poids, correctifs de mise en page) |
+| Version à **ne pas** installer | `v0.1.3` — l'écran de suivi du poids y tombe dès la première pesée. Ses notes portent l'avertissement. |
 | Icônes et écran de démarrage (Android et iOS) | prêt |
 | Politique de confidentialité | `docs/confidentialite.md` |
 | Attributions Ciqual et Open Food Facts | `app/assets/legal/ATTRIBUTION.md` |
@@ -35,6 +36,9 @@ contrôlés**, pas seulement lus dans le journal du flux :
 
 | Version | Artefact | Vérification |
 | --- | --- | --- |
+| `v0.1.4` | `app-release-0.1.4+8-signe.apk` | déclare `0.1.4` / `8`, 84 381 057 octets, signé avec la clé de release, **et contient le correctif** (voir ci-dessous) |
+| `v0.1.4` | `app-release-0.1.4+8-signe.aab` | 72 263 838 octets, version non lisible dans un AAB — non vérifiée, et le script l'écrit |
+| `v0.1.4` | `Assiette-0.1.4+7-non-signee.ipa` | déclare `0.1.4` / `7`, 17 057 982 octets |
 | `v0.1.3` | `app-release-0.1.3+7-signe.apk` | déclare `0.1.3` / `7`, 84 381 057 octets, signé avec la clé de release |
 | `v0.1.3` | `app-release-0.1.3+7-signe.aab` | 72 260 004 octets, version non lisible dans un AAB — non vérifiée, et le script l'écrit |
 | `v0.1.3` | `Assiette-0.1.3+6-non-signee.ipa` | déclare `0.1.3` / `6`, 17 059 881 octets |
@@ -64,6 +68,36 @@ Les artefacts de `v0.1.1` restent en ligne tels quels — on ne réécrit pas un
 publication, et une version publiée doit rester celle que des gens ont pu
 télécharger. Les suivants déclarent la version de leur tag, et leur nom porte la
 même valeur. Voir §8 pour le mécanisme, et §9 pour la publication.
+
+### Un binaire vérifié par son contenu, pas seulement par son nom
+
+Le contrôle de version lit la valeur **inscrite** dans le binaire. Il ne dit pas
+que le binaire contient le **code** qu'on croit. La différence compte : `v0.1.3` a
+été publiée avec un écran de suivi du poids qui tombait dès la première pesée, et
+aucun contrôle de version n'aurait pu le voir.
+
+`v0.1.4` corrige ce défaut. Le correctif se prouve sur le fichier livré : le commit
+correctif a renommé un libellé d'accessibilité en `Ajouter 1 <unité>` (l'ancienne
+forme, `Ajouter une <unité>`, supposait un genre que l'unité n'a pas forcément).
+Cette chaîne n'existe que dans le code corrigé, et se cherche donc dans le
+`libapp.so` de l'APK :
+
+| Binaire | `Ajouter 1 ` | `Ajouter une ` |
+| --- | --- | --- |
+| `v0.1.3` | absent | 3 occurrences |
+| `v0.1.4` | **1 occurrence** | 2 occurrences — les deux autres libellés, inchangés |
+
+Deux APK de `84 381 057` octets exactement, donc de taille identique, et pourtant
+d'empreintes différentes : la taille ne prouve rien, et n'aurait pas dû servir
+d'indice. C'est le contenu qui tranche.
+
+**Une release fautive ne se réécrit pas, mais elle se signale.** Ses fichiers
+restent en ligne tels quels ; ses **notes**, elles, gagnent un avertissement en
+tête, qui renvoie à la version corrigée. Laisser un binaire cassé en
+téléchargement sans rien dire coûterait la confiance de la personne qui
+l'installe. `tools/annoter_release.py` fait cet ajout, et retire un
+avertissement déjà présent avant d'en écrire un — sans quoi le relancer les
+empilerait.
 
 ---
 
