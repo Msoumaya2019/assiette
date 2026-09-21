@@ -477,6 +477,47 @@ Contrepartie assumée : la 10.x embarque `org.apache.tika:tika-core` (~300 Ko),
 que la 11.0.3 a retiré. À reprendre le jour où Flutter basculera sur le Kotlin
 intégré — le jour où `android.builtInKotlin` disparaîtra du gabarit.
 
+### 7.7 Un échec de CI qui n'accuse pas ce dépôt
+
+Le 21 septembre, la tâche « Analyse et tests » est tombée sur l'étape des tests,
+avec ce message :
+
+```
+Unhandled exception:
+Bad state: Hash of downloaded file libsqlite3.x64.linux.so is bef140a1…,
+expected 4b986901….
+  Building assets for package:sqlite3 failed.
+```
+
+Rien dans ce message ne parle de ce dépôt, et c'est normal : il n'y était pour
+rien. Le paquet `sqlite3` — dont `sqflite_common_ffi` dépend pour les tests —
+télécharge une bibliothèque native précompilée depuis une *release* GitHub, puis
+**vérifie son empreinte SHA-256**. L'empreinte attendue est inscrite dans le
+paquet, et l'exécuteur a reçu autre chose que le binaire : page d'erreur d'un
+proxy, téléchargement tronqué, incident de CDN.
+
+Mesure faite pour trancher entre « le serveur a changé » et « la récupération a
+échoué » — le fichier servi aujourd'hui :
+
+```
+$ sha256sum libsqlite3.x64.linux.so
+4b98690121dbd05d5a4df3375d0e9ed7a339d8b26ca2e573bd663976b9b0f9af
+```
+
+C'est exactement l'empreinte attendue. L'asset n'a donc pas changé : le paquet
+avait raison, et c'est bien la récupération qui a échoué. Relancer la tâche en
+échec (`gh run rerun <id> --failed`) est passé au vert du premier coup.
+
+**À retenir :** cet échec est passager et n'appelle aucune correction de code. Le
+vérifier avant de chercher un bug — un message qui nomme un fichier que ce dépôt
+ne contient pas ne parle pas de ce dépôt.
+
+> Piège de lecture, rencontré au même moment : `gh run watch … | tail -3; echo $?`
+> rend le code de sortie de `tail`, pas celui de `gh`. Le verdict affiché était
+> « 0 » alors que la tâche venait d'échouer. C'est le même piège que celui décrit
+> plus bas pour `lancer_bancs.py` : **après un tube, `$?` n'est pas le code de la
+> commande.**
+
 ---
 
 ## 8. La chaîne de garde
