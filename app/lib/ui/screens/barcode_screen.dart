@@ -6,9 +6,9 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../core/failures.dart';
 import '../../core/formatters.dart';
 import '../../core/theme.dart';
+import '../../models/apercu_aliment.dart';
 import '../../models/food.dart';
 import '../../models/meal.dart';
-import '../../models/portion.dart';
 import '../../state/providers.dart';
 import '../router.dart';
 import '../widgets/common.dart';
@@ -269,11 +269,13 @@ class _ProductPanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.palette;
 
-    // La reference affichee suit la portion retenue pour ce produit : « pour
-    // 1 pot (125 g) » au lieu de « pour 100 g ». C'est la reponse directe a
-    // « pourquoi toujours 100 g ? ».
+    // Les valeurs affichees suivent la portion retenue pour ce produit : le
+    // pot annonce « 1 pot (125 g) » vaut ses 125 g, pas ses 100 g. La reference
+    // et les valeurs viennent d'un seul appel — c'est ce qui garantit qu'elles
+    // parlent de la meme unite.
     ref.watch(portionsProvider);
     final portion = ref.read(portionsProvider.notifier).pour(food);
+    final apercu = apercuDePortion(food, portion);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -334,7 +336,7 @@ class _ProductPanel extends ConsumerWidget {
             child: Row(
               children: [
                 Text(
-                  Format.carbs(food.per100g.carbs),
+                  Format.carbs(apercu.valeurs.carbs),
                   style: TextStyle(
                     fontSize: 34,
                     fontWeight: FontWeight.w800,
@@ -343,7 +345,7 @@ class _ProductPanel extends ConsumerWidget {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'g de glucides\n${referenceDePortion(portion)}',
+                  'g de glucides\n${apercu.reference}',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -352,7 +354,7 @@ class _ProductPanel extends ConsumerWidget {
                 ),
                 const Spacer(),
                 Text(
-                  Format.kcal(food.per100g.kcal),
+                  Format.kcal(apercu.valeurs.kcal),
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,

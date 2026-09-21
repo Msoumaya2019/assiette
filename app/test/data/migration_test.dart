@@ -138,7 +138,7 @@ const List<String> _schemaVersion2Ajouts = [
 /// echouer le test sur une difference d'ecriture, pas de structure.
 Future<Map<String, Object?>> structureDe(Database db) async {
   final objets = await db.rawQuery(
-    "SELECT name, type FROM sqlite_master "
+    'SELECT name, type FROM sqlite_master '
     "WHERE name NOT LIKE 'sqlite_%' ORDER BY name",
   );
 

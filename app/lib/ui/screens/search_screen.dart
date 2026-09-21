@@ -7,9 +7,9 @@ import 'package:go_router/go_router.dart';
 import '../../core/failures.dart';
 import '../../core/formatters.dart';
 import '../../core/theme.dart';
+import '../../models/apercu_aliment.dart';
 import '../../models/food.dart';
 import '../../models/meal.dart';
-import '../../models/portion.dart';
 import '../../state/providers.dart';
 import '../widgets/common.dart';
 import '../widgets/quantity_editor.dart';
@@ -404,10 +404,13 @@ class _FoodTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.palette;
 
-    // La reference suit la portion connue pour cet aliment — retenue par
-    // l'utilisateur ou annoncee par la source — et retombe sur 100 g sinon.
+    // Les valeurs suivent la portion connue pour cet aliment — retenue par
+    // l'utilisateur ou annoncee par la source — et retombent sur 100 g sinon.
+    // Elles viennent du meme appel que leur reference : c'est ce qui garantit
+    // que le nombre et l'unite parlent bien de la meme chose.
     ref.watch(portionsProvider);
     final portion = ref.read(portionsProvider.notifier).pour(food);
+    final apercu = apercuDePortion(food, portion);
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -466,24 +469,24 @@ class _FoodTile extends ConsumerWidget {
                       children: [
                         _MiniValue(
                           label: 'glucides',
-                          value: '${Format.number(food.per100g.carbs)} g',
+                          value: '${Format.number(apercu.valeurs.carbs)} g',
                           color: palette.carb,
                         ),
                         _MiniValue(
                           label: 'kcal',
-                          value: Format.number(food.per100g.kcal),
+                          value: Format.number(apercu.valeurs.kcal),
                           color: palette.mutedText,
                         ),
                         _MiniValue(
                           label: 'prot.',
-                          value: '${Format.number(food.per100g.protein)} g',
+                          value: '${Format.number(apercu.valeurs.protein)} g',
                           color: palette.protein,
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      referenceDePortion(portion),
+                      apercu.reference,
                       style: TextStyle(fontSize: 11, color: palette.mutedText),
                     ),
                   ],

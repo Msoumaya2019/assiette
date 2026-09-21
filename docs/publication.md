@@ -11,10 +11,10 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Élément | État |
 | --- | --- |
 | Code source complet, analysé sans avertissement | prêt |
-| 325 tests de l'application, tous verts | prêt |
+| 328 tests de l'application, tous verts | prêt |
 | 18 tests du serveur, tous verts | prêt |
 | Dépôt public | https://github.com/Msoumaya2019/assiette |
-| Flux `ci.yml` — analyse, 325 tests, 9 contrôles | **vert** |
+| Flux `ci.yml` — analyse, 328 tests, 9 contrôles | **vert** |
 | Flux `ci.yml` — migrations Supabase exécutées sur un vrai PostgreSQL | **vert** (35 épreuves) |
 | Flux Android — APK et AAB | **vert**, artefacts signés et vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
@@ -660,6 +660,33 @@ migration non déclarée (l'épreuve tombe), puis le même oubli avec le garde-f
 rendu inatteignable (l'épreuve reste verte). Le second temps est le seul qui
 établisse que c'est bien le garde-fou qui porte quelque chose.
 
+### Un nombre et son unité peuvent se contredire
+
+Trois écrans — la fiche produit après un scan, les résultats de recherche, les
+favoris — annonçaient « 12 g de glucides pour 1 pot (125 g) ». Le pot en contient
+15 : le nombre affiché était celui des **100 g**, sous l'unité du pot. Un
+cinquième de moins que la réalité, et sous une étiquette qui affirmait le
+contraire.
+
+L'intention était juste, et écrite dans le code : « la référence affichée suit la
+portion retenue pour ce produit ». Seule la référence avait suivi ; le nombre,
+non. La fonction qui produisait l'étiquette était séparée de celle qui produisait
+les valeurs, et rien ne les obligeait à parler de la même unité.
+
+La correction ne recalcule pas les trois affichages : elle rend la divergence
+**impossible**. `referenceDePortion()` a disparu, remplacée par
+`apercuDePortion()`, qui rend les valeurs **et** leur unité dans le même appel —
+obtenir l'étiquette oblige désormais à obtenir les valeurs qui vont avec. Le test
+correspondant vérifie les deux ensemble, parce que pris séparément chacun des deux
+était correct : c'est le seul contrôle qui aurait attrapé ce défaut.
+
+Deux choses valent d'être dites. Ce n'est **pas** une régression : le défaut est
+apparu avec les portions nommées, dans le commit `1ef04dc`, et les 325 tests
+étaient verts. Et il est dans les binaires publiés — `git tag --contains 1ef04dc`
+rend `v0.1.3` et `v0.1.4`. **La version `v0.1.4` affiche donc cette unité
+trompeuse sur les trois écrans** ; la correction n'existe encore que dans le
+dépôt, et n'est dans aucun binaire publié.
+
 ### Ce qui n'est pas prouvé
 
 L'épreuve PGlite établit que le SQL s'exécute et que les politiques filtrent. Elle
@@ -672,6 +699,13 @@ entre deux versions divergentes n'est pas décidée** : aucun code ne dit encore
 laquelle gagne, ni comment une suppression l'emporte sur une modification. C'est
 la question que la synchronisation devra trancher, et elle n'est pas tranchée par
 une migration.
+
+Dans une **liste** de résultats, les aliments qui portent une portion connue sont
+désormais chiffrés par portion, les autres pour 100 g : deux bases dans la même
+liste. C'est la conséquence assumée de la demande initiale (« pas toujours
+100 g »), et l'étiquette dit toujours sur quoi porte le chiffre — mais comparer
+deux produits y demande de la lire. Revenir à une base unique pour les seules
+listes reste un choix ouvert.
 
 ### La version publiée, décidée à un seul endroit
 

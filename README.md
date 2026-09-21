@@ -82,6 +82,15 @@ préfère ne rien proposer plutôt que d'inventer un poids.
 Un aliment non reconnu reste à zéro : la portion change l'unité de lecture, jamais
 la valeur nutritionnelle.
 
+Un piège, corrigé depuis. L'étiquette et le nombre étaient produits par **deux
+fonctions séparées**, et rien ne les obligeait à parler de la même unité : la fiche
+produit, les résultats de recherche et les favoris annonçaient donc « pour 1 pot
+(125 g) » sous le chiffre des 100 g — soit 12 g annoncés pour un pot qui en
+contient 15. Les deux viennent maintenant du **même appel**
+(`apercuDePortion()`), qui rend les valeurs et leur unité ensemble : l'étiquette ne
+peut plus désigner une autre unité que celle des valeurs. Les binaires publiés
+`v0.1.3` et `v0.1.4` portent l'ancien affichage.
+
 ### Suivi du poids
 
 Un écran dédié, ouvert depuis l'accueil, tient une **courbe de poids**, un

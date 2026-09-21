@@ -170,14 +170,3 @@ class Portion {
   @override
   String toString() => 'Portion($label, $grams g)';
 }
-
-/// Unite de reference sur laquelle porte un apercu de valeurs.
-///
-/// « pour 1 pot (125 g) » quand une portion est connue, « pour 100 g » sinon.
-///
-/// Sans portion, le repere reste les 100 g : c'est l'unite de reference de
-/// toutes les tables, et le masquer laisserait croire que le chiffre affiche
-/// vaut pour la portion annoncee a cote. Un nombre sans son unite est pire
-/// qu'un nombre avec l'ancienne.
-String referenceDePortion(Portion? portion) =>
-    portion == null ? 'pour 100 g' : 'pour ${portion.etiquetteUnite}';

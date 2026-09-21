@@ -183,18 +183,4 @@ void main() {
       );
     });
   });
-
-  group('Unite de reference d\'un apercu', () {
-    test('sans portion, le repere reste 100 g', () {
-      // Le nombre affiche sans son unite serait pire qu'avec l'ancienne.
-      expect(referenceDePortion(null), 'pour 100 g');
-    });
-
-    test('avec une portion, le repere suit la portion', () {
-      expect(
-        referenceDePortion(const Portion(label: 'pot', grams: 125)),
-        'pour 1 pot (125 g)',
-      );
-    });
-  });
 }

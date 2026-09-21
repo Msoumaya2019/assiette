@@ -5,9 +5,9 @@ import 'package:go_router/go_router.dart';
 import '../../core/formatters.dart';
 import '../../core/theme.dart';
 import '../../data/local/app_database.dart';
+import '../../models/apercu_aliment.dart';
 import '../../models/food.dart';
 import '../../models/meal.dart';
-import '../../models/portion.dart';
 import '../../state/providers.dart';
 import '../router.dart';
 import '../widgets/common.dart';
@@ -217,11 +217,13 @@ class _FavoriteTile extends ConsumerWidget {
     final palette = context.palette;
 
     // Meme regle que dans les resultats de recherche : l'apercu annonce
-    // l'unite sur laquelle il porte.
+    // l'unite sur laquelle il porte, et les valeurs viennent du meme appel que
+    // cette reference — sinon le nombre et son etiquette divergent.
     ref.watch(portionsProvider);
     final portion = food == null
         ? null
         : ref.read(portionsProvider.notifier).pour(food);
+    final apercu = food == null ? null : apercuDePortion(food, portion);
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
@@ -247,11 +249,11 @@ class _FavoriteTile extends ConsumerWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      subtitle: food == null
+      subtitle: food == null || apercu == null
           ? null
           : Text(
-              '${Format.carbs(food.per100g.carbs)} g glucides '
-              '${referenceDePortion(portion)} · ${food.source.displayLabel}',
+              '${Format.carbs(apercu.valeurs.carbs)} g glucides '
+              '${apercu.reference} · ${food.source.displayLabel}',
               style: TextStyle(fontSize: 12, color: palette.mutedText),
             ),
       trailing: Row(
