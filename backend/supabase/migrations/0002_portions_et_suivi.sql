@@ -66,11 +66,15 @@ alter table public.meal_items add column if not exists portion_grams numeric;
 -- est la seule difference — deux personnes peuvent nommer leur portion
 -- « gateau » sans se voir.
 --
--- Pas de `deleted_at` : le schema local n'en a pas non plus, la suppression y
--- est definitive. Ajouter ici une pierre tombale que le client ne remplit pas
--- donnerait une colonne toujours nulle, donc une suppression qui ne se propage
--- jamais. C'est une limite reelle de la synchronisation des portions, et elle
--- est notee dans `backend/README.md` plutot que masquee par une colonne morte.
+-- Pas de `deleted_at` ici : le schema local n'en avait pas non plus a ce
+-- moment-la, la suppression y etait definitive. Ajouter une pierre tombale que
+-- le client ne remplit pas aurait donne une colonne toujours nulle, donc une
+-- suppression qui ne se propage jamais.
+--
+-- **Corrige depuis.** Le schema local a converti cette suppression en
+-- suppression logique, et `0003_pierres_tombales.sql` ajoute la colonne ici.
+-- Seul ce commentaire a ete corrige : le DDL ci-dessous est l'histoire de cette
+-- migration-la et ne change plus.
 -- ---------------------------------------------------------------------------
 
 create table if not exists public.portions (

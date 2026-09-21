@@ -53,7 +53,9 @@ class AppDatabase {
   /// 2 : portions nommees (`meal_items.portion_label`, `portion_grams`), table
   ///     `portions` qui retient la portion d'un aliment, et suivi du poids
   ///     (`pesees`, `mesures`).
-  static const int schemaVersion = 2;
+  /// 3 : pierres tombales la ou il en manquait (`portions`, `templates`,
+  ///     `favorites`), et `favorites.updated_at`, qui manquait aussi.
+  static const int schemaVersion = 3;
 
   /// Ce que la version 2 ajoute au schema initial.
   ///
@@ -108,6 +110,35 @@ class AppDatabase {
       )
     ''',
     'CREATE INDEX idx_mesures_le ON mesures (mesure_le DESC)',
+  ];
+
+  /// Ce que la version 3 ajoute : des pierres tombales la ou il en manquait.
+  ///
+  /// Trois tables supprimaient leurs lignes **definitivement** : `portions`,
+  /// `templates` et `favorites`. Une suppression definitive ne se propage pas.
+  /// Le jour ou la synchronisation serait branchee, effacer un modele sur un
+  /// telephone le laisserait sur les autres — et le prochain echanges l'aurait
+  /// fait revenir sur celui-la meme. C'est le meme raisonnement qui avait deja
+  /// mene aux pierres tombales de `meals`, `pesees` et `mesures` ; il n'avait
+  /// simplement pas ete applique a ces trois-la.
+  ///
+  /// `favorites.updated_at` manquait aussi, et pour une autre raison : sans
+  /// horodatage de modification, deux appareils ne peuvent pas arbitrer entre
+  /// deux versions d'un meme favori. La colonne est **remplie depuis
+  /// `created_at`** pour les lignes existantes — un favori jamais modifie a
+  /// bien ete modifie pour la derniere fois quand il a ete cree.
+  ///
+  /// `meal_items` n'a **pas** de pierre tombale, et c'est deliberé : les lignes
+  /// d'un repas sont reecrites en bloc a chaque enregistrement (`_ecrireItems`),
+  /// donc leur cycle de vie est celui de leur repas. Une suppression du repas
+  /// les emporte des deux cotes, et une modification les remplace. Leur ajouter
+  /// un `deleted_at` creerait un second mecanisme pour dire la meme chose.
+  static const List<String> _ajoutsVersion3 = [
+    'ALTER TABLE portions ADD COLUMN deleted_at INTEGER',
+    'ALTER TABLE templates ADD COLUMN deleted_at INTEGER',
+    'ALTER TABLE favorites ADD COLUMN deleted_at INTEGER',
+    'ALTER TABLE favorites ADD COLUMN updated_at INTEGER',
+    'UPDATE favorites SET updated_at = created_at WHERE updated_at IS NULL',
   ];
 
   Database get db {
@@ -221,7 +252,9 @@ class AppDatabase {
       )
     ''');
 
-    for (final ordre in _ajoutsVersion2) {
+    // Les deux listes, et dans l'ordre : une base neuve doit naitre au schema
+    // courant, pas au schema initial qu'on completerait apres coup.
+    for (final ordre in [..._ajoutsVersion2, ..._ajoutsVersion3]) {
       batch.execute(ordre);
     }
 
@@ -241,6 +274,18 @@ class AppDatabase {
       // bug, pas une migration.
       final batch = database.batch();
       for (final ordre in _ajoutsVersion2) {
+        batch.execute(ordre);
+      }
+      await batch.commit(noResult: true);
+    }
+
+    if (from < 3) {
+      // Une base restee en version 1 traverse donc les deux paliers a la
+      // suite, dans l'ordre, sans qu'on ait ecrit le raccourci 1 -> 3. C'est
+      // exactement ce que la version 2 annoncait, et le cas se presente
+      // maintenant pour de vrai.
+      final batch = database.batch();
+      for (final ordre in _ajoutsVersion3) {
         batch.execute(ordre);
       }
       await batch.commit(noResult: true);
@@ -441,7 +486,11 @@ class AppDatabase {
   }
 
   Future<List<MealTemplate>> templates() async {
-    final rows = await db.query('templates', orderBy: 'name ASC');
+    final rows = await db.query(
+      'templates',
+      where: 'deleted_at IS NULL',
+      orderBy: 'name ASC',
+    );
     return rows.map((row) {
       final raw = jsonDecode(row['items_json'] as String) as List;
       return MealTemplate(
@@ -457,8 +506,19 @@ class AppDatabase {
     }).toList();
   }
 
+  /// Suppression logique : la ligne reste, pour que la suppression puisse se
+  /// propager le jour ou la synchronisation existera.
+  ///
+  /// Une suppression definitive ne laisse aucune trace, donc rien a envoyer.
+  /// Le modele efface ici reviendrait depuis un autre appareil, et le prochain
+  /// echange le ferait revenir sur celui-ci.
   Future<void> deleteTemplate(String id) async {
-    await db.delete('templates', where: 'id = ?', whereArgs: [id]);
+    await db.update(
+      'templates',
+      {'deleted_at': DateTime.now().millisecondsSinceEpoch},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -471,19 +531,24 @@ class AppDatabase {
     String label,
     Map<String, dynamic> payload,
   ) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
     await db.insert('favorites', {
       'id': id,
       'kind': kind,
       'label': label,
       'payload_json': jsonEncode(payload),
-      'created_at': DateTime.now().millisecondsSinceEpoch,
+      'created_at': now,
+      'updated_at': now,
+      'deleted_at': null,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<List<Favorite>> favorites({String? kind}) async {
     final rows = await db.query(
       'favorites',
-      where: kind == null ? null : 'kind = ?',
+      where: kind == null
+          ? 'deleted_at IS NULL'
+          : 'deleted_at IS NULL AND kind = ?',
       whereArgs: kind == null ? null : [kind],
       orderBy: 'created_at DESC',
     );
@@ -498,15 +563,22 @@ class AppDatabase {
     }).toList();
   }
 
+  /// Suppression logique, comme pour les modeles et les repas.
   Future<void> deleteFavorite(String id) async {
-    await db.delete('favorites', where: 'id = ?', whereArgs: [id]);
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.update(
+      'favorites',
+      {'deleted_at': now, 'updated_at': now},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   Future<bool> isFavorite(String id) async {
     final rows = await db.query(
       'favorites',
       columns: ['id'],
-      where: 'id = ?',
+      where: 'id = ? AND deleted_at IS NULL',
       whereArgs: [id],
       limit: 1,
     );
@@ -546,10 +618,13 @@ class AppDatabase {
   }
 
   /// Portion retenue pour un aliment, ou `null` s'il n'en a pas.
+  ///
+  /// Une portion supprimee n'en a plus : la ligne reste en base pour que la
+  /// suppression puisse se propager, mais elle ne doit plus etre proposee.
   Future<Portion?> readPortion(String cle) async {
     final rows = await db.query(
       'portions',
-      where: 'cle = ?',
+      where: 'cle = ? AND deleted_at IS NULL',
       whereArgs: [cle],
       limit: 1,
     );
@@ -562,6 +637,10 @@ class AppDatabase {
 
   /// Retient la portion d'un aliment. Un poids d'unite nul n'est pas ecrit :
   /// il rendrait toute conversion absurde.
+  ///
+  /// Redefinir une portion **efface sa pierre tombale** : c'est le geste par
+  /// lequel l'utilisateur revient sur sa suppression, et il doit etre possible
+  /// sans passer par la base.
   Future<void> writePortion(String cle, Portion portion) async {
     if (!portion.estValide) return;
     await db.insert('portions', {
@@ -569,40 +648,90 @@ class AppDatabase {
       'label': portion.label,
       'grams': portion.grams,
       'updated_at': DateTime.now().millisecondsSinceEpoch,
+      'deleted_at': null,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
+  /// Suppression logique, comme pour les repas et les pesees.
   Future<void> deletePortion(String cle) async {
-    await db.delete('portions', where: 'cle = ?', whereArgs: [cle]);
+    await db.update(
+      'portions',
+      {'deleted_at': DateTime.now().millisecondsSinceEpoch},
+      where: 'cle = ?',
+      whereArgs: [cle],
+    );
   }
 
-  Future<Map<String, Portion>> portionsPourSauvegarde() async {
-    final rows = await db.query('portions');
+  /// Portions **vivantes**, par cle d'aliment.
+  ///
+  /// C'est la lecture de l'interface : une portion supprimee ne doit plus etre
+  /// proposee, meme si sa ligne subsiste en base. La table porte deux lecteurs
+  /// aux besoins opposes — celui-ci, qui veut ce qui reste, et
+  /// [portionsPourSauvegarde], qui veut aussi ce qui a disparu — et c'est
+  /// pourquoi ils sont deux methodes distinctes plutot qu'un filtre pose a
+  /// l'appel : un filtre oublie se voit mal, une methode qui ment sur son nom
+  /// se voit tout de suite.
+  Future<Map<String, Portion>> portionsVivantes() async {
+    final rows = await db.query(
+      'portions',
+      where: 'deleted_at IS NULL',
+      orderBy: 'cle ASC',
+    );
     final resultat = <String, Portion>{};
     for (final row in rows) {
       final portion = Portion.depuisJson({
         'label': row['label'],
         'grams': row['grams'],
       });
-      if (portion != null) resultat[row['cle'] as String] = portion;
+      if (portion == null) continue;
+      resultat[row['cle'] as String] = portion;
     }
     return resultat;
   }
 
-  Future<void> restaurerPortion(
-    String cle,
-    Portion portion,
-    int updatedAt,
-  ) async {
-    if (!portion.estValide) return;
+  /// Portions telles qu'elles sont stockees, **supprimees comprises**.
+  ///
+  /// Une sauvegarde a besoin des pierres tombales, pour la meme raison que pour
+  /// les repas : sans elles, restaurer sur un appareil ou la portion avait ete
+  /// supprimee la ferait reapparaitre.
+  Future<List<PortionEnregistree>> portionsPourSauvegarde() async {
+    final rows = await db.query('portions', orderBy: 'cle ASC');
+    final resultat = <PortionEnregistree>[];
+    for (final row in rows) {
+      final portion = Portion.depuisJson({
+        'label': row['label'],
+        'grams': row['grams'],
+      });
+      if (portion == null) continue;
+      resultat.add(
+        PortionEnregistree(
+          cle: row['cle'] as String,
+          portion: portion,
+          updatedAt: row['updated_at'] as int,
+          deletedAt: row['deleted_at'] as int?,
+        ),
+      );
+    }
+    return resultat;
+  }
+
+  /// Inscrit une portion telle qu'elle a ete sauvegardee, horodatages compris.
+  Future<void> restaurerPortion(PortionEnregistree enregistree) async {
+    if (!enregistree.portion.estValide) return;
     await db.insert('portions', {
-      'cle': cle,
-      'label': portion.label,
-      'grams': portion.grams,
-      'updated_at': updatedAt,
+      'cle': enregistree.cle,
+      'label': enregistree.portion.label,
+      'grams': enregistree.portion.grams,
+      'updated_at': enregistree.updatedAt,
+      'deleted_at': enregistree.deletedAt,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
+  /// Cles des portions presentes localement, **supprimees comprises**.
+  ///
+  /// Sert a une fusion, et doit donc inclure les pierres tombales : une portion
+  /// supprimee ici ne doit pas etre ramenee par une sauvegarde. Sans cela, une
+  /// fusion ferait revivre exactement ce que l'utilisateur venait d'effacer.
   Future<Set<String>> clesDePortions() async {
     final rows = await db.query('portions', columns: ['cle']);
     return {for (final row in rows) row['cle'] as String};
@@ -804,6 +933,7 @@ class AppDatabase {
     return resultat;
   }
 
+  /// Modeles enregistres, **supprimes compris**.
   Future<List<TemplateEnregistre>> templatesPourSauvegarde() async {
     final rows = await db.query('templates', orderBy: 'name ASC');
     return rows.map((row) {
@@ -821,10 +951,12 @@ class AppDatabase {
         ),
         createdAt: row['created_at'] as int,
         updatedAt: row['updated_at'] as int,
+        deletedAt: row['deleted_at'] as int?,
       );
     }).toList();
   }
 
+  /// Favoris, **supprimes compris**.
   Future<List<FavoriteEnregistre>> favoritesPourSauvegarde() async {
     final rows = await db.query('favorites', orderBy: 'created_at DESC');
     return rows.map((row) {
@@ -837,6 +969,11 @@ class AppDatabase {
               .cast<String, dynamic>(),
         ),
         createdAt: row['created_at'] as int,
+        // Une base ecrite avant la version 3 a des `updated_at` nuls : la
+        // migration les remplit, mais une ligne ecrite entre-temps par un
+        // chemin qui ne les poserait pas ne doit pas faire echouer la lecture.
+        updatedAt: (row['updated_at'] as int?) ?? (row['created_at'] as int),
+        deletedAt: row['deleted_at'] as int?,
       );
     }).toList();
   }
@@ -886,6 +1023,7 @@ class AppDatabase {
       ),
       'created_at': enregistre.createdAt,
       'updated_at': enregistre.updatedAt,
+      'deleted_at': enregistre.deletedAt,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
@@ -897,6 +1035,8 @@ class AppDatabase {
       'label': favorite.label,
       'payload_json': jsonEncode(favorite.payload),
       'created_at': enregistre.createdAt,
+      'updated_at': enregistre.updatedAt,
+      'deleted_at': enregistre.deletedAt,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
@@ -1045,19 +1185,52 @@ class TemplateEnregistre {
     required this.template,
     required this.createdAt,
     required this.updatedAt,
+    this.deletedAt,
   });
 
   final MealTemplate template;
   final int createdAt;
   final int updatedAt;
+  final int? deletedAt;
+
+  bool get estSupprime => deletedAt != null;
 }
 
 /// Un favori tel qu'il est stocke.
 class FavoriteEnregistre {
-  const FavoriteEnregistre({required this.favorite, required this.createdAt});
+  const FavoriteEnregistre({
+    required this.favorite,
+    required this.createdAt,
+    required this.updatedAt,
+    this.deletedAt,
+  });
 
   final Favorite favorite;
   final int createdAt;
+  final int updatedAt;
+  final int? deletedAt;
+
+  bool get estSupprime => deletedAt != null;
+}
+
+/// Une portion telle qu'elle est stockee.
+///
+/// La cle identifie l'aliment, pas la ligne : c'est elle qui sert de cle
+/// primaire, et c'est elle qui doit voyager avec la pierre tombale.
+class PortionEnregistree {
+  const PortionEnregistree({
+    required this.cle,
+    required this.portion,
+    required this.updatedAt,
+    this.deletedAt,
+  });
+
+  final String cle;
+  final Portion portion;
+  final int updatedAt;
+  final int? deletedAt;
+
+  bool get estSupprimee => deletedAt != null;
 }
 
 /// Une pesee telle qu'elle est stockee.

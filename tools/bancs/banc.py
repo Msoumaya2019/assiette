@@ -142,9 +142,22 @@ class Resultat:
 class Banc:
     """Falsifie un controle : mute, execute, restaure, et rend compte."""
 
-    def __init__(self, script: Path, arguments: tuple[str, ...] = ()) -> None:
+    def __init__(
+        self,
+        script: Path,
+        arguments: tuple[str, ...] = (),
+        interpreteur: list[str] | None = None,
+        environnement: dict[str, str] | None = None,
+    ) -> None:
         self.script = script
         self.arguments = arguments
+        # Certains controles ne sont pas des scripts Python : `falsifier_epreuve_migrations.py`
+        # eprouve un `.mjs`, qui a besoin de Node. L'interpreteur est donc un
+        # parametre, et non `sys.executable` en dur.
+        self.interpreteur = interpreteur if interpreteur is not None else [sys.executable]
+        # `None` laisse `subprocess` heriter de l'environnement courant, ce qui
+        # est le comportement des bancs qui n'ont rien de particulier a poser.
+        self.environnement = environnement
         self.fichiers: dict[Path, Fichier] = {}
         self.crees: list[Path] = []
         self.supprimes: list[Fichier] = []
@@ -247,10 +260,11 @@ class Banc:
 
     def executer(self) -> Resultat:
         resultat = subprocess.run(
-            [sys.executable, str(self.script), *self.arguments],
+            [*self.interpreteur, str(self.script), *self.arguments],
             cwd=RACINE,
             capture_output=True,
             text=True,
+            env=self.environnement,
             check=False,
         )
         return Resultat(resultat.returncode, resultat.stdout, resultat.stderr)

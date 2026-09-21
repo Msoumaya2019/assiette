@@ -11,11 +11,11 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Élément | État |
 | --- | --- |
 | Code source complet, analysé sans avertissement | prêt |
-| 314 tests de l'application, tous verts | prêt |
+| 325 tests de l'application, tous verts | prêt |
 | 18 tests du serveur, tous verts | prêt |
 | Dépôt public | https://github.com/Msoumaya2019/assiette |
-| Flux `ci.yml` — analyse, 314 tests, 9 contrôles | **vert** |
-| Flux `ci.yml` — migrations Supabase exécutées sur un vrai PostgreSQL | **vert** (27 épreuves) |
+| Flux `ci.yml` — analyse, 325 tests, 9 contrôles | **vert** |
+| Flux `ci.yml` — migrations Supabase exécutées sur un vrai PostgreSQL | **vert** (35 épreuves) |
 | Flux Android — APK et AAB | **vert**, artefacts signés et vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
 | Déclenchement par étiquette `v*` | **vert** (`v0.1.0`, `v0.1.1`, `v0.1.2`, `v0.1.3`, `v0.1.4`) |
@@ -497,35 +497,42 @@ qui justifie sa présence, et c'est aussi pourquoi aucun ne doit être retiré s
 | `tools/check_migration_serveur.py` | une colonne du schéma local sans destination côté serveur, une table ajoutée d'un côté seulement, une politique RLS sans son `drop` |
 | `tools/verifier_version_build.py` | une régression dans la logique qui décide de la version publiée |
 | `tools/check_workflows.py` | YAML invalide, action non épinglée, `permissions` absentes, `run:` qui ne passe pas `bash -n`, script du dépôt appelé mais absent, un flux qui ne tire plus la version du même endroit que l'autre, et une compilation qui n'injecte pas `APP_VERSION` depuis la sortie du script de version |
-| `tools/eprouver_migration_sur_postgres.mjs` | du SQL qui ne s'exécute pas : colonne mal nommée, `references` vers une table absente, parenthèse en trop — et une politique RLS qui laisserait écrire au nom d'un autre |
+| `tools/eprouver_migration_sur_postgres.mjs` | du SQL qui ne s'exécute pas : colonne mal nommée, `references` vers une table absente, parenthèse en trop — une politique RLS qui laisserait écrire au nom d'un autre, une reprise de données fausse, et une migration écrite mais oubliée de la liste de l'épreuve |
 
-### Le schéma local ne change que par une seule liste
+### Le schéma local ne change que par paliers
 
 La base SQLite de l'appareil est passée en **schéma v2** (portions nommées, suivi du
-poids). Une base installée en v1 doit migrer **sans rien perdre** : c'est la
-première fois que ce projet a des données utilisateur à préserver.
+poids), puis en **v3** (pierres tombales sur `portions`, `templates` et `favorites`).
+Une base installée en v1 doit migrer **sans rien perdre**, et elle doit pouvoir le
+faire en traversant les deux paliers : c'est la première fois que ce projet a des
+données utilisateur à préserver.
 
-Trois règles, tenues par un test plutôt que par la vigilance :
+Quatre règles, tenues par un test plutôt que par la vigilance :
 
-1. **Une seule liste d'ajouts.** `_ajoutsVersion2` dans `app_database.dart` sert à
-   la fois à `onCreate` (base neuve) et à `onUpgrade` (base existante). Deux listes
-   séparées divergeraient au premier oubli, et une base neuve et une base migrée
-   n'auraient plus la même forme.
+1. **Une seule liste d'ajouts par palier.** `_ajoutsVersion2` et `_ajoutsVersion3`
+   servent à la fois à `onCreate` (base neuve) et à `onUpgrade` (base existante),
+   appliquées dans l'ordre. Deux listes séparées par chemin divergeraient au premier
+   oubli, et une base neuve et une base migrée n'auraient plus la même forme.
 2. **Aucun `DROP`, aucun `DELETE`.** Une migration qui recrée une table peut
    perdre ce qu'elle n'a pas pensé à recopier.
 3. **La forme est comparée, pas supposée.** `app/test/data/migration_test.dart`
    construit une base v1 **remplie**, la migre, puis compare sa structure à celle
    d'une base neuve — colonnes et objets SQLite, triés. Un test qui ne vérifierait
    que « les données sont là » laisserait passer une colonne manquante.
+4. **Chaque palier est traversé seul.** Une base v1 traverse 1→2 puis 2→3 dans le
+   même appel ; cela n'exerce donc jamais le palier 2→3 **isolément**. Un ordre
+   égaré d'une liste à l'autre passerait inaperçu, et ne casserait que les appareils
+   restés en version 2 — ceux qu'on ne peut pas remettre à zéro. Le banc construit
+   donc une base réellement en v2, et lui fait rejoindre le schéma courant.
 
-Le schéma v1 du test est **recopié à la main**, volontairement : c'est un fait
-historique, pas une dérivation du code courant. Le dériver ferait qu'une migration
-cassée serait testée contre la forme cassée, et le test resterait vert.
+Les schémas v1 et v2 du test sont **recopiés à la main**, volontairement : ce sont
+des faits historiques, pas une dérivation du code courant. Les dériver ferait qu'une
+migration cassée serait testée contre la forme cassée, et le test resterait vert.
 
 Le test a été **falsifié** : remplacer `if (from < 2)` par `if (from < 1)` fait
 tomber 4 des 7 cas. Un test de migration qui n'a jamais échoué ne prouve rien.
 
-### Le schéma serveur, remis d'accord avec le schéma local
+### Le schéma serveur, remis d'accord — deux fois
 
 La même vérité est écrite à deux endroits qui ne peuvent pas se lire :
 `app_database.dart` décrit ce que l'application stocke, `backend/supabase/migrations/`
@@ -545,7 +552,15 @@ destination serveur, et l'ensemble des colonnes serveur sans équivalent local e
 normaux, un oubli ne l'est pas. Les deux ensembles sont clos : une table ajoutée
 d'un côté fait échouer le contrôle tant qu'elle n'a pas été prise en compte.
 
-Deux détails de lecture, tous deux mesurés en écrivant ce contrôle :
+**Puis le schéma local est passé en v3**, et le serveur a repris du retard. Cette
+fois, personne n'a eu à s'en apercevoir : le contrôle a signalé quatre défauts de
+lui-même, dans **les deux sens** — deux colonnes locales sans destination
+(`favorites.updated_at`, `portions.deleted_at`) et deux déclarations devenues
+fausses (`meal_templates.deleted_at`, `favorites.deleted_at`, que le local alimente
+désormais). Un contrôle écrit pour fermer un retard a fermé le suivant sans qu'on
+lui demande rien. `0003_pierres_tombales.sql` les corrige.
+
+Trois détails de lecture, tous mesurés en écrivant ce contrôle :
 
 **Un `create table` se lit ligne à ligne, un `alter table … add column` s'écrit sur
 plusieurs lignes.** Aplatir le fichier avant d'extraire les colonnes d'un bloc ne
@@ -559,6 +574,13 @@ deux lectures coexistent, chacune sur la forme de texte qui lui convient.
 le contrôle tombe ; le même état, retrait désactivé : il reste vert sur un fichier
 fautif. Le second temps est le seul qui établisse que ce retrait porte quelque
 chose.
+
+**Un commentaire de migration peut devenir faux sans que le DDL change.** Le
+commentaire de `0002` annonçait « pas de `deleted_at` : le schéma local n'en a pas
+non plus ». Il était juste quand il a été écrit. Il a été corrigé sur place, et
+seulement lui : un commentaire n'est pas du DDL, le corriger ne change rien à ce
+qu'une migration déjà appliquée a fait. Le DDL, lui, est de l'histoire et ne bouge
+plus.
 
 ### Le contrôle qui était vert en n'ayant rien mesuré
 
@@ -581,12 +603,34 @@ brut, le contrôle échoue. C'est le comptage brut qui l'emporte. Le banc reprod
 l'aveuglement historique, motif fautif remis en place, et exige que le contrôle
 tombe malgré tout.
 
+### Une migration neuve ne peut plus passer inaperçue
+
+L'épreuve PGlite listait ses migrations **en dur**, dans deux boucles. Une
+migration écrite plus tard aurait donc été silencieusement non éprouvée, et le
+script aurait rendu un vert sur un ensemble incomplet — exactement le défaut du
+validateur qui annonçait « Politiques : 0 ».
+
+Le script **découvre** désormais les fichiers sur le disque et exige de les
+retrouver dans une liste déclarée, `MIGRATIONS_ATTENDUES`. Un fichier présent et
+non déclaré, ou déclaré et absent, fait échouer l'épreuve en le nommant.
+
+Et ce garde-fou est lui-même éprouvé, dans les deux sens : le banc crée une
+migration non déclarée (l'épreuve tombe), puis le même oubli avec le garde-fou
+rendu inatteignable (l'épreuve reste verte). Le second temps est le seul qui
+établisse que c'est bien le garde-fou qui porte quelque chose.
+
 ### Ce qui n'est pas prouvé
 
 L'épreuve PGlite établit que le SQL s'exécute et que les politiques filtrent. Elle
 ne dit rien des droits par défaut de Supabase, qui n'y sont pas reproduits, ni des
 extensions, ni de Realtime. Un essai contre le vrai projet reste nécessaire avant
 de s'y fier — la marche à suivre est dans `backend/README.md`.
+
+Les pierres tombales sont en place des deux côtés, mais **la règle d'arbitrage
+entre deux versions divergentes n'est pas décidée** : aucun code ne dit encore
+laquelle gagne, ni comment une suppression l'emporte sur une modification. C'est
+la question que la synchronisation devra trancher, et elle n'est pas tranchée par
+une migration.
 
 ### La version publiée, décidée à un seul endroit
 
@@ -649,6 +693,7 @@ python3 tools/bancs/falsifier_proxy_dart.py            # 6 cas — mode proxy (F
 python3 tools/bancs/falsifier_version_build.py         # 6 cas — version publiée
 python3 tools/bancs/falsifier_check_workflows.py       # 19 cas — validation des flux
 python3 tools/bancs/falsifier_migration_serveur.py     # 12 cas — accord des deux schémas
+python3 tools/bancs/falsifier_epreuve_migrations.py    # 6 cas — épreuve PostgreSQL
 ```
 
 `falsifier_migration_serveur.py` couvre les deux côtés et les deux sens. Il
@@ -664,6 +709,21 @@ serveur (colonne retirée, table renommée, colonne non déclarée), et les poli
   le commentaire qui la nomme : le contrôle tombe. Le même état, retrait
   désactivé : il reste **vert sur un fichier fautif**, et c'est ce second temps qui
   établit que ce retrait porte quelque chose.
+
+`falsifier_epreuve_migrations.py` éprouve l'épreuve PGlite. C'est le premier banc
+qui n'éprouve pas un script Python : le harnais a reçu un paramètre d'interpréteur,
+et ce banc cherche Node et PGlite là où l'espace de travail isolé les range — en le
+disant s'il ne les trouve pas, plutôt que de conclure « non détecté » sur des cas
+qu'il n'a pas mesurés. Trois de ses cas méritent d'être cités :
+
+- **une migration non déclarée.** Le fichier existe, l'épreuve ne le connaît pas :
+  elle tombe en le nommant ;
+- **le même oubli, garde-fou désactivé.** L'épreuve applique alors la migration
+  inconnue sans broncher et rend un **vert sur un ensemble incomplet**. C'est ce
+  second temps qui établit que le garde-fou porte quelque chose ;
+- **la reprise des favoris retirée de `0003`.** Rien ne casse : la colonne existe
+  et vaut `NULL`. Seule la comparaison avec `created_at` peut le voir — et elle le
+  voit.
 
 `falsifier_check_workflows.py` éprouve le seul contrôle qui lit `.github/workflows`,
 et qui n'en avait aucun. Trois de ses cas méritent d'être cités :

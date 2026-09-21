@@ -14,11 +14,17 @@
  *
  * ## Ce que ce script etablit
  *
- *   1. `0001_init.sql` puis `0002_portions_et_suivi.sql` s'appliquent ;
- *   2. **les deux se rejouent** — appliquees deux fois, sans erreur ;
+ *   1. **toutes** les migrations du dossier s'appliquent, dans l'ordre, et
+ *      **toutes** se rejouent — appliquees deux fois, sans erreur ;
+ *   2. une migration ecrite mais absente de `MIGRATIONS_ATTENDUES` fait
+ *      **echouer** l'epreuve, avec le nom du fichier oublie. Sans cela, une
+ *      migration neuve serait silencieusement non eprouvee ;
  *   3. les trois tables ajoutees filtrent par utilisateur ;
  *   4. elles refusent une ecriture au nom d'un autre ;
- *   5. une revendication absente **refuse** au lieu de lever.
+ *   5. une revendication absente **refuse** au lieu de lever ;
+ *   6. `0003` s'applique sur une base **qui porte deja des donnees**, et
+ *      `favorites.updated_at` y est rempli depuis `created_at` — et non depuis
+ *      `now()`, ce que rien d'autre ne distinguerait.
  *
  * ## Ce qu'il n'etablit pas
  *
@@ -38,7 +44,7 @@
  *   NODE_PATH=<espace-node>/node_modules node tools/eprouver_migration_sur_postgres.mjs
  */
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -65,14 +71,57 @@ try {
 const ICI = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS = join(ICI, '..', 'backend', 'supabase', 'migrations');
 
+/**
+ * Les migrations que cette epreuve doit couvrir, **declarees a la main**.
+ *
+ * Elles sont lues sur le disque, pas prises dans cette liste : c'est le disque
+ * qui fait foi. Cette liste existe pour l'autre moitie du controle — une
+ * migration ecrite mais oubliee ici serait **silencieusement non eprouvee**, et
+ * l'epreuve resterait verte en n'ayant pas regarde le fichier neuf. C'est
+ * exactement le defaut que ce depot a deja rencontre ailleurs (un validateur
+ * qui annoncait « Politiques : 0 » sur un fichier qui en portait six).
+ *
+ * Ecrire une migration sans l'ajouter ici fait donc echouer l'epreuve, avec le
+ * nom du fichier oublie.
+ */
+const MIGRATIONS_ATTENDUES = [
+  '0001_init.sql',
+  '0002_portions_et_suivi.sql',
+  '0003_pierres_tombales.sql',
+];
+
 const UA = '11111111-1111-1111-1111-111111111111';
 const UB = '22222222-2222-2222-2222-222222222222';
+
+const surDisque = readdirSync(MIGRATIONS)
+  .filter((nom) => nom.endsWith('.sql'))
+  .sort();
 
 const resultats = [];
 const noter = (nom, ok, detail) => {
   resultats.push({ nom, ok });
   console.log(`${ok ? 'OK  ' : 'ECHEC'}  ${nom}${detail ? `  ${detail}` : ''}`);
 };
+
+// Le controle d'exhaustivite, avant toute autre chose : sans lui, l'epreuve
+// pourrait passer en entier sans avoir jamais ouvert la derniere migration.
+const oubliees = surDisque.filter((nom) => !MIGRATIONS_ATTENDUES.includes(nom));
+const fantomes = MIGRATIONS_ATTENDUES.filter((nom) => !surDisque.includes(nom));
+if (oubliees.length || fantomes.length) {
+  for (const nom of oubliees) {
+    console.error(
+      `La migration ${nom} existe mais n'est pas dans MIGRATIONS_ATTENDUES : ` +
+        "elle ne serait pas eprouvee. L'ajouter a la liste.",
+    );
+  }
+  for (const nom of fantomes) {
+    console.error(
+      `MIGRATIONS_ATTENDUES annonce ${nom}, qui n'existe pas sur le disque.`,
+    );
+  }
+  process.exit(2);
+}
+
 
 // ---------------------------------------------------------------------------
 // La doublure de Supabase
@@ -131,9 +180,9 @@ const DOUBLURE = `
 const db = new PGlite();
 
 /** Applique un fichier de migration. Rend le nombre d'instructions lues. */
-async function appliquer(nom) {
+async function appliquer(nom, base = db) {
   const sql = readFileSync(join(MIGRATIONS, nom), 'utf8');
-  await db.exec(sql);
+  await base.exec(sql);
   return sql.split('\n').length;
 }
 
@@ -161,7 +210,7 @@ await db.exec(DOUBLURE);
 
 // --- 1. Les migrations s'appliquent, et se rejouent ------------------------
 
-for (const nom of ['0001_init.sql', '0002_portions_et_suivi.sql']) {
+for (const nom of surDisque) {
   try {
     const lignes = await appliquer(nom);
     noter(`${nom} s'applique`, true, `${lignes} lignes`);
@@ -170,7 +219,7 @@ for (const nom of ['0001_init.sql', '0002_portions_et_suivi.sql']) {
   }
 }
 
-for (const nom of ['0001_init.sql', '0002_portions_et_suivi.sql']) {
+for (const nom of surDisque) {
   try {
     await appliquer(nom);
     noter(`${nom} se rejoue sans erreur`, true);
@@ -219,6 +268,32 @@ for (const nom of ['0001_init.sql', '0002_portions_et_suivi.sql']) {
     'les colonnes de rattrapage existent',
     trouvees.length === 3,
     trouvees.join(', '),
+  );
+}
+
+{
+  // Les colonnes de `0003`. Elles sont nommees une a une : un `deleted_at`
+  // ajoute a la mauvaise table satisferait un simple comptage.
+  const attendues = [
+    'favorites.deleted_at',
+    'favorites.updated_at',
+    'meal_templates.deleted_at',
+    'portions.deleted_at',
+  ];
+  const r = await db.query(
+    `select table_name || '.' || column_name as nom
+       from information_schema.columns
+      where table_schema = 'public'
+        and column_name in ('deleted_at', 'updated_at')
+        and table_name in ('favorites', 'meal_templates', 'portions')
+      order by nom`,
+  );
+  const presentes = r.rows.map((ligne) => ligne.nom);
+  const manquantes = attendues.filter((nom) => !presentes.includes(nom));
+  noter(
+    'les pierres tombales de 0003 existent',
+    manquantes.length === 0,
+    manquantes.length ? `manquantes : ${manquantes.join(', ')}` : presentes.join(', '),
   );
 }
 
@@ -357,6 +432,118 @@ for (const table of ['portions', 'weight_entries', 'body_measurements']) {
     r.rows[0].n === 9,
     `${r.rows[0].n} politique(s)`,
   );
+}
+
+// --- 9. La migration 0003 sur une base qui porte deja des donnees ----------
+//
+// C'est le cas reel : `0002` tourne, l'utilisateur a des favoris, et `0003`
+// arrive. Le premier scenario applique les trois migrations a la suite sur une
+// base **vide**, ce qui ne prouve rien sur ce point — la reprise des donnees
+// n'a alors aucune ligne a reprendre, et un `update` faux, ou meme absent,
+// passerait inapercu.
+//
+// PGlite rend une base neuve en une ligne, donc le cas se mesure.
+
+{
+  const avant = new PGlite();
+  await avant.exec(DOUBLURE);
+  await appliquer('0001_init.sql', avant);
+  await appliquer('0002_portions_et_suivi.sql', avant);
+
+  // Un favori et une portion anterieurs a `0003`. Le favori porte un
+  // `created_at` **eloigne de l'heure courante** : c'est ce qui permet de
+  // distinguer « rempli depuis `created_at` » de « rempli par `default now()` »,
+  // deux resultats que rien d'autre ne separerait.
+  await avant.exec(`
+    insert into public.favorites (user_id, client_id, kind, label, payload, created_at)
+    values ('${UA}', 'fav-ancien', 'food', 'Riz', '{"name":"Riz"}', '2026-01-02T03:04:05Z');
+
+    insert into public.portions (user_id, cle, label, grams)
+    values ('${UA}', 'nom:gateau', 'gateau', 65);
+  `);
+
+  try {
+    await appliquer('0003_pierres_tombales.sql', avant);
+    noter("0003 s'applique sur une base qui porte deja des donnees", true);
+  } catch (erreur) {
+    noter(
+      "0003 s'applique sur une base qui porte deja des donnees",
+      false,
+      erreur.message,
+    );
+  }
+
+  const favoris = await avant.query(
+    `select created_at, updated_at from public.favorites where client_id = 'fav-ancien'`,
+  );
+  const ligne = favoris.rows[0];
+  const rempliDepuisCreation =
+    Boolean(ligne) &&
+    ligne.updated_at !== null &&
+    new Date(ligne.updated_at).getTime() === new Date(ligne.created_at).getTime();
+  noter(
+    'favorites.updated_at est rempli depuis created_at, pas depuis now()',
+    rempliDepuisCreation,
+    ligne
+      ? `created_at=${new Date(ligne.created_at).toISOString()} ` +
+        `updated_at=${ligne.updated_at === null ? 'NULL' : new Date(ligne.updated_at).toISOString()}`
+      : 'aucune ligne',
+  );
+
+  const portions = await avant.query(
+    `select grams, deleted_at from public.portions where cle = 'nom:gateau'`,
+  );
+  noter(
+    'une portion anterieure reste vivante',
+    portions.rows.length === 1 && portions.rows[0].deleted_at === null,
+    portions.rows.length
+      ? `grams=${portions.rows[0].grams} deleted_at=${portions.rows[0].deleted_at}`
+      : 'aucune ligne',
+  );
+
+  try {
+    await avant.exec(
+      `update public.portions set deleted_at = now() where cle = 'nom:gateau'`,
+    );
+    const effacee = await avant.query(
+      `select deleted_at from public.portions where cle = 'nom:gateau'`,
+    );
+    noter(
+      "la pierre tombale d'une portion s'ecrit",
+      effacee.rows[0].deleted_at !== null,
+      String(effacee.rows[0].deleted_at),
+    );
+
+    // Redefinir la portion efface sa pierre tombale : c'est le geste par lequel
+    // l'utilisateur revient sur sa suppression, et `writePortion` l'ecrit ainsi.
+    // Le serveur doit l'accepter par la meme porte, la cle primaire etant
+    // `(user_id, cle)`.
+    await avant.exec(`
+      insert into public.portions (user_id, cle, label, grams, deleted_at)
+      values ('${UA}', 'nom:gateau', 'gateau', 70, null)
+      on conflict (user_id, cle) do update
+        set label = excluded.label,
+            grams = excluded.grams,
+            deleted_at = null;
+    `);
+    const revelee = await avant.query(
+      `select grams, deleted_at from public.portions where cle = 'nom:gateau'`,
+    );
+    noter(
+      'redefinir une portion efface sa pierre tombale',
+      revelee.rows[0].deleted_at === null &&
+        Number(revelee.rows[0].grams) === 70,
+      `grams=${revelee.rows[0].grams} deleted_at=${revelee.rows[0].deleted_at}`,
+    );
+  } catch (erreur) {
+    noter(
+      "la pierre tombale d'une portion s'ecrit",
+      false,
+      `${erreur.code ?? '?'} — ${erreur.message}`,
+    );
+  }
+
+  await avant.close();
 }
 
 // ---------------------------------------------------------------------------

@@ -84,7 +84,8 @@ SOURCE_DART = RACINE / "app" / "lib"
 #
 # Ce qui suit est la seule partie ecrite a la main du fichier, et c'est
 # volontaire : un accord se declare, sinon il n'y a rien a tenir. Chaque entree
-# correspond a une decision prise en ecrivant `0002_portions_et_suivi.sql`.
+# correspond a une decision prise en ecrivant `0002_portions_et_suivi.sql` ou
+# `0003_pierres_tombales.sql`.
 # ---------------------------------------------------------------------------
 
 # Table locale -> table serveur.
@@ -135,9 +136,15 @@ RENOMMAGES = {
 #   - les `total_*` de `meals` : une denormalisation pour accelerer le tableau
 #     de bord, recalculee depuis les lignes de `meal_items` ;
 #   - `created_at`/`updated_at` sur `meal_items` : le local n'horodate pas les
-#     lignes d'un repas, seul le repas l'est ;
-#   - `deleted_at` sur `meal_templates` et `favorites` : le local supprime ces
-#     deux-la definitivement, sans pierre tombale.
+#     lignes d'un repas, seul le repas l'est.
+#
+# `meal_templates.deleted_at` et `favorites.deleted_at` etaient declares ici
+# jusqu'au 21 septembre : le local supprimait ces deux tables definitivement.
+# La version 3 du schema local leur a donne des pierres tombales, donc ces deux
+# colonnes sont desormais **alimentees** et n'ont plus rien a faire dans cette
+# liste. Le controle l'a signale de lui-meme, dans les deux sens a la fois — les
+# colonnes locales `portions.deleted_at` et `favorites.updated_at` sans
+# destination, et ces deux declarations devenues fausses.
 SERVEUR_SEUL = {
     "meals": {
         "id",
@@ -151,8 +158,8 @@ SERVEUR_SEUL = {
         "total_salt_g",
     },
     "meal_items": {"id", "user_id", "created_at", "updated_at"},
-    "meal_templates": {"id", "user_id", "deleted_at"},
-    "favorites": {"id", "user_id", "deleted_at"},
+    "meal_templates": {"id", "user_id"},
+    "favorites": {"id", "user_id"},
     "portions": {"user_id"},
     "weight_entries": {"id", "user_id"},
     "body_measurements": {"id", "user_id"},
@@ -199,8 +206,13 @@ SETTINGS_LOCAUX = {
 
 # Planchers d'extraction. Un lecteur qui ne trouve rien rend un vert qui ne
 # prouve rien ; ces bornes le font echouer au lieu de le laisser passer.
+#
+# Ils sont tenus **pres de la realite** (67 colonnes locales, 8 tables), avec
+# une petite marge : un plancher trop bas laisserait passer un lecteur qui a
+# perdu un morceau, ce qui est exactement le defaut qu'ils existent pour
+# fermer. Les tables ont en plus un comptage brut, qui les rend exactes.
 MIN_TABLES_LOCALES = 8
-MIN_COLONNES_LOCALES = 60
+MIN_COLONNES_LOCALES = 65
 MIN_TABLES_SERVEUR = 8
 MIN_POLITIQUES = 9
 

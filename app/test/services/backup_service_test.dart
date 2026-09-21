@@ -810,8 +810,151 @@ void main() {
         };
 
         final lue = SauvegardeLue.depuisTexte(jsonEncode(json));
-        expect(lue.portions.keys, ['bonne']);
+        expect(lue.portions.map((p) => p.cle), ['bonne']);
       },
     );
+
+    test(
+      'les portions ecrites avant les pierres tombales restent lisibles',
+      () async {
+        // Forme historique : un objet `{cle: portion}`, sans horodatage ni
+        // suppression. Un fichier exporte par une version anterieure doit
+        // continuer de se restaurer.
+        final texte = await service.exporter();
+        final json = jsonDecode(texte) as Map<String, dynamic>;
+        json['portions'] = {
+          'ciqual:9100': {'label': 'part', 'grams': 80},
+        };
+
+        final lue = SauvegardeLue.depuisTexte(jsonEncode(json));
+        expect(lue.portions, hasLength(1));
+        expect(lue.portions.single.cle, 'ciqual:9100');
+        expect(lue.portions.single.estSupprimee, isFalse);
+        // Aucun horodatage dans cette forme : zero dit « inconnu », et non
+        // « 1970 ». C'est ce que la restauration ecrira.
+        expect(lue.portions.single.updatedAt, 0);
+
+        await vers(cible).restaurer(lue, mode: ModeRestauration.remplacement);
+        expect((await cible.readPortion('ciqual:9100'))!.grams, 80);
+      },
+    );
+
+    test('une portion supprimee voyage, et ne revient pas', () async {
+      // Le point de la pierre tombale : sans elle, restaurer sur un appareil ou
+      // la portion avait ete supprimee la ferait reapparaitre.
+      await source.writePortion(
+        'ciqual:9100',
+        const Portion(label: 'part', grams: 80),
+      );
+      await source.deletePortion('ciqual:9100');
+
+      final lue = SauvegardeLue.depuisTexte(await service.exporter());
+      expect(lue.portions, hasLength(1));
+      expect(lue.portions.single.estSupprimee, isTrue);
+      expect(lue.portionsVivantes, 0);
+      expect(lue.portionsSupprimees, 1);
+
+      // La cible, elle, connait la portion : elle doit disparaitre.
+      await cible.writePortion(
+        'ciqual:9100',
+        const Portion(label: 'part', grams: 80),
+      );
+      await vers(cible).restaurer(lue, mode: ModeRestauration.remplacement);
+
+      expect(await cible.readPortion('ciqual:9100'), isNull);
+      // La ligne est bien la, mais muette : c'est elle qui propagera l'effacement.
+      expect(await cible.clesDePortions(), contains('ciqual:9100'));
+    });
+
+    test('une fusion ne ressuscite pas une portion supprimee ici', () async {
+      // La source a encore la portion, la cible l'a supprimee. Fusionner ne doit
+      // pas la ramener : « fusionner » n'efface rien, mais ne ressuscite rien
+      // non plus.
+      await source.writePortion(
+        'ciqual:9100',
+        const Portion(label: 'part', grams: 80),
+      );
+      await cible.writePortion(
+        'ciqual:9100',
+        const Portion(label: 'part', grams: 80),
+      );
+      await cible.deletePortion('ciqual:9100');
+
+      final lue = SauvegardeLue.depuisTexte(await service.exporter());
+      final rapport = await vers(
+        cible,
+      ).restaurer(lue, mode: ModeRestauration.fusion);
+
+      expect(rapport.portionsEcrites, 0);
+      expect(rapport.portionsIgnorees, 1);
+      expect(await cible.readPortion('ciqual:9100'), isNull);
+    });
+
+    test('une fusion ne ressuscite pas un modele supprime ici', () async {
+      // Meme modele des deux cotes : c'est l'identifiant qui doit faire foi, et
+      // il est present localement — sous forme de pierre tombale.
+      await source.saveTemplate('tpl-1', 'Petit dejeuner', [
+        MealItem(food: riz, quantityG: 150),
+      ]);
+      await cible.saveTemplate('tpl-1', 'Petit dejeuner', [
+        MealItem(food: riz, quantityG: 150),
+      ]);
+      await cible.deleteTemplate('tpl-1');
+
+      final lue = SauvegardeLue.depuisTexte(await service.exporter());
+      expect(
+        lue.templates.single.estSupprime,
+        isFalse,
+        reason: 'la source, elle, le garde',
+      );
+
+      final rapport = await vers(
+        cible,
+      ).restaurer(lue, mode: ModeRestauration.fusion);
+
+      expect(rapport.templatesEcrits, 0);
+      expect(rapport.templatesIgnores, 1);
+      expect(await cible.templates(), isEmpty);
+    });
+
+    test('une fusion ne ressuscite pas un favori supprime ici', () async {
+      await source.addFavorite('fav-1', 'food', 'Riz blanc cuit', {
+        'food': riz.toJson(),
+      });
+      await cible.addFavorite('fav-1', 'food', 'Riz blanc cuit', {
+        'food': riz.toJson(),
+      });
+      await cible.deleteFavorite('fav-1');
+
+      final lue = SauvegardeLue.depuisTexte(await service.exporter());
+      expect(lue.favorites.single.estSupprime, isFalse);
+
+      final rapport = await vers(
+        cible,
+      ).restaurer(lue, mode: ModeRestauration.fusion);
+
+      expect(rapport.favoritesEcrits, 0);
+      expect(rapport.favoritesIgnores, 1);
+      expect(await cible.favorites(), isEmpty);
+      expect(await cible.isFavorite('fav-1'), isFalse);
+    });
+
+    test('redefinir une portion efface sa pierre tombale', () async {
+      // Le geste par lequel l'utilisateur revient sur sa suppression, sans
+      // passer par la base : ecrire une portion, c'est la faire vivre.
+      await source.writePortion(
+        'ciqual:9100',
+        const Portion(label: 'part', grams: 80),
+      );
+      await source.deletePortion('ciqual:9100');
+      await source.writePortion(
+        'ciqual:9100',
+        const Portion(label: 'bol', grams: 250),
+      );
+
+      final lue = SauvegardeLue.depuisTexte(await service.exporter());
+      expect(lue.portions.single.estSupprimee, isFalse);
+      expect((await source.readPortion('ciqual:9100'))!.grams, 250);
+    });
   });
 }

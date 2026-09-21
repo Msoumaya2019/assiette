@@ -16,6 +16,10 @@ YAML, et sans PyYAML ce controle sort en 1 sans le moindre marqueur — tous les
 cas se liraient « non detecte ». Le lanceur le dit avant de commencer, plutot
 que de laisser accuser le banc.
 
+`falsifier_epreuve_migrations.py` a besoin de Node et de PGlite. Il les cherche
+lui-meme et s'arrete en le disant s'il ne les trouve pas : un banc qui ne peut
+pas mesurer doit le dire, pas rendre « non detecte ».
+
 Usage : python3 tools/lancer_bancs.py
 """
 
@@ -28,7 +32,8 @@ from pathlib import Path
 RACINE = Path(__file__).resolve().parent.parent
 BANCS = RACINE / "tools" / "bancs"
 
-# Le banc du serveur a besoin de Deno ; les autres, de rien d'autre que Python.
+# Le banc du serveur a besoin de Deno ; `falsifier_epreuve_migrations.py` a
+# besoin de Node et de PGlite ; les autres, de rien d'autre que Python.
 ORDRE = [
     "falsifier_fins_de_ligne.py",
     "falsifier_ios.py",
@@ -39,6 +44,7 @@ ORDRE = [
     "falsifier_check_workflows.py",
     "falsifier_client_deepseek.py",
     "falsifier_migration_serveur.py",
+    "falsifier_epreuve_migrations.py",
 ]
 
 

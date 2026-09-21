@@ -68,7 +68,7 @@ class SauvegardeLue {
     required this.photosAbsentes,
     this.pesees = const [],
     this.mesures = const [],
-    this.portions = const {},
+    this.portions = const [],
   });
 
   final int version;
@@ -78,7 +78,10 @@ class SauvegardeLue {
   /// Repas, supprimes compris.
   final List<MealEnregistre> meals;
 
+  /// Repas enregistres, supprimes compris.
   final List<TemplateEnregistre> templates;
+
+  /// Favoris, supprimes compris.
   final List<FavoriteEnregistre> favorites;
 
   /// Reglages a reinscrire, hors cles exclues.
@@ -99,8 +102,8 @@ class SauvegardeLue {
   /// Mesures corporelles, supprimees comprises.
   final List<MesureEnregistree> mesures;
 
-  /// Portions retenues, par cle d'aliment.
-  final Map<String, Portion> portions;
+  /// Portions retenues, supprimees comprises.
+  final List<PortionEnregistree> portions;
 
   int get mealsVivants => meals.where((m) => !m.estSupprime).length;
 
@@ -113,6 +116,10 @@ class SauvegardeLue {
   int get mesuresVivantes => mesures.where((m) => !m.estSupprimee).length;
 
   int get mesuresSupprimees => mesures.where((m) => m.estSupprimee).length;
+
+  int get portionsVivantes => portions.where((p) => !p.estSupprimee).length;
+
+  int get portionsSupprimees => portions.where((p) => p.estSupprimee).length;
 
   /// Lit un fichier de sauvegarde.
   ///
@@ -199,16 +206,7 @@ class SauvegardeLue {
       'les mesures',
     ).map(_lireMesure).toList();
 
-    final portions = <String, Portion>{};
-    final portionsJson = json['portions'];
-    if (portionsJson is Map) {
-      for (final entree in portionsJson.cast<Object?, Object?>().entries) {
-        final cle = entree.key;
-        if (cle is! String) continue;
-        final portion = Portion.depuisJson(entree.value);
-        if (portion != null) portions[cle] = portion;
-      }
-    }
+    final portions = _lirePortions(json['portions']);
 
     // L'objectif de poids n'a pas de section a lui : il vit dans la table
     // `settings`, comme les objectifs nutritionnels, et suit donc le bloc
@@ -282,6 +280,7 @@ class SauvegardeLue {
         ),
         createdAt: _entier(json['createdAt']) ?? 0,
         updatedAt: _entier(json['updatedAt']) ?? 0,
+        deletedAt: _entier(json['deletedAt']),
       );
     } on SauvegardeIllisible {
       rethrow;
@@ -296,6 +295,7 @@ class SauvegardeLue {
   static FavoriteEnregistre _lireFavorite(Object? valeur) {
     final json = _objet(valeur, 'un favori');
     try {
+      final createdAt = _entier(json['createdAt']) ?? 0;
       return FavoriteEnregistre(
         favorite: Favorite(
           id: _texte(json['id'], 'un identifiant de favori'),
@@ -304,7 +304,12 @@ class SauvegardeLue {
           payload: ((json['payload'] as Map?) ?? const {})
               .cast<String, dynamic>(),
         ),
-        createdAt: _entier(json['createdAt']) ?? 0,
+        createdAt: createdAt,
+        // Une sauvegarde ecrite avant la version 3 du schema n'a pas
+        // d'`updatedAt` : un favori jamais modifie a ete modifie pour la
+        // derniere fois quand il a ete cree.
+        updatedAt: _entier(json['updatedAt']) ?? createdAt,
+        deletedAt: _entier(json['deletedAt']),
       );
     } on SauvegardeIllisible {
       rethrow;
@@ -314,6 +319,61 @@ class SauvegardeLue {
         hint: 'Le fichier est probablement abime.',
       );
     }
+  }
+
+  /// Portions, dans l'une ou l'autre des deux formes ecrites.
+  ///
+  /// Elles ont d'abord ete sauvegardees comme un objet `{cle: portion}`, puis
+  /// comme une liste, le jour ou elles ont gagne une pierre tombale — une cle
+  /// ne peut pas porter « supprimee ». **Les deux formes sont lues** : un
+  /// fichier produit avant ce changement reste exploitable, et c'est le point
+  /// d'une sauvegarde. Refuser les anciens fichiers pour une raison de
+  /// commodite serait le contraire du but.
+  static List<PortionEnregistree> _lirePortions(Object? valeur) {
+    if (valeur == null) return const [];
+    if (valeur is List) return valeur.map(_lirePortion).toList();
+
+    if (valeur is Map) {
+      final resultat = <PortionEnregistree>[];
+      for (final entree in valeur.cast<Object?, Object?>().entries) {
+        final cle = entree.key;
+        if (cle is! String) continue;
+        final portion = Portion.depuisJson(entree.value);
+        if (portion == null) continue;
+        // L'ancienne forme ne portait aucune date : zero dit « inconnue »,
+        // plutot que d'inventer « maintenant » et de faire croire a une
+        // modification recente.
+        resultat.add(
+          PortionEnregistree(cle: cle, portion: portion, updatedAt: 0),
+        );
+      }
+      return resultat;
+    }
+
+    throw const SauvegardeIllisible(
+      'La sauvegarde est abimee : les portions ne forment ni une liste ni un '
+      'objet.',
+      hint: 'Le fichier est probablement tronque.',
+    );
+  }
+
+  static PortionEnregistree _lirePortion(Object? valeur) {
+    final json = _objet(valeur, 'une portion');
+    final portion = Portion.depuisJson(json['portion']);
+    final cle = json['cle'];
+    if (portion == null || cle is! String || cle.isEmpty) {
+      throw const SauvegardeIllisible(
+        'Une portion de la sauvegarde est illisible : sa cle ou le poids de son '
+        'unite manque.',
+        hint: 'Le fichier est probablement abime.',
+      );
+    }
+    return PortionEnregistree(
+      cle: cle,
+      portion: portion,
+      updatedAt: _entier(json['updatedAt']) ?? 0,
+      deletedAt: _entier(json['deletedAt']),
+    );
   }
 
   static PeseeEnregistree _lirePesee(Object? valeur) {

@@ -238,7 +238,7 @@ Le backend se déploie sur Supabase :
 supabase functions deploy analyze-meal
 supabase functions deploy analyze-label
 supabase secrets set DEEPSEEK_API_KEY=...   # jamais dans le dépôt
-supabase db push                            # applique migrations/0001_init.sql
+supabase db push                            # applique migrations/0001, 0002, 0003
 ```
 
 Voir `backend/README.md`.
@@ -332,11 +332,13 @@ dans un travail séparé, `tools/check_workflows.py` — qui valide la structure
 flux de travail, la présence des scripts qu'ils appellent, et le fait que
 `android.yml` et `ios.yml` tirent la version du même endroit.
 
-Un troisième travail, `migrations`, exécute les deux migrations Supabase sur un vrai
-PostgreSQL compilé en WebAssembly (`tools/eprouver_migration_sur_postgres.mjs`) :
+Un troisième travail, `migrations`, exécute **toutes** les migrations Supabase sur un
+vrai PostgreSQL compilé en WebAssembly (`tools/eprouver_migration_sur_postgres.mjs`) :
 sans Docker et sans service, il vérifie qu'elles s'appliquent, qu'elles se
-**rejouent**, et que les politiques RLS filtrent par utilisateur — y compris du côté
-écriture. C'est le seul contrôle qui lit du SQL **exécuté** plutôt que du SQL relu.
+**rejouent**, que les politiques RLS filtrent par utilisateur — y compris du côté
+écriture — et qu'une migration neuve oubliée de la liste de l'épreuve fait échouer
+celle-ci au lieu de n'être jamais ouverte. C'est le seul contrôle qui lit du SQL
+**exécuté** plutôt que du SQL relu.
 
 ### La version publiée vient du tag, et d'un seul endroit
 
@@ -411,7 +413,7 @@ CI, sur cette machine :
 ```bash
 python tools/verifier_version_build.py    # 11 cas sur tools/version_build.sh
 python tools/check_migration_serveur.py   # accord des schémas local et serveur
-python tools/lancer_bancs.py              # les neuf bancs de falsification
+python tools/lancer_bancs.py              # les dix bancs de falsification
 ```
 
 L'épreuve des migrations, elle, demande Node et le paquet `@electric-sql/pglite`,
@@ -420,6 +422,10 @@ qui n'est pas vendoré dans le dépôt :
 ```bash
 NODE_PATH=<espace-node>/node_modules node tools/eprouver_migration_sur_postgres.mjs
 ```
+
+Le banc qui l'éprouve, `falsifier_epreuve_migrations.py`, cherche Node et PGlite
+lui-même et **s'arrête en le disant** s'il ne les trouve pas : un banc qui ne peut
+pas mesurer doit le dire, pas rendre « non détecté ».
 
 Un banc de falsification retire un garde-fou à la fois et vérifie que le contrôle
 tombe. Un contrôle qui n'a jamais échoué ne prouve rien : il peut regarder au
@@ -471,10 +477,11 @@ Couverture actuelle :
   invariant), nombre d'unités déduit du poids et non l'inverse, poids par unité
   lu dans une étiquette (`2 biscuits (25 g)` → 12,5 g), mentions ambiguës
   refusées, portion retenue qui prime sur celle de la source ;
-- **migration de schéma v1 → v2** : une base v1 remplie migre sans perte, les
-  pierres tombales restent mortes, les nouvelles tables existent et sont vides, et
-  la base migrée est **structurellement identique** à une base neuve (colonnes et
-  objets SQLite comparés) ;
+- **migration de schéma** : une base v1 remplie migre sans perte jusqu'au schéma
+  courant, les pierres tombales restent mortes, les nouvelles tables existent et
+  sont vides, et la base migrée est **structurellement identique** à une base neuve
+  (colonnes et objets SQLite comparés). Une base **v2** est éprouvée séparément :
+  c'est le seul chemin où le palier 2 → 3 est joué seul ;
 - **suivi du poids** : une pesée par jour retenue, variation, bornes de la courbe
   élargies pour contenir l'objectif, mensurations par type, et refus des valeurs
   nulles ou négatives ;
@@ -522,7 +529,7 @@ macOS et Linux, `flutter` fonctionne normalement.
 | Sauvegarde : export JSON et restauration (fusion ou remplacement) | Écrit, testé |
 | Portions nommées (« pour 1 gâteau »), retenues par aliment | Écrit, testé |
 | Suivi du poids : courbe, objectif, mensurations | Écrit, testé |
-| Base locale en schéma v2 (migration v1 → v2 éprouvée) | Écrit, testé |
+| Base locale en schéma v3 (migrations v1 → v3 et v2 → v3 éprouvées) | Écrit, testé |
 | Notifications (rappels de repas, résumé du soir) | Écrit, testé |
 | Compte et synchronisation | Schéma serveur prêt, interface à brancher |
 | APK et AAB signés, IPA non signée | Produits et vérifiés — release `v0.1.4` (la `v0.1.3` est fautive, ne pas l'installer) |

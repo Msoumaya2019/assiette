@@ -820,10 +820,14 @@ final seriePoidsProvider = Provider<AsyncValue<SeriePoids>>((ref) {
 /// autant d'acces pendant le defilement. La table reste petite — quelques
 /// dizaines de lignes pour un usage soutenu — donc la garder en memoire coute
 /// moins que de la relire sans arret.
+///
+/// Lecture des portions **vivantes** : la table porte aussi des pierres
+/// tombales, que la sauvegarde lit de son cote, mais qui ne doivent pas
+/// remonter ici.
 class PortionsNotifier extends AsyncNotifier<Map<String, Portion>> {
   @override
   Future<Map<String, Portion>> build() =>
-      ref.watch(appDatabaseProvider).portionsPourSauvegarde();
+      ref.watch(appDatabaseProvider).portionsVivantes();
 
   /// Portion a proposer pour un aliment.
   ///
@@ -838,7 +842,7 @@ class PortionsNotifier extends AsyncNotifier<Map<String, Portion>> {
 
   Future<void> recharger() async {
     final database = ref.read(appDatabaseProvider);
-    state = await AsyncValue.guard(() => database.portionsPourSauvegarde());
+    state = await AsyncValue.guard(() => database.portionsVivantes());
   }
 }
 

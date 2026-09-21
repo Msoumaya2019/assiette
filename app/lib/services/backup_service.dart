@@ -200,13 +200,16 @@ class BackupService {
       'compte': {
         'meals': meals.where((m) => !m.estSupprime).length,
         'mealsSupprimes': meals.where((m) => m.estSupprime).length,
-        'templates': templates.length,
-        'favorites': favorites.length,
+        'templates': templates.where((t) => !t.estSupprime).length,
+        'templatesSupprimes': templates.where((t) => t.estSupprime).length,
+        'favorites': favorites.where((f) => !f.estSupprime).length,
+        'favoritesSupprimes': favorites.where((f) => f.estSupprime).length,
         'pesees': pesees.where((p) => !p.estSupprimee).length,
         'peseesSupprimees': pesees.where((p) => p.estSupprimee).length,
         'mesures': mesures.where((m) => !m.estSupprimee).length,
         'mesuresSupprimees': mesures.where((m) => m.estSupprimee).length,
-        'portions': portions.length,
+        'portions': portions.where((p) => !p.estSupprimee).length,
+        'portionsSupprimees': portions.where((p) => p.estSupprimee).length,
       },
       'photosAbsentes': photosAbsentes,
       'reglagesExclus': reglagesExclus,
@@ -229,6 +232,7 @@ class BackupService {
                 .toList(),
             'createdAt': enregistre.createdAt,
             'updatedAt': enregistre.updatedAt,
+            'deletedAt': enregistre.deletedAt,
           },
       ],
       'favorites': [
@@ -239,6 +243,8 @@ class BackupService {
             'label': enregistre.favorite.label,
             'payload': enregistre.favorite.payload,
             'createdAt': enregistre.createdAt,
+            'updatedAt': enregistre.updatedAt,
+            'deletedAt': enregistre.deletedAt,
           },
       ],
       'settings': reglagesGardes,
@@ -265,10 +271,18 @@ class BackupService {
             'deletedAt': enregistre.deletedAt,
           },
       ],
-      'portions': {
-        for (final entree in portions.entries)
-          entree.key: entree.value.toJson(),
-      },
+      // Liste et non objet : une portion porte desormais une pierre tombale, et
+      // une cle ne peut pas dire « supprimee ». Les anciens fichiers, ecrits
+      // sous forme d'objet, restent lus — voir `SauvegardeLue._lirePortions`.
+      'portions': [
+        for (final enregistre in portions)
+          {
+            'cle': enregistre.cle,
+            'portion': enregistre.portion.toJson(),
+            'updatedAt': enregistre.updatedAt,
+            'deletedAt': enregistre.deletedAt,
+          },
+      ],
     };
 
     // Avec indentation plutot que compact : le fichier reste lisible dans un
@@ -359,9 +373,14 @@ class BackupService {
     var templatesEcrits = 0;
     var templatesIgnores = 0;
     for (final enregistre in sauvegarde.templates) {
-      if (idsTemplates.contains(enregistre.template.id)) {
-        templatesIgnores++;
-        continue;
+      if (mode == ModeRestauration.fusion) {
+        // Meme regle que pour les repas : l'identifiant local l'emporte, et une
+        // pierre tombale sans modele local n'apprend rien.
+        if (idsTemplates.contains(enregistre.template.id) ||
+            enregistre.estSupprime) {
+          templatesIgnores++;
+          continue;
+        }
       }
       await _database.restaurerTemplate(enregistre);
       templatesEcrits++;
@@ -375,9 +394,12 @@ class BackupService {
     var favoritesEcrits = 0;
     var favoritesIgnores = 0;
     for (final enregistre in sauvegarde.favorites) {
-      if (idsFavoris.contains(enregistre.favorite.id)) {
-        favoritesIgnores++;
-        continue;
+      if (mode == ModeRestauration.fusion) {
+        if (idsFavoris.contains(enregistre.favorite.id) ||
+            enregistre.estSupprime) {
+          favoritesIgnores++;
+          continue;
+        }
       }
       await _database.restaurerFavorite(enregistre);
       favoritesEcrits++;
@@ -421,24 +443,24 @@ class BackupService {
       mesuresEcrites++;
     }
 
-    // Une portion n'a pas de pierre tombale : elle existe ou elle n'existe pas.
-    // La cle identifie l'aliment, donc une portion deja connue localement n'est
-    // jamais ecrasee par une fusion.
+    // Les portions portent desormais une pierre tombale, comme le reste : une
+    // portion supprimee sur un appareil doit pouvoir disparaitre sur l'autre,
+    // sinon la synchronisation la ferait revenir. La cle identifie l'aliment,
+    // donc une portion deja connue localement n'est jamais ecrasee par une
+    // fusion.
     final clesPortions = mode == ModeRestauration.fusion
         ? await _database.clesDePortions()
         : const <String>{};
     var portionsEcrites = 0;
     var portionsIgnorees = 0;
-    for (final entree in sauvegarde.portions.entries) {
-      if (clesPortions.contains(entree.key)) {
-        portionsIgnorees++;
-        continue;
+    for (final enregistre in sauvegarde.portions) {
+      if (mode == ModeRestauration.fusion) {
+        if (clesPortions.contains(enregistre.cle) || enregistre.estSupprimee) {
+          portionsIgnorees++;
+          continue;
+        }
       }
-      await _database.restaurerPortion(
-        entree.key,
-        entree.value,
-        DateTime.now().millisecondsSinceEpoch,
-      );
+      await _database.restaurerPortion(enregistre);
       portionsEcrites++;
     }
 

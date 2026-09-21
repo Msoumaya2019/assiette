@@ -189,8 +189,9 @@ jobs:
       # absente, une parenthese en trop : tout cela passe une lecture attentive
       # et echoue ici.
       #
-      # Il verifie aussi que les deux migrations se **rejouent**, et que les
-      # trois tables ajoutees filtrent par utilisateur — y compris du cote
-      # ecriture, la moitie qu'on oublie.
+      # Il verifie aussi que **toutes** les migrations se **rejouent**, qu'une
+      # migration neuve oubliee de la liste fait echouer l'epreuve au lieu de
+      # n'etre jamais ouverte, et que les trois tables ajoutees filtrent par
+      # utilisateur — y compris du cote ecriture, la moitie qu'on oublie.
       - name: Eprouver les migrations sur un vrai PostgreSQL
         run: node tools/eprouver_migration_sur_postgres.mjs
