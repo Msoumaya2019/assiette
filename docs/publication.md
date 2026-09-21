@@ -11,10 +11,10 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Élément | État |
 | --- | --- |
 | Code source complet, analysé sans avertissement | prêt |
-| 328 tests de l'application, tous verts | prêt |
+| 342 tests de l'application, tous verts | prêt |
 | 18 tests du serveur, tous verts | prêt |
 | Dépôt public | https://github.com/Msoumaya2019/assiette |
-| Flux `ci.yml` — analyse, 328 tests, 9 contrôles | **vert** |
+| Flux `ci.yml` — analyse, 342 tests, 9 contrôles | **vert** |
 | Flux `ci.yml` — migrations Supabase exécutées sur un vrai PostgreSQL | **vert** (35 épreuves) |
 | Flux Android — APK et AAB | **vert**, artefacts signés et vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
@@ -715,9 +715,44 @@ correspondant vérifie les deux ensemble, parce que pris séparément chacun des
 Deux choses valent d'être dites. Ce n'est **pas** une régression : le défaut est
 apparu avec les portions nommées, dans le commit `1ef04dc`, et les 325 tests
 étaient verts. Et il est dans les binaires publiés — `git tag --contains 1ef04dc`
-rend `v0.1.3` et `v0.1.4`. **La version `v0.1.4` affiche donc cette unité
-trompeuse sur les trois écrans** ; la correction n'existe encore que dans le
-dépôt, et n'est dans aucun binaire publié.
+rend `v0.1.3` et `v0.1.4`. **La version `v0.1.4` affichait donc cette unité
+trompeuse sur les trois écrans** — c'est elle qui porte l'avertissement dans ses
+notes. La correction est publiée en `v0.1.5`, et prouvée dans ses deux binaires (§1).
+
+### La règle d'arbitrage, décidée et éprouvée
+
+Deux appareils modifient la même ligne hors ligne. Il fallait décider laquelle garder —
+et la vraie question n'était pas « laquelle est la bonne », mais **comment garantir que
+les deux appareils prennent la même décision**. Deux appareils qui se croient chacun
+vainqueur ne convergent jamais : ils s'échangent leurs versions à chaque
+synchronisation, indéfiniment.
+
+La règle vit dans `app/lib/models/arbitrage.dart` :
+
+1. la modification la plus récente gagne (`updated_at`) ;
+2. à date égale, **la suppression gagne** ;
+3. sinon, la plus grande empreinte de contenu gagne ;
+4. empreintes égales : les versions sont identiques, il n'y a rien à faire.
+
+**Aucune des trois premières règles ne regarde quel côté est « le mien ».** C'est
+exactement ce qui fait converger : la décision ne dépend que de la paire, donc inverser
+les deux côtés inverse le verdict. L'écriture la plus naturelle — « en cas d'égalité, je
+garde ma version » — passe tous les autres cas et **ne converge pas** : c'est le premier
+cas du banc de falsification, et c'est celui qui compte.
+
+Trois décisions de méthode valent d'être notées :
+
+- **La règle vit d'un seul côté, volontairement.** C'est le client qui connaît les deux
+  versions, décide, puis pousse la gagnante. Un serveur qui appliquerait la même règle
+  serait une seconde implémentation à tenir d'accord avec la première — exactement le
+  genre d'accord qui se défait en silence.
+- **« La suppression gagne » ne vaut qu'à date égale.** Une pierre tombale ancienne ne
+  bat pas une modification plus récente ; c'est le cas que les tests distinguent
+  explicitement, parce que la formulation courte — « la suppression gagne » — serait
+  fausse.
+- **Une date inconnue (zéro) perd contre toute date connue**, sans cas particulier : une
+  sauvegarde écrite avant que la colonne existe n'en porte pas. Deux dates inconnues ne
+  se départagent pas par la date, et retombent sur l'empreinte.
 
 ### Ce qui n'est pas prouvé
 
@@ -726,11 +761,15 @@ ne dit rien des droits par défaut de Supabase, qui n'y sont pas reproduits, ni 
 extensions, ni de Realtime. Un essai contre le vrai projet reste nécessaire avant
 de s'y fier — la marche à suivre est dans `backend/README.md`.
 
-Les pierres tombales sont en place des deux côtés, mais **la règle d'arbitrage
-entre deux versions divergentes n'est pas décidée** : aucun code ne dit encore
-laquelle gagne, ni comment une suppression l'emporte sur une modification. C'est
-la question que la synchronisation devra trancher, et elle n'est pas tranchée par
-une migration.
+La règle d'arbitrage est décidée, mais elle **ne corrige pas une horloge fausse**. Un
+appareil avancé de trois jours gagne pendant trois jours. Le remède est un horodatage
+venu du serveur, pas une règle de plus dans le client : une garde « la date est dans le
+futur » ne supprimerait pas la divergence, elle déplacerait seulement la perte sur
+l'appareil juste. À trancher quand la synchronisation existera.
+
+Et la règle n'est encore **appelée par personne** : elle est la condition préalable de
+la synchronisation, et elle est éprouvée comme telle. Une règle non branchée peut
+vieillir ; c'est pourquoi elle est falsifiée plutôt que seulement écrite.
 
 Dans une **liste** de résultats, les aliments qui portent une portion connue sont
 désormais chiffrés par portion, les autres pour 100 g : deux bases dans la même
@@ -797,6 +836,7 @@ python3 tools/bancs/falsifier_adresses.py              # 4 cas
 python3 tools/bancs/falsifier_client_deepseek.py       # 2 cas — serveur (Deno)
 python3 tools/bancs/falsifier_client_deepseek_dart.py  # 6 cas — application (Flutter)
 python3 tools/bancs/falsifier_proxy_dart.py            # 6 cas — mode proxy (Flutter)
+python3 tools/bancs/falsifier_arbitrage_dart.py        # 5 cas — règle d'arbitrage (Flutter)
 python3 tools/bancs/falsifier_version_build.py         # 6 cas — version publiée
 python3 tools/bancs/falsifier_check_workflows.py       # 19 cas — validation des flux
 python3 tools/bancs/falsifier_migration_serveur.py     # 12 cas — accord des deux schémas
@@ -831,6 +871,18 @@ qu'il n'a pas mesurés. Trois de ses cas méritent d'être cités :
 - **la reprise des favoris retirée de `0003`.** Rien ne casse : la colonne existe
   et vaut `NULL`. Seule la comparaison avec `created_at` peut le voir — et elle le
   voit.
+
+`falsifier_arbitrage_dart.py` éprouve la règle d'arbitrage. Son premier cas est celui
+qui compte, parce qu'il décrit l'erreur qu'on écrirait sans y penser :
+
+- **à date égale, « je garde ma version ».** Cette écriture passe tous les autres cas et
+  **ne converge pas** : chaque appareil se croit vainqueur et les deux s'échangent leurs
+  versions indéfiniment. C'est le test de symétrie qui la détecte, et lui seul ;
+- la suppression perdante à date égale — une ligne supprimée peut alors revenir ;
+- la comparaison des dates inversée — chaque synchronisation ramène le passé ;
+- une date inconnue tenue pour la plus récente — une ligne relue d'une sauvegarde
+  ancienne écraserait toutes les modifications réelles ;
+- et un **témoin négatif** : un commentaire reformulé ne fait rien tomber.
 
 `falsifier_check_workflows.py` éprouve le seul contrôle qui lit `.github/workflows`,
 et qui n'en avait aucun. Trois de ses cas méritent d'être cités :

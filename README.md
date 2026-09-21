@@ -422,7 +422,7 @@ CI, sur cette machine :
 ```bash
 python tools/verifier_version_build.py    # 11 cas sur tools/version_build.sh
 python tools/check_migration_serveur.py   # accord des schémas local et serveur
-python tools/lancer_bancs.py              # les dix bancs de falsification
+python tools/lancer_bancs.py              # les onze bancs de falsification
 ```
 
 L'épreuve des migrations, elle, demande Node et le paquet `@electric-sql/pglite`,
@@ -494,6 +494,13 @@ Couverture actuelle :
 - **suivi du poids** : une pesée par jour retenue, variation, bornes de la courbe
   élargies pour contenir l'objectif, mensurations par type, et refus des valeurs
   nulles ou négatives ;
+- **règle d'arbitrage des conflits** : la version la plus récente l'emporte, une
+  suppression l'emporte à date égale, l'empreinte du contenu tranche ensuite. Le
+  test central n'énumère pas des cas mais vérifie une **propriété** : le verdict
+  est le même quel que soit le côté depuis lequel on appelle la règle, donc deux
+  appareils convergent. Aucune règle ne regarde « de quel côté je suis » — c'est
+  exactement ce qui rend l'accord possible. La règle n'est encore **appelée par
+  personne** : elle est le socle de la synchronisation, pas la synchronisation ;
 - **l'interface, pilotée comme un utilisateur la pilote** — l'éditeur de quantité
   avec une portion (ce qui s'affiche, le pas des boutons, et le fait que ce qui
   est **transmis** reste des grammes), l'écran de suivi du poids de bout en bout
