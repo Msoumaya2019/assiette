@@ -3,6 +3,8 @@ import 'package:assiette/models/food.dart';
 import 'package:assiette/models/goals.dart';
 import 'package:assiette/models/meal.dart';
 import 'package:assiette/models/nutrition_values.dart';
+import 'package:assiette/models/portion.dart';
+import 'package:assiette/models/suivi_poids.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -389,6 +391,267 @@ void main() {
       // indefiniment apres une remise a zero.
       final lignes = await base.db.query('meal_items');
       expect(lignes, isEmpty);
+    });
+
+    test('la remise a zero emporte aussi le suivi du poids', () async {
+      await base.savePesee(
+        Pesee(id: 'p1', le: DateTime(2026, 9, 12), poidsKg: 70),
+      );
+      await base.saveMesure(
+        Mesure(
+          id: 'm1',
+          le: DateTime(2026, 9, 12),
+          type: TypeMesure.taille,
+          valeurCm: 82,
+        ),
+      );
+      await base.writePortion(
+        'ciqual:9100',
+        const Portion(label: 'part', grams: 80),
+      );
+      await base.writeObjectifPoids(const ObjectifPoids(cibleKg: 68));
+
+      await base.wipe();
+
+      // Une remise a zero qui laisserait des mensurations derriere elle ne
+      // serait pas une remise a zero, et l'utilisateur n'aurait aucun moyen de
+      // s'en apercevoir.
+      expect(await base.pesees(), isEmpty);
+      expect(await base.mesures(), isEmpty);
+      expect(await base.portionsPourSauvegarde(), isEmpty);
+      expect((await base.readObjectifPoids()).estDefini, isFalse);
+    });
+  });
+
+  group('Portions', () {
+    const part = Portion(label: 'part', grams: 80);
+
+    test('la portion d\'un aliment survit au stockage', () async {
+      final enregistre = repas(DateTime(2026, 9, 18), [
+        MealItem(food: riz, quantityG: 160, portion: part),
+      ]);
+
+      await base.saveMeal(enregistre);
+      final relu = (await base.mealById(enregistre.id))!;
+      final aliment = relu.items.single;
+
+      expect(aliment.portion, isNotNull);
+      expect(aliment.portion!.label, 'part');
+      expect(aliment.portion!.grams, 80);
+
+      // Le nombre d'unites est deduit, jamais stocke : deux valeurs a tenir
+      // coherentes finiraient par diverger sans que rien ne le signale.
+      expect(aliment.nombreDUnites, 2);
+      expect(aliment.libellePortion, '2 parts · 160 g');
+      // Comparaison approchee : 160 x 28 / 100 ne tombe pas juste en binaire.
+      expect(relu.totals.carbs, closeTo(44.8, 1e-9));
+    });
+
+    test('un aliment sans portion n\'en invente pas', () async {
+      final enregistre = repas(DateTime(2026, 9, 18), [item(riz, 150)]);
+      await base.saveMeal(enregistre);
+
+      final aliment = (await base.mealById(enregistre.id))!.items.single;
+      expect(aliment.portion, isNull);
+      expect(aliment.nombreDUnites, isNull);
+      expect(aliment.libellePortion, isNull);
+    });
+
+    test('la portion survit aussi a un modele de repas', () async {
+      await base.saveTemplate('t1', 'Gouter', [
+        MealItem(food: riz, quantityG: 160, portion: part),
+      ]);
+
+      final modele = (await base.templates()).single;
+      expect(modele.items.single.portion, part);
+    });
+
+    test('une portion retenue se relit par la cle de l\'aliment', () async {
+      expect(await base.readPortion(AppDatabase.cleDePortion(riz)), isNull);
+
+      await base.writePortion(AppDatabase.cleDePortion(riz), part);
+
+      final retenue = await base.readPortion(AppDatabase.cleDePortion(riz));
+      expect(retenue, part);
+    });
+
+    test('une portion absurde n\'est pas ecrite', () async {
+      // Un poids d'unite nul rendrait toute conversion infinie.
+      await base.writePortion('x', const Portion(label: 'rien', grams: 0));
+      expect(await base.readPortion('x'), isNull);
+
+      await base.writePortion('y', const Portion(label: '', grams: 80));
+      expect(await base.readPortion('y'), isNull);
+    });
+
+    test('la portion retenue prime sur l\'etiquette de la source', () async {
+      const produit = Food(
+        name: 'Yaourt nature',
+        per100g: NutritionValues(carbs: 4.5),
+        source: FoodSource.openFoodFacts,
+        sourceRef: '3033490005247',
+        servingSizeG: 125,
+        servingLabel: '1 pot (125 g)',
+      );
+
+      // Sans rien de retenu, l'etiquette de la source sert de proposition.
+      final proposee = await base.portionPour(produit);
+      expect(proposee!.label, 'pot');
+      expect(proposee.grams, 125);
+
+      // Une fois que l'utilisateur a dit ce qu'il voulait, sa reponse prime :
+      // redemander 125 g apres qu'il a declare 150 g serait ignorer ce qu'il a
+      // dit.
+      await base.writePortion(
+        AppDatabase.cleDePortion(produit),
+        const Portion(label: 'pot', grams: 150),
+      );
+      final retenue = await base.portionPour(produit);
+      expect(retenue!.grams, 150);
+    });
+
+    test('une etiquette inexploitable ne propose rien', () async {
+      const produit = Food(
+        name: 'Produit',
+        per100g: NutritionValues(carbs: 10),
+        source: FoodSource.openFoodFacts,
+        sourceRef: '1',
+        servingSizeG: 100,
+        servingLabel: 'une portion',
+      );
+
+      expect(await base.portionPour(produit), isNull);
+    });
+  });
+
+  group('Suivi du poids', () {
+    test('une pesee fait un aller-retour, note comprise', () async {
+      await base.savePesee(
+        Pesee(
+          id: 'p1',
+          le: DateTime(2026, 9, 12, 8),
+          poidsKg: 70.4,
+          note: 'a jeun',
+        ),
+      );
+
+      final relue = (await base.pesees()).single;
+      expect(relue.poidsKg, 70.4);
+      expect(relue.le, DateTime(2026, 9, 12, 8));
+      expect(relue.note, 'a jeun');
+    });
+
+    test('les pesees sortent de la plus recente a la plus ancienne', () async {
+      for (final jour in [10, 12, 11]) {
+        await base.savePesee(
+          Pesee(id: 'p$jour', le: DateTime(2026, 9, jour), poidsKg: 70),
+        );
+      }
+
+      expect((await base.pesees()).map((p) => p.id), ['p12', 'p11', 'p10']);
+    });
+
+    test('la fenetre ecarte ce qui precede', () async {
+      await base.savePesee(
+        Pesee(id: 'vieux', le: DateTime(2026, 8, 1), poidsKg: 75),
+      );
+      await base.savePesee(
+        Pesee(id: 'recent', le: DateTime(2026, 9, 10), poidsKg: 71),
+      );
+
+      expect(
+        (await base.pesees(depuis: DateTime(2026, 9, 1))).map((p) => p.id),
+        ['recent'],
+      );
+    });
+
+    test('une pesee supprimee disparait sans quitter la base', () async {
+      await base.savePesee(
+        Pesee(id: 'p1', le: DateTime(2026, 9, 12), poidsKg: 70),
+      );
+      await base.deletePesee('p1');
+
+      expect(await base.pesees(), isEmpty);
+
+      // La ligne reste, comme pour les repas : une synchronisation future doit
+      // pouvoir propager la suppression au lieu de la perdre.
+      final lignes = await base.db.query('pesees');
+      expect(lignes, hasLength(1));
+      expect(lignes.single['deleted_at'], isNotNull);
+    });
+
+    test('une mesure fait un aller-retour', () async {
+      await base.saveMesure(
+        Mesure(
+          id: 'm1',
+          le: DateTime(2026, 9, 12),
+          type: TypeMesure.hanches,
+          valeurCm: 96.5,
+        ),
+      );
+
+      final relue = (await base.mesures()).single;
+      expect(relue.type, TypeMesure.hanches);
+      expect(relue.valeurCm, 96.5);
+      expect(relue.le, DateTime(2026, 9, 12));
+    });
+
+    test('une mesure d\'un type inconnu est ecartee, pas fatale', () async {
+      // Cas d'une base ecrite par une version plus recente : la version
+      // installee doit continuer de lire ce qu'elle comprend.
+      await base.db.insert('mesures', {
+        'id': 'm-inconnu',
+        'mesure_le': DateTime(2026, 9, 12).millisecondsSinceEpoch,
+        'type': 'tour-de-mollet',
+        'valeur_cm': 38.0,
+        'created_at': 1,
+        'updated_at': 1,
+        'deleted_at': null,
+      });
+      await base.saveMesure(
+        Mesure(
+          id: 'm1',
+          le: DateTime(2026, 9, 12),
+          type: TypeMesure.taille,
+          valeurCm: 82,
+        ),
+      );
+
+      final lues = await base.mesures();
+      expect(lues, hasLength(1));
+      expect(lues.single.type, TypeMesure.taille);
+    });
+
+    test('une mesure supprimee disparait de la lecture', () async {
+      await base.saveMesure(
+        Mesure(
+          id: 'm1',
+          le: DateTime(2026, 9, 12),
+          type: TypeMesure.taille,
+          valeurCm: 82,
+        ),
+      );
+      await base.deleteMesure('m1');
+
+      expect(await base.mesures(), isEmpty);
+      expect((await base.db.query('mesures')).single['deleted_at'], isNotNull);
+    });
+
+    test('aucun objectif de poids n\'est propose par defaut', () async {
+      expect((await base.readObjectifPoids()).estDefini, isFalse);
+    });
+
+    test('l\'objectif de poids fait un aller-retour', () async {
+      await base.writeObjectifPoids(const ObjectifPoids(cibleKg: 68.5));
+      expect((await base.readObjectifPoids()).cibleKg, 68.5);
+
+      await base.writeObjectifPoids(ObjectifPoids.aucun);
+      expect((await base.readObjectifPoids()).estDefini, isFalse);
+    });
+
+    test('un objectif illisible ne fait pas echouer le demarrage', () async {
+      await base.writeSetting('objectif_poids', 'ceci n\'est pas du JSON');
+      expect((await base.readObjectifPoids()).estDefini, isFalse);
     });
   });
 }

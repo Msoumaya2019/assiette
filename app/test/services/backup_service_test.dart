@@ -5,7 +5,9 @@ import 'package:assiette/data/local/app_database.dart';
 import 'package:assiette/models/food.dart';
 import 'package:assiette/models/meal.dart';
 import 'package:assiette/models/nutrition_values.dart';
+import 'package:assiette/models/portion.dart';
 import 'package:assiette/models/sauvegarde.dart';
+import 'package:assiette/models/suivi_poids.dart';
 import 'package:assiette/services/backup_service.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -618,5 +620,198 @@ void main() {
       expect(lue.meals.single.meal.id, 'm1');
       expect(lue.meals.single.createdAt, 0, reason: 'horodatage absent tolere');
     });
+  });
+
+  group('Suivi du poids', () {
+    test('les pesees et les mesures font un aller-retour', () async {
+      await source.savePesee(
+        Pesee(id: 'p1', le: DateTime(2026, 9, 10), poidsKg: 71, note: 'a jeun'),
+      );
+      await source.savePesee(
+        Pesee(id: 'p2', le: DateTime(2026, 9, 12), poidsKg: 70.4),
+      );
+      await source.saveMesure(
+        Mesure(
+          id: 'm1',
+          le: DateTime(2026, 9, 12),
+          type: TypeMesure.taille,
+          valeurCm: 82,
+        ),
+      );
+      await source.writeObjectifPoids(const ObjectifPoids(cibleKg: 68));
+
+      final lue = SauvegardeLue.depuisTexte(await service.exporter());
+      expect(lue.peseesVivantes, 2);
+      expect(lue.mesuresVivantes, 1);
+
+      final rapport = await vers(
+        cible,
+      ).restaurer(lue, mode: ModeRestauration.remplacement);
+
+      expect(rapport.peseesEcrites, 2);
+      expect(rapport.mesuresEcrites, 1);
+
+      final pesees = await cible.pesees();
+      expect(pesees, hasLength(2));
+      expect(pesees.first.poidsKg, 70.4);
+      expect(pesees.last.note, 'a jeun');
+      expect((await cible.mesures()).single.valeurCm, 82);
+
+      // L'objectif vit dans les reglages : il suit le bloc `settings`, et une
+      // seconde place dans le fichier creerait deux sources pour la meme
+      // valeur.
+      expect((await cible.readObjectifPoids()).cibleKg, 68);
+    });
+
+    test('une pesee supprimee reste supprimee apres restauration', () async {
+      await source.savePesee(
+        Pesee(id: 'p1', le: DateTime(2026, 9, 10), poidsKg: 71),
+      );
+      await source.savePesee(
+        Pesee(id: 'p2', le: DateTime(2026, 9, 12), poidsKg: 70),
+      );
+      await source.deletePesee('p2');
+
+      final lue = SauvegardeLue.depuisTexte(await service.exporter());
+      expect(lue.peseesVivantes, 1);
+      expect(lue.peseesSupprimees, 1);
+
+      await vers(cible).restaurer(lue, mode: ModeRestauration.remplacement);
+
+      // La pierre tombale a voyage : la pesee supprimee ne reapparait pas.
+      expect((await cible.pesees()).map((p) => p.id), ['p1']);
+    });
+
+    test('une fusion n\'ecrase aucune pesee existante', () async {
+      await source.savePesee(
+        Pesee(id: 'p1', le: DateTime(2026, 9, 10), poidsKg: 71),
+      );
+      await cible.savePesee(
+        Pesee(id: 'p1', le: DateTime(2026, 9, 10), poidsKg: 99),
+      );
+
+      final lue = SauvegardeLue.depuisTexte(await service.exporter());
+      final rapport = await vers(
+        cible,
+      ).restaurer(lue, mode: ModeRestauration.fusion);
+
+      expect(rapport.peseesEcrites, 0);
+      expect(rapport.peseesIgnorees, 1);
+      expect((await cible.pesees()).single.poidsKg, 99);
+    });
+
+    test(
+      'les pesees d\'une sauvegarde ancienne sont simplement absentes',
+      () async {
+        // Une sauvegarde produite avant cette fonctionnalite n'a pas de section
+        // `pesees` : la lire ne doit rien casser.
+        final lue = SauvegardeLue.depuisTexte(
+          '{"format":"assiette.sauvegarde","formatVersion":1}',
+        );
+        expect(lue.pesees, isEmpty);
+        expect(lue.mesures, isEmpty);
+        expect(lue.portions, isEmpty);
+      },
+    );
+
+    test('une pesee illisible fait refuser le fichier, en le disant', () async {
+      final texte = await service.exporter();
+      final json = jsonDecode(texte) as Map<String, dynamic>;
+      json['pesees'] = [
+        {'id': 'p1', 'le': '2026-09-10T00:00:00.000'},
+      ];
+
+      expect(
+        () => SauvegardeLue.depuisTexte(jsonEncode(json)),
+        throwsA(
+          isA<SauvegardeIllisible>().having(
+            (e) => e.toString(),
+            'message',
+            contains('pesee'),
+          ),
+        ),
+      );
+    });
+  });
+
+  group('Portions retenues', () {
+    test('les portions retenues voyagent avec la sauvegarde', () async {
+      await source.writePortion(
+        'ciqual:9100',
+        const Portion(label: 'part', grams: 80),
+      );
+      await source.writePortion(
+        'nom:gateau maison',
+        const Portion(label: 'gateau', grams: 65),
+      );
+
+      final lue = SauvegardeLue.depuisTexte(await service.exporter());
+      expect(lue.portions, hasLength(2));
+
+      await vers(cible).restaurer(lue, mode: ModeRestauration.remplacement);
+
+      final retenue = await cible.readPortion('ciqual:9100');
+      expect(retenue, isNotNull);
+      expect(retenue!.label, 'part');
+      expect(retenue.grams, 80);
+      expect((await cible.readPortion('nom:gateau maison'))!.grams, 65);
+    });
+
+    test('la portion d\'un aliment voyage avec son repas', () async {
+      await source.saveMeal(
+        repas(DateTime(2026, 9, 18), [
+          MealItem(
+            food: riz,
+            quantityG: 160,
+            portion: const Portion(label: 'part', grams: 80),
+          ),
+        ]),
+      );
+
+      final lue = SauvegardeLue.depuisTexte(await service.exporter());
+      await vers(cible).restaurer(lue, mode: ModeRestauration.remplacement);
+
+      final aliment = (await cible.recentMeals()).single.items.single;
+      expect(aliment.portion, isNotNull);
+      expect(aliment.portion!.label, 'part');
+      expect(aliment.libellePortion, '2 parts · 160 g');
+    });
+
+    test('une fusion ne remplace pas une portion deja connue', () async {
+      await source.writePortion(
+        'ciqual:9100',
+        const Portion(label: 'part', grams: 80),
+      );
+      await cible.writePortion(
+        'ciqual:9100',
+        const Portion(label: 'bol', grams: 250),
+      );
+
+      final lue = SauvegardeLue.depuisTexte(await service.exporter());
+      final rapport = await vers(
+        cible,
+      ).restaurer(lue, mode: ModeRestauration.fusion);
+
+      expect(rapport.portionsEcrites, 0);
+      expect(rapport.portionsIgnorees, 1);
+      expect((await cible.readPortion('ciqual:9100'))!.label, 'bol');
+    });
+
+    test(
+      'une portion malformee est ignoree, sans faire echouer la lecture',
+      () async {
+        // Une portion sans poids n'a aucun sens : la garder ferait diviser par
+        // zero au premier calcul de nombre d'unites.
+        final texte = await service.exporter();
+        final json = jsonDecode(texte) as Map<String, dynamic>;
+        json['portions'] = {
+          'bonne': {'label': 'part', 'grams': 80},
+          'mauvaise': {'label': 'rien'},
+        };
+
+        final lue = SauvegardeLue.depuisTexte(jsonEncode(json));
+        expect(lue.portions.keys, ['bonne']);
+      },
+    );
   });
 }

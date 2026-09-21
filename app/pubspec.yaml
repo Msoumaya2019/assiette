@@ -4,7 +4,7 @@ description: >-
   photo, d'un code-barres ou d'une recherche manuelle.
 publish_to: "none"
 
-version: 0.1.2+1
+version: 0.1.3+1
 
 environment:
   sdk: ">=3.9.0 <4.0.0"

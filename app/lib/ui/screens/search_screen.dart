@@ -9,6 +9,7 @@ import '../../core/formatters.dart';
 import '../../core/theme.dart';
 import '../../models/food.dart';
 import '../../models/meal.dart';
+import '../../models/portion.dart';
 import '../../state/providers.dart';
 import '../widgets/common.dart';
 import '../widgets/quantity_editor.dart';
@@ -108,15 +109,20 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   Future<void> _selectFood(Food food) async {
+    final portion = await ref.read(appDatabaseProvider).portionPour(food);
+    if (!mounted) return;
+
     final grams = await showQuantityDialog(
       context,
-      initial: food.servingSizeG ?? 100,
+      initial: food.servingSizeG ?? portion?.grams ?? 100,
+      portion: portion,
     );
     if (grams == null || grams <= 0) return;
 
     final item = MealItem(
       food: food,
       quantityG: grams,
+      portion: portion,
       isEstimate: false,
       portionSize: null,
     );
@@ -387,16 +393,21 @@ class _ProductResults extends StatelessWidget {
   }
 }
 
-/// Ligne de resultat, avec un apercu des valeurs pour 100 g.
-class _FoodTile extends StatelessWidget {
+/// Ligne de resultat, avec un apercu des valeurs pour une portion ou 100 g.
+class _FoodTile extends ConsumerWidget {
   const _FoodTile({required this.food, required this.onTap});
 
   final Food food;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.palette;
+
+    // La reference suit la portion connue pour cet aliment — retenue par
+    // l'utilisateur ou annoncee par la source — et retombe sur 100 g sinon.
+    ref.watch(portionsProvider);
+    final portion = ref.read(portionsProvider.notifier).pour(food);
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -469,6 +480,11 @@ class _FoodTile extends StatelessWidget {
                           color: palette.protein,
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      referenceDePortion(portion),
+                      style: TextStyle(fontSize: 11, color: palette.mutedText),
                     ),
                   ],
                 ),

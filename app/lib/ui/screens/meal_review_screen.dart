@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/formatters.dart';
 import '../../core/theme.dart';
 import '../../models/meal.dart';
+import '../../models/portion.dart';
 import '../../services/nutrition_calculator.dart';
 import '../../state/providers.dart';
 import '../router.dart';
@@ -119,6 +120,8 @@ class _MealReviewScreenState extends ConsumerState<MealReviewScreen> {
                       item: item,
                       onQuantityChanged: (grams) =>
                           notifier.setQuantity(item.id, grams),
+                      onPortionChanged: (portion) =>
+                          notifier.setPortion(item.id, portion),
                       onRemove: () => notifier.removeItem(item.id),
                       onReplace: () => _replaceItem(context, item),
                     ),
@@ -514,12 +517,14 @@ class _EditableItem extends StatefulWidget {
   const _EditableItem({
     required this.item,
     required this.onQuantityChanged,
+    required this.onPortionChanged,
     required this.onRemove,
     required this.onReplace,
   });
 
   final MealItem item;
   final void Function(double) onQuantityChanged;
+  final void Function(Portion?) onPortionChanged;
   final VoidCallback onRemove;
   final VoidCallback onReplace;
 
@@ -540,6 +545,7 @@ class _EditableItemState extends State<_EditableItem> {
         MealItemRow(
           name: item.food.name,
           quantityG: item.quantityG,
+          portionLabel: item.libellePortion,
           totals: totals,
           sourceLabel: item.food.source.displayLabel,
           confidence: item.confidence,
@@ -556,6 +562,8 @@ class _EditableItemState extends State<_EditableItem> {
             child: QuantityEditor(
               quantityG: item.quantityG,
               onChange: widget.onQuantityChanged,
+              portion: item.portion,
+              onPortionChange: widget.onPortionChanged,
               onReplace: widget.onReplace,
               onRemove: widget.onRemove,
               sourceLabel: item.food.source.displayLabel,

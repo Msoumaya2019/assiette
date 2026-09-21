@@ -25,6 +25,12 @@ class RapportRestauration {
     required this.reglagesEcrits,
     required this.reglagesIgnores,
     required this.photosPerdues,
+    this.peseesEcrites = 0,
+    this.peseesIgnorees = 0,
+    this.mesuresEcrites = 0,
+    this.mesuresIgnorees = 0,
+    this.portionsEcrites = 0,
+    this.portionsIgnorees = 0,
   });
 
   final ModeRestauration mode;
@@ -40,11 +46,21 @@ class RapportRestauration {
   /// Repas dont la photo n'a pas ete retrouvee sur cet appareil.
   final int photosPerdues;
 
+  final int peseesEcrites;
+  final int peseesIgnorees;
+  final int mesuresEcrites;
+  final int mesuresIgnorees;
+  final int portionsEcrites;
+  final int portionsIgnorees;
+
   bool get rienAEcrit =>
       mealsEcrits == 0 &&
       templatesEcrits == 0 &&
       favoritesEcrits == 0 &&
-      reglagesEcrits == 0;
+      reglagesEcrits == 0 &&
+      peseesEcrites == 0 &&
+      mesuresEcrites == 0 &&
+      portionsEcrites == 0;
 
   /// Resume en une phrase, affiche tel quel a l'utilisateur.
   String get resume {
@@ -58,15 +74,23 @@ class RapportRestauration {
       if (mealsEcrits > 0) '$mealsEcrits repas',
       if (templatesEcrits > 0) '$templatesEcrits repas enregistres',
       if (favoritesEcrits > 0) '$favoritesEcrits favoris',
+      if (peseesEcrites > 0) '$peseesEcrites pesees',
+      if (mesuresEcrites > 0) '$mesuresEcrites mesures',
+      if (portionsEcrites > 0) '$portionsEcrites portions',
       if (reglagesEcrits > 0) '$reglagesEcrits reglages',
     ];
 
+    final ignores =
+        mealsIgnores +
+        templatesIgnores +
+        favoritesIgnores +
+        peseesIgnorees +
+        mesuresIgnorees +
+        portionsIgnorees;
+
     final buffer = StringBuffer()..write('Restaure : ${morceaux.join(', ')}.');
-    if (mealsIgnores > 0 || templatesIgnores > 0 || favoritesIgnores > 0) {
-      buffer.write(
-        ' Conserve : ${mealsIgnores + templatesIgnores + favoritesIgnores} '
-        'element(s) deja present(s).',
-      );
+    if (ignores > 0) {
+      buffer.write(' Conserve : $ignores element(s) deja present(s).');
     }
     if (photosPerdues > 0) {
       buffer.write(
@@ -144,6 +168,9 @@ class BackupService {
     final templates = await _database.templatesPourSauvegarde();
     final favorites = await _database.favoritesPourSauvegarde();
     final settings = await _database.settingsPourSauvegarde();
+    final pesees = await _database.peseesPourSauvegarde();
+    final mesures = await _database.mesuresPourSauvegarde();
+    final portions = await _database.portionsPourSauvegarde();
 
     final reglagesExclus = <String>[];
     final reglagesGardes = <String, String>{};
@@ -175,6 +202,11 @@ class BackupService {
         'mealsSupprimes': meals.where((m) => m.estSupprime).length,
         'templates': templates.length,
         'favorites': favorites.length,
+        'pesees': pesees.where((p) => !p.estSupprimee).length,
+        'peseesSupprimees': pesees.where((p) => p.estSupprimee).length,
+        'mesures': mesures.where((m) => !m.estSupprimee).length,
+        'mesuresSupprimees': mesures.where((m) => m.estSupprimee).length,
+        'portions': portions.length,
       },
       'photosAbsentes': photosAbsentes,
       'reglagesExclus': reglagesExclus,
@@ -210,6 +242,33 @@ class BackupService {
           },
       ],
       'settings': reglagesGardes,
+
+      // Sections ajoutees apres la version 1 du format. Leur absence dans un
+      // fichier ancien est normale : la lecture les traite comme vides, et le
+      // numero de format n'a donc pas eu a changer. Un fichier ecrit ici reste
+      // lisible par une version anterieure, qui ignorera simplement ces cles.
+      'pesees': [
+        for (final enregistre in pesees)
+          {
+            ...enregistre.pesee.toJson(),
+            'createdAt': enregistre.createdAt,
+            'updatedAt': enregistre.updatedAt,
+            'deletedAt': enregistre.deletedAt,
+          },
+      ],
+      'mesures': [
+        for (final enregistre in mesures)
+          {
+            ...enregistre.mesure.toJson(),
+            'createdAt': enregistre.createdAt,
+            'updatedAt': enregistre.updatedAt,
+            'deletedAt': enregistre.deletedAt,
+          },
+      ],
+      'portions': {
+        for (final entree in portions.entries)
+          entree.key: entree.value.toJson(),
+      },
     };
 
     // Avec indentation plutot que compact : le fichier reste lisible dans un
@@ -324,6 +383,65 @@ class BackupService {
       favoritesEcrits++;
     }
 
+    // Suivi du poids : memes regles que les repas, et pour la meme raison. En
+    // fusion, un identifiant deja present l'emporte — y compris s'il a ete
+    // supprime ici — et une pierre tombale sans pesee locale n'apprend rien,
+    // donc elle n'est pas ecrite.
+    final idsPesees = mode == ModeRestauration.fusion
+        ? await _database.idsDePesees()
+        : const <String>{};
+    var peseesEcrites = 0;
+    var peseesIgnorees = 0;
+    for (final enregistre in sauvegarde.pesees) {
+      if (mode == ModeRestauration.fusion) {
+        if (idsPesees.contains(enregistre.pesee.id) ||
+            enregistre.estSupprimee) {
+          peseesIgnorees++;
+          continue;
+        }
+      }
+      await _database.restaurerPesee(enregistre);
+      peseesEcrites++;
+    }
+
+    final idsMesures = mode == ModeRestauration.fusion
+        ? await _database.idsDeMesures()
+        : const <String>{};
+    var mesuresEcrites = 0;
+    var mesuresIgnorees = 0;
+    for (final enregistre in sauvegarde.mesures) {
+      if (mode == ModeRestauration.fusion) {
+        if (idsMesures.contains(enregistre.mesure.id) ||
+            enregistre.estSupprimee) {
+          mesuresIgnorees++;
+          continue;
+        }
+      }
+      await _database.restaurerMesure(enregistre);
+      mesuresEcrites++;
+    }
+
+    // Une portion n'a pas de pierre tombale : elle existe ou elle n'existe pas.
+    // La cle identifie l'aliment, donc une portion deja connue localement n'est
+    // jamais ecrasee par une fusion.
+    final clesPortions = mode == ModeRestauration.fusion
+        ? await _database.clesDePortions()
+        : const <String>{};
+    var portionsEcrites = 0;
+    var portionsIgnorees = 0;
+    for (final entree in sauvegarde.portions.entries) {
+      if (clesPortions.contains(entree.key)) {
+        portionsIgnorees++;
+        continue;
+      }
+      await _database.restaurerPortion(
+        entree.key,
+        entree.value,
+        DateTime.now().millisecondsSinceEpoch,
+      );
+      portionsEcrites++;
+    }
+
     var reglagesEcrits = 0;
     var reglagesIgnores = 0;
     final aEcrire = <String, String>{};
@@ -356,6 +474,12 @@ class BackupService {
       reglagesEcrits: reglagesEcrits,
       reglagesIgnores: reglagesIgnores,
       photosPerdues: photosPerdues,
+      peseesEcrites: peseesEcrites,
+      peseesIgnorees: peseesIgnorees,
+      mesuresEcrites: mesuresEcrites,
+      mesuresIgnorees: mesuresIgnorees,
+      portionsEcrites: portionsEcrites,
+      portionsIgnorees: portionsIgnorees,
     );
   }
 

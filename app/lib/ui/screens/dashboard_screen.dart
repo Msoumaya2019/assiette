@@ -163,6 +163,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
 
             const SizedBox(height: AppSpacing.lg),
 
+            const _PoidsCard(),
+
+            const SizedBox(height: AppSpacing.lg),
+
             const EstimateBanner(
               message:
                   'Ces chiffres reposent sur les quantites que vous avez validees. '
@@ -217,6 +221,39 @@ class _TodayCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.md),
           MacroGrid(totals: totals),
         ],
+      ),
+    );
+  }
+}
+
+/// Acces au suivi du poids depuis le tableau de bord.
+///
+/// Une seule ligne, sans courbe : le tableau de bord parle de glucides, et la
+/// courbe de poids a son propre ecran. Melanger les deux ici donnerait a croire
+/// qu'ils sont lies, ce qui n'est pas le propos de l'application.
+class _PoidsCard extends ConsumerWidget {
+  const _PoidsCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final suivi = ref.watch(suiviProvider);
+    final palette = context.palette;
+
+    final derniere = suivi.valueOrNull?.serie().derniereKg;
+    final objectif = suivi.valueOrNull?.objectif.cibleKg;
+
+    return SectionCard(
+      title: 'Poids',
+      subtitle: derniere == null
+          ? 'Aucune pesee enregistree'
+          : 'Derniere pesee : ${Format.number(derniere)} kg'
+                '${objectif == null ? '' : ' · objectif ${Format.number(objectif)} kg'}',
+      trailing: Icon(Icons.chevron_right_rounded, color: palette.mutedText),
+      onTap: () => context.push(Routes.poids),
+      child: Text(
+        'Suivez votre poids, fixez vous-meme un repere et notez vos '
+        'mensurations. Ces donnees restent sur votre telephone.',
+        style: TextStyle(fontSize: 13, height: 1.45, color: palette.mutedText),
       ),
     );
   }

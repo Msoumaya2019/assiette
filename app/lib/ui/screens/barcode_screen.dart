@@ -8,6 +8,7 @@ import '../../core/formatters.dart';
 import '../../core/theme.dart';
 import '../../models/food.dart';
 import '../../models/meal.dart';
+import '../../models/portion.dart';
 import '../../state/providers.dart';
 import '../router.dart';
 import '../widgets/common.dart';
@@ -102,13 +103,24 @@ class _BarcodeScreenState extends ConsumerState<BarcodeScreen> {
   }
 
   Future<void> _addProduct(Food food) async {
+    // La portion retenue pour ce produit est proposee d'emblee : c'est ce qui
+    // evite de redire « 1 pot = 150 g » a chaque scan.
+    final portion = await ref.read(appDatabaseProvider).portionPour(food);
+    if (!mounted) return;
+
     final grams = await showQuantityDialog(
       context,
-      initial: food.servingSizeG ?? 100,
+      initial: food.servingSizeG ?? portion?.grams ?? 100,
+      portion: portion,
     );
     if (grams == null || grams <= 0) return;
 
-    final item = MealItem(food: food, quantityG: grams, isEstimate: false);
+    final item = MealItem(
+      food: food,
+      quantityG: grams,
+      portion: portion,
+      isEstimate: false,
+    );
     final draft = ref.read(draftMealProvider);
 
     if (draft == null) {
@@ -242,7 +254,7 @@ class _ScannerOverlay extends StatelessWidget {
   }
 }
 
-class _ProductPanel extends StatelessWidget {
+class _ProductPanel extends ConsumerWidget {
   const _ProductPanel({
     required this.food,
     required this.onAdd,
@@ -254,8 +266,14 @@ class _ProductPanel extends StatelessWidget {
   final VoidCallback onScanAgain;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.palette;
+
+    // La reference affichee suit la portion retenue pour ce produit : « pour
+    // 1 pot (125 g) » au lieu de « pour 100 g ». C'est la reponse directe a
+    // « pourquoi toujours 100 g ? ».
+    ref.watch(portionsProvider);
+    final portion = ref.read(portionsProvider.notifier).pour(food);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -325,7 +343,7 @@ class _ProductPanel extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'g de glucides\npour 100 g',
+                  'g de glucides\n${referenceDePortion(portion)}',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,

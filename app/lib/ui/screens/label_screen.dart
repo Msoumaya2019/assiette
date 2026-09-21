@@ -181,10 +181,25 @@ class _LabelScreenState extends ConsumerState<LabelScreen> {
     );
 
     if (!mounted) return;
-    final grams = await showQuantityDialog(context, initial: 100);
+
+    // Une etiquette deja saisie une fois garde sa portion : le produit est
+    // reconnaissable a son nom, meme sans code-barres.
+    final portion = await ref.read(appDatabaseProvider).portionPour(food);
+    if (!mounted) return;
+
+    final grams = await showQuantityDialog(
+      context,
+      initial: portion?.grams ?? 100,
+      portion: portion,
+    );
     if (grams == null || grams <= 0) return;
 
-    final item = MealItem(food: food, quantityG: grams, isEstimate: false);
+    final item = MealItem(
+      food: food,
+      quantityG: grams,
+      portion: portion,
+      isEstimate: false,
+    );
     final draft = ref.read(draftMealProvider);
 
     if (draft == null) {

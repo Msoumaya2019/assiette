@@ -11,10 +11,10 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Élément | État |
 | --- | --- |
 | Code source complet, analysé sans avertissement | prêt |
-| 167 tests de l'application, tous verts | prêt |
+| 273 tests de l'application, tous verts | prêt |
 | 18 tests du serveur, tous verts | prêt |
 | Dépôt public | https://github.com/Msoumaya2019/assiette |
-| Flux `ci.yml` — analyse, 167 tests, 7 contrôles | **vert** |
+| Flux `ci.yml` — analyse, 273 tests, 7 contrôles | **vert** |
 | Flux Android — APK et AAB | **vert**, artefacts signés et vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
 | Déclenchement par étiquette `v*` | **vert** (`v0.1.0`, `v0.1.1`, `v0.1.2`) |
@@ -444,6 +444,32 @@ pourquoi aucun ne doit être retiré sans être remplacé.
 | `tools/check_adresses_du_depot.py` | une adresse GitHub du code qui désigne un autre dépôt |
 | `tools/verifier_version_build.py` | une régression dans la logique qui décide de la version publiée |
 | `tools/check_workflows.py` | YAML invalide, action non épinglée, `permissions` absentes, `run:` qui ne passe pas `bash -n`, script du dépôt appelé mais absent, un flux qui ne tire plus la version du même endroit que l'autre, et une compilation qui n'injecte pas `APP_VERSION` depuis la sortie du script de version |
+
+### Le schéma local ne change que par une seule liste
+
+La base SQLite de l'appareil est passée en **schéma v2** (portions nommées, suivi du
+poids). Une base installée en v1 doit migrer **sans rien perdre** : c'est la
+première fois que ce projet a des données utilisateur à préserver.
+
+Trois règles, tenues par un test plutôt que par la vigilance :
+
+1. **Une seule liste d'ajouts.** `_ajoutsVersion2` dans `app_database.dart` sert à
+   la fois à `onCreate` (base neuve) et à `onUpgrade` (base existante). Deux listes
+   séparées divergeraient au premier oubli, et une base neuve et une base migrée
+   n'auraient plus la même forme.
+2. **Aucun `DROP`, aucun `DELETE`.** Une migration qui recrée une table peut
+   perdre ce qu'elle n'a pas pensé à recopier.
+3. **La forme est comparée, pas supposée.** `app/test/data/migration_test.dart`
+   construit une base v1 **remplie**, la migre, puis compare sa structure à celle
+   d'une base neuve — colonnes et objets SQLite, triés. Un test qui ne vérifierait
+   que « les données sont là » laisserait passer une colonne manquante.
+
+Le schéma v1 du test est **recopié à la main**, volontairement : c'est un fait
+historique, pas une dérivation du code courant. Le dériver ferait qu'une migration
+cassée serait testée contre la forme cassée, et le test resterait vert.
+
+Le test a été **falsifié** : remplacer `if (from < 2)` par `if (from < 1)` fait
+tomber 4 des 7 cas. Un test de migration qui n'a jamais échoué ne prouve rien.
 
 ### La version publiée, décidée à un seul endroit
 

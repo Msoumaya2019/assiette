@@ -14,6 +14,7 @@ import 'screens/home_screen.dart';
 import 'screens/label_screen.dart';
 import 'screens/meal_review_screen.dart';
 import 'screens/onboarding_screen.dart';
+import 'screens/poids_screen.dart';
 import 'screens/privacy_screen.dart';
 import 'screens/search_screen.dart';
 import 'screens/settings_screen.dart';
@@ -38,6 +39,7 @@ class Routes {
   static const String label = '/etiquette';
   static const String templates = '/repas-enregistres';
   static const String goals = '/objectifs';
+  static const String poids = '/poids';
   static const String privacy = '/confidentialite';
   static const String onboarding = '/bienvenue';
 }
@@ -128,6 +130,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: Routes.goals,
         builder: (context, state) => const GoalsScreen(),
+      ),
+      GoRoute(
+        path: Routes.poids,
+        builder: (context, state) => const PoidsScreen(),
       ),
       GoRoute(
         path: Routes.privacy,

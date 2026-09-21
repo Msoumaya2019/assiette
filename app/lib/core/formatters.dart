@@ -14,6 +14,7 @@ class Format {
   static final DateFormat _time = DateFormat('HH:mm', 'fr_FR');
   static final DateFormat _weekday = DateFormat('EEEE d MMMM', 'fr_FR');
   static final DateFormat _month = DateFormat('MMMM y', 'fr_FR');
+  static final DateFormat _dayMonthShort = DateFormat('dd/MM', 'fr_FR');
 
   /// Grammes, avec une decimale seulement si necessaire.
   static String grams(double value) {
@@ -56,6 +57,12 @@ class Format {
   static String time(DateTime date) => _time.format(date);
 
   static String dayMonth(DateTime date) => _dayMonth.format(date);
+
+  /// Date compacte « 19/09 », pour les axes de graphique.
+  ///
+  /// Un axe ne dispose que de quelques dizaines de pixels par graduation :
+  /// « 19 septembre » y serait tronque ou illisible.
+  static String dayMonthShort(DateTime date) => _dayMonthShort.format(date);
 
   static String weekdayDayMonth(DateTime date) {
     final formatted = _weekday.format(date);

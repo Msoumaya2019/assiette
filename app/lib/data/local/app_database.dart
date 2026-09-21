@@ -7,6 +7,8 @@ import '../../models/food.dart';
 import '../../models/goals.dart';
 import '../../models/meal.dart';
 import '../../models/nutrition_values.dart';
+import '../../models/portion.dart';
+import '../../models/suivi_poids.dart';
 
 /// Base de donnees locale.
 ///
@@ -46,7 +48,67 @@ class AppDatabase {
   Database? _db;
 
   /// Version du schema. A incrementer a chaque migration.
-  static const int schemaVersion = 1;
+  ///
+  /// 1 : schema initial.
+  /// 2 : portions nommees (`meal_items.portion_label`, `portion_grams`), table
+  ///     `portions` qui retient la portion d'un aliment, et suivi du poids
+  ///     (`pesees`, `mesures`).
+  static const int schemaVersion = 2;
+
+  /// Ce que la version 2 ajoute au schema initial.
+  ///
+  /// Ecrit **une seule fois**, et execute par les deux chemins : `_onCreate`
+  /// l'applique apres les tables d'origine, `_onUpgrade` l'applique a une base
+  /// restee en version 1. Recopier ces ordres dans les deux methodes les ferait
+  /// diverger un jour, et la divergence ne se verrait que sur les appareils
+  /// deja installes — c'est-a-dire exactement ceux dont on ne peut pas
+  /// repartir de zero.
+  ///
+  /// Les `ALTER TABLE ... ADD COLUMN` fonctionnent dans les deux cas : la table
+  /// `meal_items` existe deja quand ils sont joues, en creation comme en
+  /// migration.
+  static const List<String> _ajoutsVersion2 = [
+    'ALTER TABLE meal_items ADD COLUMN portion_label TEXT',
+    'ALTER TABLE meal_items ADD COLUMN portion_grams REAL',
+
+    // Portion retenue pour un aliment, d'un repas a l'autre. La cle identifie
+    // l'aliment : sa reference de source quand elle existe, son nom normalise
+    // sinon.
+    '''
+      CREATE TABLE portions (
+        cle TEXT PRIMARY KEY,
+        label TEXT NOT NULL,
+        grams REAL NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    ''',
+
+    '''
+      CREATE TABLE pesees (
+        id TEXT PRIMARY KEY,
+        mesure_le INTEGER NOT NULL,
+        poids_kg REAL NOT NULL,
+        note TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER
+      )
+    ''',
+    'CREATE INDEX idx_pesees_le ON pesees (mesure_le DESC)',
+
+    '''
+      CREATE TABLE mesures (
+        id TEXT PRIMARY KEY,
+        mesure_le INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        valeur_cm REAL NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        deleted_at INTEGER
+      )
+    ''',
+    'CREATE INDEX idx_mesures_le ON mesures (mesure_le DESC)',
+  ];
 
   Database get db {
     final database = _db;
@@ -159,12 +221,30 @@ class AppDatabase {
       )
     ''');
 
+    for (final ordre in _ajoutsVersion2) {
+      batch.execute(ordre);
+    }
+
     await batch.commit(noResult: true);
   }
 
+  /// Amene une base existante au schema courant, **sans perdre une ligne**.
+  ///
+  /// Chaque palier est traite separement et dans l'ordre : une base restee en
+  /// version 1 doit pouvoir atteindre la version 3 le jour ou elle existera,
+  /// sans qu'on ait a ecrire le raccourci 1 -> 3.
   Future<void> _onUpgrade(Database database, int from, int to) async {
-    // Aucune migration pour l'instant : la version 1 est la version initiale.
-    // Les migrations suivantes s'ajouteront ici, en preservant les donnees.
+    if (from < 2) {
+      // Les tables existantes ne sont pas recreees : seules des colonnes et
+      // des tables sont ajoutees. Aucun `DROP`, aucun `DELETE` — une migration
+      // qui efface les donnees de l'utilisateur pour changer de schema est un
+      // bug, pas une migration.
+      final batch = database.batch();
+      for (final ordre in _ajoutsVersion2) {
+        batch.execute(ordre);
+      }
+      await batch.commit(noResult: true);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -226,6 +306,8 @@ class AppDatabase {
         'image_url': item.food.imageUrl,
         'confidence': item.confidence,
         'portion': item.portionSize?.name,
+        'portion_label': item.portion?.label,
+        'portion_grams': item.portion?.grams,
         'is_estimate': item.isEstimate ? 1 : 0,
         'sort_order': index,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -315,6 +397,13 @@ class AppDatabase {
         portionSize: item['portion'] == null
             ? null
             : PortionSize.fromId(item['portion'] as String?),
+        // Une portion dont une seule des deux colonnes serait renseignee est
+        // ecartee : `Portion.depuisJson` exige les deux, ce qui evite de
+        // proposer « 0 g » comme poids d'unite.
+        portion: Portion.depuisJson({
+          'label': item['portion_label'],
+          'grams': item['portion_grams'],
+        }),
         isEstimate: (item['is_estimate'] as int? ?? 0) == 1,
         sortOrder: (item['sort_order'] as int?) ?? 0,
       );
@@ -425,6 +514,101 @@ class AppDatabase {
   }
 
   // -------------------------------------------------------------------------
+  // Portions retenues
+  //
+  // Une portion appartient a un **aliment**, pas a un repas : c'est ce qui
+  // permet de retrouver « 1 gateau = 65 g » au repas suivant. Sans cette table,
+  // l'utilisateur devrait redefinir sa portion chaque fois, ce qui reviendrait
+  // a ne pas avoir de portion du tout.
+  // -------------------------------------------------------------------------
+
+  /// Cle identifiant un aliment dans la table `portions`.
+  static String cleDePortion(Food food) => Portion.clePour(
+    source: food.source.name,
+    sourceRef: food.sourceRef,
+    nom: food.name,
+  );
+
+  /// Portion a proposer pour un aliment.
+  ///
+  /// L'ordre compte : une portion **retenue** prime sur l'etiquette annoncee
+  /// par la source. C'est le sens meme de « retenir » — si l'utilisateur a
+  /// declare une fois que son pot fait 150 g, redemander 125 g a chaque scan
+  /// reviendrait a ignorer ce qu'il a dit.
+  ///
+  /// La portion d'etiquette sert de premier remplissage, et seulement quand
+  /// elle est exploitable : `Portion.depuisEtiquette` refuse les formes
+  /// ambigues plutot que d'inventer.
+  Future<Portion?> portionPour(Food food) async {
+    final retenue = await readPortion(cleDePortion(food));
+    if (retenue != null) return retenue;
+    return Portion.depuisEtiquette(food.servingLabel, food.servingSizeG);
+  }
+
+  /// Portion retenue pour un aliment, ou `null` s'il n'en a pas.
+  Future<Portion?> readPortion(String cle) async {
+    final rows = await db.query(
+      'portions',
+      where: 'cle = ?',
+      whereArgs: [cle],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return Portion.depuisJson({
+      'label': rows.first['label'],
+      'grams': rows.first['grams'],
+    });
+  }
+
+  /// Retient la portion d'un aliment. Un poids d'unite nul n'est pas ecrit :
+  /// il rendrait toute conversion absurde.
+  Future<void> writePortion(String cle, Portion portion) async {
+    if (!portion.estValide) return;
+    await db.insert('portions', {
+      'cle': cle,
+      'label': portion.label,
+      'grams': portion.grams,
+      'updated_at': DateTime.now().millisecondsSinceEpoch,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> deletePortion(String cle) async {
+    await db.delete('portions', where: 'cle = ?', whereArgs: [cle]);
+  }
+
+  Future<Map<String, Portion>> portionsPourSauvegarde() async {
+    final rows = await db.query('portions');
+    final resultat = <String, Portion>{};
+    for (final row in rows) {
+      final portion = Portion.depuisJson({
+        'label': row['label'],
+        'grams': row['grams'],
+      });
+      if (portion != null) resultat[row['cle'] as String] = portion;
+    }
+    return resultat;
+  }
+
+  Future<void> restaurerPortion(
+    String cle,
+    Portion portion,
+    int updatedAt,
+  ) async {
+    if (!portion.estValide) return;
+    await db.insert('portions', {
+      'cle': cle,
+      'label': portion.label,
+      'grams': portion.grams,
+      'updated_at': updatedAt,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<Set<String>> clesDePortions() async {
+    final rows = await db.query('portions', columns: ['cle']);
+    return {for (final row in rows) row['cle'] as String};
+  }
+
+  // -------------------------------------------------------------------------
   // Reglages
   // -------------------------------------------------------------------------
 
@@ -461,6 +645,133 @@ class AppDatabase {
 
   Future<void> writeGoals(DailyGoals goals) =>
       writeSetting('daily_goals', jsonEncode(goals.toJson()));
+
+  // -------------------------------------------------------------------------
+  // Suivi du poids
+  //
+  // Suivi personnel : l'application enregistre et affiche, elle ne suggere
+  // aucune cible et ne produit aucun conseil. Ces donnees ne quittent pas
+  // l'appareil, sauf par la sauvegarde que l'utilisateur declenche lui-meme.
+  // -------------------------------------------------------------------------
+
+  Future<ObjectifPoids> readObjectifPoids() async {
+    final raw = await readSetting('objectif_poids');
+    if (raw == null || raw.isEmpty) return ObjectifPoids.aucun;
+    try {
+      return ObjectifPoids.fromJson(
+        (jsonDecode(raw) as Map).cast<String, dynamic>(),
+      );
+    } on FormatException {
+      return ObjectifPoids.aucun;
+    }
+  }
+
+  Future<void> writeObjectifPoids(ObjectifPoids objectif) =>
+      writeSetting('objectif_poids', jsonEncode(objectif.toJson()));
+
+  /// Pesees, de la plus recente a la plus ancienne.
+  ///
+  /// Les pesees supprimees sont exclues : la ligne reste en base pour qu'une
+  /// synchronisation puisse propager la suppression, mais elle ne doit plus
+  /// apparaitre nulle part.
+  Future<List<Pesee>> pesees({DateTime? depuis, int? limit}) async {
+    final rows = await db.query(
+      'pesees',
+      where: depuis == null
+          ? 'deleted_at IS NULL'
+          : 'deleted_at IS NULL AND mesure_le >= ?',
+      whereArgs: depuis == null ? null : [depuis.millisecondsSinceEpoch],
+      orderBy: 'mesure_le DESC, created_at DESC',
+      limit: limit,
+    );
+    return rows.map(_lirePesee).nonNulls.toList();
+  }
+
+  Future<void> savePesee(Pesee pesee) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.insert('pesees', {
+      'id': pesee.id,
+      'mesure_le': pesee.le.millisecondsSinceEpoch,
+      'poids_kg': pesee.poidsKg,
+      'note': pesee.note,
+      'created_at': now,
+      'updated_at': now,
+      'deleted_at': null,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Suppression logique, comme pour les repas.
+  Future<void> deletePesee(String id) async {
+    await db.update(
+      'pesees',
+      {'deleted_at': DateTime.now().millisecondsSinceEpoch},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Mesures, de la plus recente a la plus ancienne.
+  Future<List<Mesure>> mesures({DateTime? depuis}) async {
+    final rows = await db.query(
+      'mesures',
+      where: depuis == null
+          ? 'deleted_at IS NULL'
+          : 'deleted_at IS NULL AND mesure_le >= ?',
+      whereArgs: depuis == null ? null : [depuis.millisecondsSinceEpoch],
+      orderBy: 'mesure_le DESC, created_at DESC',
+    );
+    // Une mesure dont le type est inconnu est ecartee au lieu de faire echouer
+    // la lecture : une version plus ancienne de l'application doit pouvoir
+    // ouvrir une base ecrite par une version plus recente.
+    return rows.map(_lireMesure).nonNulls.toList();
+  }
+
+  Future<void> saveMesure(Mesure mesure) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await db.insert('mesures', {
+      'id': mesure.id,
+      'mesure_le': mesure.le.millisecondsSinceEpoch,
+      'type': mesure.type.name,
+      'valeur_cm': mesure.valeurCm,
+      'created_at': now,
+      'updated_at': now,
+      'deleted_at': null,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> deleteMesure(String id) async {
+    await db.update(
+      'mesures',
+      {'deleted_at': DateTime.now().millisecondsSinceEpoch},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  Pesee? _lirePesee(Map<String, Object?> row) {
+    final poids = (row['poids_kg'] as num?)?.toDouble();
+    final le = row['mesure_le'] as int?;
+    if (poids == null || le == null) return null;
+    return Pesee(
+      id: row['id'] as String,
+      le: DateTime.fromMillisecondsSinceEpoch(le),
+      poidsKg: poids,
+      note: row['note'] as String?,
+    );
+  }
+
+  Mesure? _lireMesure(Map<String, Object?> row) {
+    final type = TypeMesure.fromId(row['type'] as String?);
+    final valeur = (row['valeur_cm'] as num?)?.toDouble();
+    final le = row['mesure_le'] as int?;
+    if (type == null || valeur == null || le == null) return null;
+    return Mesure(
+      id: row['id'] as String,
+      le: DateTime.fromMillisecondsSinceEpoch(le),
+      type: type,
+      valeurCm: valeur,
+    );
+  }
 
   // -------------------------------------------------------------------------
   // Sauvegarde et restauration
@@ -589,6 +900,80 @@ class AppDatabase {
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
+  /// Pesees telles qu'elles sont stockees, **supprimees comprises**.
+  Future<List<PeseeEnregistree>> peseesPourSauvegarde() async {
+    final rows = await db.query('pesees', orderBy: 'mesure_le ASC');
+    return rows
+        .map((row) {
+          final pesee = _lirePesee(row);
+          if (pesee == null) return null;
+          return PeseeEnregistree(
+            pesee: pesee,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int,
+            deletedAt: row['deleted_at'] as int?,
+          );
+        })
+        .nonNulls
+        .toList();
+  }
+
+  /// Mesures telles qu'elles sont stockees, **supprimees comprises**.
+  Future<List<MesureEnregistree>> mesuresPourSauvegarde() async {
+    final rows = await db.query('mesures', orderBy: 'mesure_le ASC');
+    return rows
+        .map((row) {
+          final mesure = _lireMesure(row);
+          if (mesure == null) return null;
+          return MesureEnregistree(
+            mesure: mesure,
+            createdAt: row['created_at'] as int,
+            updatedAt: row['updated_at'] as int,
+            deletedAt: row['deleted_at'] as int?,
+          );
+        })
+        .nonNulls
+        .toList();
+  }
+
+  Future<void> restaurerPesee(PeseeEnregistree enregistree) async {
+    final pesee = enregistree.pesee;
+    await db.insert('pesees', {
+      'id': pesee.id,
+      'mesure_le': pesee.le.millisecondsSinceEpoch,
+      'poids_kg': pesee.poidsKg,
+      'note': pesee.note,
+      'created_at': enregistree.createdAt,
+      'updated_at': enregistree.updatedAt,
+      'deleted_at': enregistree.deletedAt,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> restaurerMesure(MesureEnregistree enregistree) async {
+    final mesure = enregistree.mesure;
+    await db.insert('mesures', {
+      'id': mesure.id,
+      'mesure_le': mesure.le.millisecondsSinceEpoch,
+      'type': mesure.type.name,
+      'valeur_cm': mesure.valeurCm,
+      'created_at': enregistree.createdAt,
+      'updated_at': enregistree.updatedAt,
+      'deleted_at': enregistree.deletedAt,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  /// Identifiants des pesees presentes localement, supprimees comprises.
+  Future<Set<String>> idsDePesees() async {
+    final rows = await db.query('pesees', columns: ['id']);
+    return {for (final row in rows) row['id'] as String};
+  }
+
+  /// Identifiants des mesures presentes localement, supprimees comprises.
+  Future<Set<String>> idsDeMesures() async {
+    final rows = await db.query('mesures', columns: ['id']);
+    return {for (final row in rows) row['id'] as String};
+  }
+
   Future<void> ecrireSettings(Map<String, String> valeurs) async {
     final batch = db.batch();
     for (final entree in valeurs.entries) {
@@ -611,12 +996,19 @@ class AppDatabase {
 
   /// Efface toutes les donnees locales. Utilise par la suppression de compte et
   /// par la remise a zero depuis les reglages.
+  ///
+  /// Toutes les tables y passent, y compris le suivi du poids : une remise a
+  /// zero qui laisserait des mensurations derriere elle ne serait pas une
+  /// remise a zero, et l'utilisateur n'aurait aucun moyen de le voir.
   Future<void> wipe() async {
     await db.transaction((txn) async {
       await txn.delete('meal_items');
       await txn.delete('meals');
       await txn.delete('templates');
       await txn.delete('favorites');
+      await txn.delete('portions');
+      await txn.delete('pesees');
+      await txn.delete('mesures');
       await txn.delete('settings');
     });
   }
@@ -666,6 +1058,44 @@ class FavoriteEnregistre {
 
   final Favorite favorite;
   final int createdAt;
+}
+
+/// Une pesee telle qu'elle est stockee.
+///
+/// Meme raison que pour les repas : `savePesee` remet `created_at` a maintenant
+/// et `deleted_at` a nul. Restaurer avec elle **ressusciterait** une pesee que
+/// l'utilisateur avait supprimee.
+class PeseeEnregistree {
+  const PeseeEnregistree({
+    required this.pesee,
+    required this.createdAt,
+    required this.updatedAt,
+    this.deletedAt,
+  });
+
+  final Pesee pesee;
+  final int createdAt;
+  final int updatedAt;
+  final int? deletedAt;
+
+  bool get estSupprimee => deletedAt != null;
+}
+
+/// Une mesure corporelle telle qu'elle est stockee.
+class MesureEnregistree {
+  const MesureEnregistree({
+    required this.mesure,
+    required this.createdAt,
+    required this.updatedAt,
+    this.deletedAt,
+  });
+
+  final Mesure mesure;
+  final int createdAt;
+  final int updatedAt;
+  final int? deletedAt;
+
+  bool get estSupprimee => deletedAt != null;
 }
 
 /// Repas personnalise enregistre.

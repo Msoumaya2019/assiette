@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import '../data/local/app_database.dart';
 import 'meal.dart';
+import 'portion.dart';
+import 'suivi_poids.dart';
 
 /// Format du fichier de sauvegarde.
 ///
@@ -64,6 +66,9 @@ class SauvegardeLue {
     required this.settings,
     required this.reglagesExclus,
     required this.photosAbsentes,
+    this.pesees = const [],
+    this.mesures = const [],
+    this.portions = const {},
   });
 
   final int version;
@@ -88,9 +93,26 @@ class SauvegardeLue {
   /// sauvegarde qui perd des photos sans le dire est une sauvegarde qui ment.
   final int photosAbsentes;
 
+  /// Pesees, supprimees comprises.
+  final List<PeseeEnregistree> pesees;
+
+  /// Mesures corporelles, supprimees comprises.
+  final List<MesureEnregistree> mesures;
+
+  /// Portions retenues, par cle d'aliment.
+  final Map<String, Portion> portions;
+
   int get mealsVivants => meals.where((m) => !m.estSupprime).length;
 
   int get mealsSupprimes => meals.where((m) => m.estSupprime).length;
+
+  int get peseesVivantes => pesees.where((p) => !p.estSupprimee).length;
+
+  int get peseesSupprimees => pesees.where((p) => p.estSupprimee).length;
+
+  int get mesuresVivantes => mesures.where((m) => !m.estSupprimee).length;
+
+  int get mesuresSupprimees => mesures.where((m) => m.estSupprimee).length;
 
   /// Lit un fichier de sauvegarde.
   ///
@@ -164,6 +186,34 @@ class SauvegardeLue {
       }
     }
 
+    // Les sections ajoutees apres la version 1 du format sont **facultatives** :
+    // une sauvegarde produite avant elles reste lisible. C'est ce qui permet de
+    // ne pas changer le numero de format a chaque table nouvelle, et donc de ne
+    // pas refuser des fichiers parfaitement exploitables.
+    final pesees = _liste(
+      json['pesees'],
+      'les pesees',
+    ).map(_lirePesee).toList();
+    final mesures = _liste(
+      json['mesures'],
+      'les mesures',
+    ).map(_lireMesure).toList();
+
+    final portions = <String, Portion>{};
+    final portionsJson = json['portions'];
+    if (portionsJson is Map) {
+      for (final entree in portionsJson.cast<Object?, Object?>().entries) {
+        final cle = entree.key;
+        if (cle is! String) continue;
+        final portion = Portion.depuisJson(entree.value);
+        if (portion != null) portions[cle] = portion;
+      }
+    }
+
+    // L'objectif de poids n'a pas de section a lui : il vit dans la table
+    // `settings`, comme les objectifs nutritionnels, et suit donc le bloc
+    // `settings`. Lui donner une seconde place dans le fichier creerait deux
+    // sources pour la meme valeur, et rien ne dirait laquelle fait foi.
     return SauvegardeLue(
       version: version,
       exporteLe: json['exporteLe'] is String
@@ -179,6 +229,9 @@ class SauvegardeLue {
         'les reglages exclus',
       ).whereType<String>().toList(),
       photosAbsentes: (json['photosAbsentes'] as int?) ?? 0,
+      pesees: pesees,
+      mesures: mesures,
+      portions: portions,
     );
   }
 
@@ -261,6 +314,42 @@ class SauvegardeLue {
         hint: 'Le fichier est probablement abime.',
       );
     }
+  }
+
+  static PeseeEnregistree _lirePesee(Object? valeur) {
+    final json = _objet(valeur, 'une pesee');
+    final pesee = Pesee.depuisJson(json);
+    if (pesee == null) {
+      throw const SauvegardeIllisible(
+        'Une pesee de la sauvegarde est illisible : son poids ou sa date '
+        'manque.',
+        hint: 'Le fichier est probablement abime.',
+      );
+    }
+    return PeseeEnregistree(
+      pesee: pesee,
+      createdAt: _entier(json['createdAt']) ?? 0,
+      updatedAt: _entier(json['updatedAt']) ?? 0,
+      deletedAt: _entier(json['deletedAt']),
+    );
+  }
+
+  static MesureEnregistree _lireMesure(Object? valeur) {
+    final json = _objet(valeur, 'une mesure');
+    final mesure = Mesure.depuisJson(json);
+    if (mesure == null) {
+      throw const SauvegardeIllisible(
+        'Une mesure de la sauvegarde est illisible : son type, sa valeur ou sa '
+        'date manque, ou son type n\'est pas reconnu.',
+        hint: 'Le fichier est probablement abime.',
+      );
+    }
+    return MesureEnregistree(
+      mesure: mesure,
+      createdAt: _entier(json['createdAt']) ?? 0,
+      updatedAt: _entier(json['updatedAt']) ?? 0,
+      deletedAt: _entier(json['deletedAt']),
+    );
   }
 
   static Map<String, dynamic> _objet(Object? valeur, String quoi) {

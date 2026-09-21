@@ -7,6 +7,7 @@ import '../../core/theme.dart';
 import '../../data/local/app_database.dart';
 import '../../models/food.dart';
 import '../../models/meal.dart';
+import '../../models/portion.dart';
 import '../../state/providers.dart';
 import '../router.dart';
 import '../widgets/common.dart';
@@ -124,13 +125,22 @@ class FavoritesScreen extends ConsumerWidget {
     final food = favorite.asFood;
     if (food == null) return;
 
+    final portion = await ref.read(appDatabaseProvider).portionPour(food);
+    if (!context.mounted) return;
+
     final grams = await showQuantityDialog(
       context,
-      initial: food.servingSizeG ?? 100,
+      initial: food.servingSizeG ?? portion?.grams ?? 100,
+      portion: portion,
     );
     if (grams == null || grams <= 0) return;
 
-    final item = MealItem(food: food, quantityG: grams, isEstimate: false);
+    final item = MealItem(
+      food: food,
+      quantityG: grams,
+      portion: portion,
+      isEstimate: false,
+    );
     final draft = ref.read(draftMealProvider);
 
     if (draft == null) {
@@ -190,7 +200,7 @@ class FavoritesScreen extends ConsumerWidget {
   }
 }
 
-class _FavoriteTile extends StatelessWidget {
+class _FavoriteTile extends ConsumerWidget {
   const _FavoriteTile({
     required this.favorite,
     required this.onAdd,
@@ -202,9 +212,16 @@ class _FavoriteTile extends StatelessWidget {
   final VoidCallback onRemove;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final food = favorite.asFood;
     final palette = context.palette;
+
+    // Meme regle que dans les resultats de recherche : l'apercu annonce
+    // l'unite sur laquelle il porte.
+    ref.watch(portionsProvider);
+    final portion = food == null
+        ? null
+        : ref.read(portionsProvider.notifier).pour(food);
 
     return ListTile(
       contentPadding: EdgeInsets.zero,
@@ -233,7 +250,8 @@ class _FavoriteTile extends StatelessWidget {
       subtitle: food == null
           ? null
           : Text(
-              '${Format.carbs(food.per100g.carbs)} g glucides / 100 g · ${food.source.displayLabel}',
+              '${Format.carbs(food.per100g.carbs)} g glucides '
+              '${referenceDePortion(portion)} · ${food.source.displayLabel}',
               style: TextStyle(fontSize: 12, color: palette.mutedText),
             ),
       trailing: Row(

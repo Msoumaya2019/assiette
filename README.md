@@ -39,6 +39,7 @@ viennent en complément.
 | **Historique** | Tous les repas, groupés par jour, avec le total de glucides de chaque journée |
 | **Statistiques** | Glucides des 7 derniers jours ou des 6 dernières semaines, objectifs, répartition |
 | **Favoris** | Aliments et produits enregistrés, plus les repas types |
+| **Poids** | Suivi personnel : courbe de poids, objectif, mensurations — ouvert depuis l'accueil |
 | **Réglages** | Mode d'analyse, objectifs, thème clair/sombre, rappels, sauvegarde et restauration, effacement des données |
 
 Parcours principal :
@@ -54,6 +55,44 @@ Autres entrées : **code-barres** (produits industriels), **photo d'étiquette**
 Méthodes d'estimation de portion : photo rapide, second angle, poids connu saisi
 directement, ou petite / moyenne / grande portion. Chaque modification de quantité
 recalcule immédiatement l'ensemble des valeurs.
+
+### Portions nommées : « pour 1 gâteau » au lieu de « pour 100 g »
+
+Un aliment se lit souvent par unité, pas au gramme. L'application permet donc de
+déclarer, **pour un aliment donné**, ce que vaut une unité chez soi :
+
+```
+1 gâteau = 65 g        →  l'écran affiche « pour 1 gâteau (65 g) »
+                       →  les valeurs affichées deviennent celles d'un gâteau
+                       →  les boutons + et − avancent d'un gâteau
+```
+
+Ce que cela **ne** change pas, et c'est délibéré : le stockage reste au gramme et
+au pour-100 g. La portion n'est qu'une **unité d'affichage** appliquée par-dessus.
+Corriger « 1 gâteau = 65 g » en « 1 gâteau = 70 g » ne touche donc aucune valeur
+déjà enregistrée, et aucun arrondi ne s'accumule.
+
+La portion est retenue **par aliment** et reproposée automatiquement lors des
+recherches, des scans, des favoris et des lectures d'étiquette. Quand la source
+annonce déjà une portion exploitable (`2 biscuits (25 g)`), elle est reprise — et
+le nombre de biscuits en est **déduit** (12,5 g chacun), jamais supposé. Une
+mention ambiguë (`une part`, `125 g`) n'est pas interprétée : l'application
+préfère ne rien proposer plutôt que d'inventer un poids.
+
+Un aliment non reconnu reste à zéro : la portion change l'unité de lecture, jamais
+la valeur nutritionnelle.
+
+### Suivi du poids
+
+Un écran dédié, ouvert depuis l'accueil, tient une **courbe de poids**, un
+**objectif** et des **mensurations** (tour de taille, hanches, poitrine, bras,
+cuisse, cou). L'objectif apparaît en pointillé sur la courbe.
+
+Ce suivi est **personnel** : l'application enregistre ce que l'utilisateur saisit
+et le lui rend en graphique. Elle ne propose aucune cible, ne suggère aucune
+valeur, ne calcule aucun indice et ne formule aucun conseil. Aucune donnée de
+poids ou de mensuration ne quitte l'appareil, sauf si l'utilisateur exporte
+lui-même sa sauvegarde.
 
 ### Sauvegarde
 
@@ -93,6 +132,10 @@ Le point le plus important du projet :
 Toutes les valeurs sont stockées **pour 100 g**, jamais en total. Modifier une
 portion ne fait donc qu'un recalcul, sans dérive d'arrondi cumulée.
 
+L'unité **affichée** peut être une portion nommée (« pour 1 gâteau (65 g) »), mais
+c'est une conversion d'affichage : le gramme reste la seule unité stockée. Il n'y a
+donc jamais deux vérités à réconcilier, et changer une portion ne réécrit rien.
+
 L'incertitude est propagée : chaque aliment porte un indice de confiance, et
 l'application affiche une **fourchette** (`≈ 74 g — estimation 68–82 g`) dont la
 largeur dépend de la confiance. En dessous de 0,65, le repas est marqué « à vérifier ».
@@ -103,7 +146,7 @@ largeur dépend de la confiance. En dessous de 0,65, le repas est marqué « à 
 app/                        Application Flutter (Android + iOS)
   lib/
     core/                   Configuration, thème, formatage, erreurs
-    models/                 Valeurs nutritionnelles, aliments, repas, objectifs, réglages
+    models/                 Valeurs nutritionnelles, aliments, repas, portions, suivi du poids, objectifs, réglages
     data/
       vision/               Fournisseurs d'analyse d'image + prompts
       local/                Base SQLite
@@ -406,7 +449,18 @@ Couverture actuelle :
   provenance, total de glucides identique, suppression conservée après
   restauration, fusion qui n'écrase ni ne ressuscite rien, clé sensible absente du
   fichier, photo disparue retirée et annoncée, et sept refus de fichier dont
-  chacun nomme sa cause.
+  chacun nomme sa cause ;
+- **portions nommées** : pluriel et singulier français (`gâteau`/`gâteaux`, `jus`
+  invariant), nombre d'unités déduit du poids et non l'inverse, poids par unité
+  lu dans une étiquette (`2 biscuits (25 g)` → 12,5 g), mentions ambiguës
+  refusées, portion retenue qui prime sur celle de la source ;
+- **migration de schéma v1 → v2** : une base v1 remplie migre sans perte, les
+  pierres tombales restent mortes, les nouvelles tables existent et sont vides, et
+  la base migrée est **structurellement identique** à une base neuve (colonnes et
+  objets SQLite comparés) ;
+- **suivi du poids** : une pesée par jour retenue, variation, bornes de la courbe
+  élargies pour contenir l'objectif, mensurations par type, et refus des valeurs
+  nulles ou négatives.
 
 ## Notes d'environnement
 
@@ -439,6 +493,9 @@ macOS et Linux, `flutter` fonctionne normalement.
 | Historique, favoris, repas types, statistiques, objectifs | Écrit |
 | Réglages, thème clair/sombre, confidentialité | Écrit |
 | Sauvegarde : export JSON et restauration (fusion ou remplacement) | Écrit, testé |
+| Portions nommées (« pour 1 gâteau »), retenues par aliment | Écrit, testé |
+| Suivi du poids : courbe, objectif, mensurations | Écrit, testé |
+| Base locale en schéma v2 (migration v1 → v2 éprouvée) | Écrit, testé |
 | Notifications (rappels de repas, résumé du soir) | Écrit, testé |
 | Compte et synchronisation | Schéma serveur prêt, interface à brancher |
 | APK et AAB signés, IPA non signée | Produits et vérifiés — release `v0.1.2` |

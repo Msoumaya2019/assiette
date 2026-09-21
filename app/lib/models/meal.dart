@@ -2,6 +2,7 @@ import 'package:uuid/uuid.dart';
 
 import 'food.dart';
 import 'nutrition_values.dart';
+import 'portion.dart';
 
 const _uuid = Uuid();
 
@@ -58,6 +59,7 @@ class MealItem {
     required this.quantityG,
     this.confidence,
     this.portionSize,
+    this.portion,
     this.isEstimate = false,
     this.sortOrder = 0,
   }) : id = id ?? _uuid.v4();
@@ -74,6 +76,14 @@ class MealItem {
   /// Portion choisie par l'utilisateur, si elle a ete utilisee.
   final PortionSize? portionSize;
 
+  /// Unite nommee par l'utilisateur, par exemple « gateau ».
+  ///
+  /// Purement descriptive : elle sert a **afficher** « 2 gateaux (130 g) » au
+  /// lieu de « 130 g ». Le nombre d'unites est toujours deduit de `quantityG`
+  /// et du poids d'une unite, jamais conserve a part : deux valeurs a tenir
+  /// coherentes finiraient par diverger, et le total affiche ne suivrait plus.
+  final Portion? portion;
+
   /// Vrai lorsque la quantite provient d'une estimation visuelle.
   final bool isEstimate;
 
@@ -82,11 +92,27 @@ class MealItem {
   /// Valeurs effectivement consommees pour cette quantite.
   NutritionValues get total => food.per100g.forGrams(quantityG);
 
+  /// Nombre d'unites consommees, ou `null` si aucune portion n'est definie.
+  double? get nombreDUnites => portion?.unitesPour(quantityG);
+
+  /// « 2 gateaux (130 g) », ou `null` sans portion definie.
+  ///
+  /// Le nombre d'unites est **deduit** du poids consomme : passer les grammes
+  /// directement a `libelleAvecPoids` les ferait lire comme un nombre d'unites,
+  /// et « 160 g » deviendrait « 160 parts ».
+  String? get libellePortion {
+    final nombre = nombreDUnites;
+    if (nombre == null) return null;
+    return portion!.libelleAvecPoids(nombre);
+  }
+
   MealItem copyWith({
     Food? food,
     double? quantityG,
     double? confidence,
     PortionSize? portionSize,
+    Portion? portion,
+    bool effacerPortion = false,
     bool? isEstimate,
     int? sortOrder,
   }) {
@@ -96,6 +122,7 @@ class MealItem {
       quantityG: quantityG ?? this.quantityG,
       confidence: confidence ?? this.confidence,
       portionSize: portionSize ?? this.portionSize,
+      portion: effacerPortion ? null : (portion ?? this.portion),
       isEstimate: isEstimate ?? this.isEstimate,
       sortOrder: sortOrder ?? this.sortOrder,
     );
@@ -107,6 +134,7 @@ class MealItem {
     'quantityG': quantityG,
     'confidence': confidence,
     'portionSize': portionSize?.name,
+    'portion': portion?.toJson(),
     'isEstimate': isEstimate,
     'sortOrder': sortOrder,
   };
@@ -119,6 +147,7 @@ class MealItem {
     portionSize: json['portionSize'] == null
         ? null
         : PortionSize.fromId(json['portionSize'] as String?),
+    portion: Portion.depuisJson(json['portion']),
     isEstimate: (json['isEstimate'] as bool?) ?? false,
     sortOrder: (json['sortOrder'] as int?) ?? 0,
   );

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:uuid/uuid.dart';
 
 import '../core/config.dart';
 import '../data/ciqual_repository.dart';
@@ -10,9 +11,12 @@ import '../data/vision/mock_provider.dart';
 import '../data/vision/proxy_provider.dart';
 import '../data/vision/vision_provider.dart';
 import '../models/app_settings.dart';
+import '../models/food.dart';
 import '../models/goals.dart';
 import '../models/meal.dart';
 import '../models/nutrition_values.dart';
+import '../models/portion.dart';
+import '../models/suivi_poids.dart';
 import '../services/backup_service.dart';
 import '../services/image_service.dart';
 import '../services/meal_analysis_service.dart';
@@ -249,6 +253,8 @@ class SettingsNotifier extends Notifier<AppSettings> {
     ref.invalidate(mealsProvider);
     ref.invalidate(favoritesProvider);
     ref.invalidate(templatesProvider);
+    ref.invalidate(suiviProvider);
+    ref.invalidate(portionsProvider);
   }
 
   /// Relit les reglages et recharge les listes apres une restauration.
@@ -264,6 +270,8 @@ class SettingsNotifier extends Notifier<AppSettings> {
     ref.invalidate(mealsProvider);
     ref.invalidate(favoritesProvider);
     ref.invalidate(templatesProvider);
+    ref.invalidate(suiviProvider);
+    ref.invalidate(portionsProvider);
     // Les rappels programmes decoulent des reglages : ils doivent suivre.
     await ref.read(notificationServiceProvider).applySettings(state);
   }
@@ -343,8 +351,27 @@ class MealsNotifier extends AsyncNotifier<List<Meal>> {
   }
 
   /// Enregistre un repas puis recharge la liste.
+  ///
+  /// C'est **ici**, et non au moment ou la portion est definie, que les portions
+  /// sont retenues pour les prochaines fois. Une portion definie sur un repas
+  /// que l'utilisateur finit par abandonner ne doit pas s'installer dans la
+  /// base : retenir ce qui a ete valide, c'est retenir ce que l'utilisateur a
+  /// effectivement garde.
   Future<void> save(Meal meal) async {
-    await ref.read(appDatabaseProvider).saveMeal(meal);
+    final database = ref.read(appDatabaseProvider);
+    await database.saveMeal(meal);
+
+    for (final item in meal.items) {
+      final portion = item.portion;
+      if (portion == null) continue;
+      await database.writePortion(AppDatabase.cleDePortion(item.food), portion);
+    }
+
+    // Les listes de resultats lisent les portions depuis `portionsProvider` :
+    // sans cette invalidation, une portion tout juste definie n'apparaitrait
+    // qu'au prochain demarrage.
+    ref.invalidate(portionsProvider);
+
     await refresh();
   }
 
@@ -545,6 +572,25 @@ class DraftMealNotifier extends Notifier<Meal?> {
     state = meal.copyWith(items: items);
   }
 
+  /// Definit ou retire la portion nommee d'un aliment.
+  ///
+  /// La quantite en grammes n'est **pas** touchee. Declarer « 1 gateau = 65 g »
+  /// alors que 130 g sont deja saisis doit afficher « 2 gateaux », pas reecrire
+  /// la quantite : changer un total que l'utilisateur n'a pas demande de
+  /// changer serait une perte silencieuse.
+  void setPortion(String itemId, Portion? portion) {
+    final meal = state;
+    if (meal == null) return;
+    final items = meal.items
+        .map(
+          (item) => item.id == itemId
+              ? item.copyWith(portion: portion, effacerPortion: portion == null)
+              : item,
+        )
+        .toList();
+    state = meal.copyWith(items: items);
+  }
+
   /// Applique un coefficient de portion a un aliment.
   void applyPortionFactor(String itemId, double factor) {
     final meal = state;
@@ -657,4 +703,146 @@ class TemplatesNotifier extends AsyncNotifier<List<MealTemplate>> {
 final templatesProvider =
     AsyncNotifierProvider<TemplatesNotifier, List<MealTemplate>>(
       TemplatesNotifier.new,
+    );
+
+// ---------------------------------------------------------------------------
+// Suivi du poids
+// ---------------------------------------------------------------------------
+
+const _uuidSuivi = Uuid();
+
+/// Pesees, mesures et objectif de poids, lus ensemble.
+///
+/// Une seule source pour l'ecran : la courbe a besoin des pesees **et** de
+/// l'objectif pour se cadrer. Deux providers separes obligeraient l'ecran a
+/// gerer deux etats de chargement pour un affichage unique, et l'objectif
+/// pourrait arriver apres la courbe — qui se recadrerait alors sous les yeux de
+/// l'utilisateur.
+class SuiviNotifier extends AsyncNotifier<SuiviPoids> {
+  @override
+  Future<SuiviPoids> build() async {
+    final database = ref.watch(appDatabaseProvider);
+    return _lire(database);
+  }
+
+  Future<SuiviPoids> _lire(AppDatabase database) async {
+    return SuiviPoids(
+      pesees: await database.pesees(),
+      mesures: await database.mesures(),
+      objectif: await database.readObjectifPoids(),
+    );
+  }
+
+  Future<void> _rafraichir() async {
+    final database = ref.read(appDatabaseProvider);
+    state = await AsyncValue.guard(() => _lire(database));
+  }
+
+  /// Enregistre une pesee. La date par defaut est maintenant.
+  Future<void> ajouterPesee({
+    required double poidsKg,
+    DateTime? le,
+    String? note,
+  }) async {
+    if (poidsKg <= 0) return;
+    await ref
+        .read(appDatabaseProvider)
+        .savePesee(
+          Pesee(
+            id: _uuidSuivi.v4(),
+            le: le ?? DateTime.now(),
+            poidsKg: poidsKg,
+            note: (note ?? '').trim().isEmpty ? null : note!.trim(),
+          ),
+        );
+    await _rafraichir();
+  }
+
+  Future<void> supprimerPesee(String id) async {
+    await ref.read(appDatabaseProvider).deletePesee(id);
+    await _rafraichir();
+  }
+
+  Future<void> ajouterMesure({
+    required TypeMesure type,
+    required double valeurCm,
+    DateTime? le,
+  }) async {
+    if (valeurCm <= 0) return;
+    await ref
+        .read(appDatabaseProvider)
+        .saveMesure(
+          Mesure(
+            id: _uuidSuivi.v4(),
+            le: le ?? DateTime.now(),
+            type: type,
+            valeurCm: valeurCm,
+          ),
+        );
+    await _rafraichir();
+  }
+
+  Future<void> supprimerMesure(String id) async {
+    await ref.read(appDatabaseProvider).deleteMesure(id);
+    await _rafraichir();
+  }
+
+  /// Definit ou efface l'objectif de poids.
+  ///
+  /// L'application ne propose aucune valeur : `null` efface, il ne remplace
+  /// jamais par une cible inventee.
+  Future<void> definirObjectif(double? cibleKg) async {
+    final objectif = cibleKg == null || cibleKg <= 0
+        ? ObjectifPoids.aucun
+        : ObjectifPoids(cibleKg: cibleKg);
+    await ref.read(appDatabaseProvider).writeObjectifPoids(objectif);
+    await _rafraichir();
+  }
+}
+
+final suiviProvider = AsyncNotifierProvider<SuiviNotifier, SuiviPoids>(
+  SuiviNotifier.new,
+);
+
+/// Courbe de poids, prete a dessiner.
+final seriePoidsProvider = Provider<AsyncValue<SeriePoids>>((ref) {
+  return ref.watch(suiviProvider).whenData((suivi) => suivi.serie());
+});
+
+// ---------------------------------------------------------------------------
+// Portions retenues
+// ---------------------------------------------------------------------------
+
+/// Portions retenues, par cle d'aliment.
+///
+/// Chargees **d'un bloc** plutot qu'a la demande : une liste de resultats en
+/// affiche plusieurs dizaines a la fois, et une lecture disque par ligne ferait
+/// autant d'acces pendant le defilement. La table reste petite — quelques
+/// dizaines de lignes pour un usage soutenu — donc la garder en memoire coute
+/// moins que de la relire sans arret.
+class PortionsNotifier extends AsyncNotifier<Map<String, Portion>> {
+  @override
+  Future<Map<String, Portion>> build() =>
+      ref.watch(appDatabaseProvider).portionsPourSauvegarde();
+
+  /// Portion a proposer pour un aliment.
+  ///
+  /// Celle que l'utilisateur a retenue prime ; a defaut, celle annoncee par la
+  /// source. Avant le premier chargement, seule la seconde est disponible —
+  /// c'est acceptable, et mieux que de n'afficher aucune portion.
+  Portion? pour(Food food) {
+    final retenue = state.valueOrNull?[AppDatabase.cleDePortion(food)];
+    if (retenue != null) return retenue;
+    return Portion.depuisEtiquette(food.servingLabel, food.servingSizeG);
+  }
+
+  Future<void> recharger() async {
+    final database = ref.read(appDatabaseProvider);
+    state = await AsyncValue.guard(() => database.portionsPourSauvegarde());
+  }
+}
+
+final portionsProvider =
+    AsyncNotifierProvider<PortionsNotifier, Map<String, Portion>>(
+      PortionsNotifier.new,
     );

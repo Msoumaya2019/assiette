@@ -200,6 +200,7 @@ class MealItemRow extends StatelessWidget {
     required this.name,
     required this.quantityG,
     required this.totals,
+    this.portionLabel,
     this.sourceLabel,
     this.confidence,
     this.onTap,
@@ -208,6 +209,14 @@ class MealItemRow extends StatelessWidget {
 
   final String name;
   final double quantityG;
+
+  /// « 2 gateaux (130 g) », quand une portion est definie.
+  ///
+  /// Remplace alors l'affichage en grammes : les deux cote a cote diraient la
+  /// meme chose deux fois, et l'utilisateur qui compte en gateaux n'a pas
+  /// besoin de relire les grammes a chaque ligne.
+  final String? portionLabel;
+
   final NutritionValues totals;
   final String? sourceLabel;
   final double? confidence;
@@ -242,7 +251,7 @@ class MealItemRow extends StatelessWidget {
                   Row(
                     children: [
                       Text(
-                        Format.grams(quantityG),
+                        portionLabel ?? Format.grams(quantityG),
                         style: TextStyle(
                           fontSize: 12,
                           color: palette.mutedText,
