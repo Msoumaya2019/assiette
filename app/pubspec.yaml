@@ -46,6 +46,24 @@ dependencies:
   flutter_local_notifications: ^18.0.1
   timezone: ^0.10.0
 
+  # Sauvegarde : partager le fichier exporte, et en choisir un a restaurer.
+  #
+  # `share_plus` et `mobile_scanner` appliquent `org.jetbrains.kotlin.android`
+  # sans condition. Le projet tourne donc avec `android.builtInKotlin=false`,
+  # la valeur que le migrateur de Flutter ecrit dans `gradle.properties`.
+  #
+  # `file_picker` est **epingle a la 10.x pour cette raison** : depuis la 11.0.0
+  # il n'applique plus le greffon Kotlin, en comptant sur le Kotlin integre
+  # d'AGP 9. Sous `builtInKotlin=false`, ses sources Kotlin ne sont alors
+  # compilees par personne, et la compilation Android echoue sur
+  # `cannot find symbol: class FilePickerPlugin`. Mesure faite, et detaillee
+  # dans `docs/publication.md` §7.6.
+  #
+  # La 10.3.11 est **retiree** par son auteur : `pub` la refuse. D'ou la 10.3.10,
+  # et un epinglage exact plutot qu'un intervalle qui la laisserait revenir.
+  share_plus: ^12.0.2
+  file_picker: 10.3.10
+
   # Divers
   intl: ^0.20.2
   uuid: ^4.5.1

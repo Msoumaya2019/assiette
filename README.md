@@ -39,7 +39,7 @@ viennent en complément.
 | **Historique** | Tous les repas, groupés par jour, avec le total de glucides de chaque journée |
 | **Statistiques** | Glucides des 7 derniers jours ou des 6 dernières semaines, objectifs, répartition |
 | **Favoris** | Aliments et produits enregistrés, plus les repas types |
-| **Réglages** | Mode d'analyse, objectifs, thème clair/sombre, rappels, effacement des données |
+| **Réglages** | Mode d'analyse, objectifs, thème clair/sombre, rappels, sauvegarde et restauration, effacement des données |
 
 Parcours principal :
 
@@ -54,6 +54,28 @@ Autres entrées : **code-barres** (produits industriels), **photo d'étiquette**
 Méthodes d'estimation de portion : photo rapide, second angle, poids connu saisi
 directement, ou petite / moyenne / grande portion. Chaque modification de quantité
 recalcule immédiatement l'ensemble des valeurs.
+
+### Sauvegarde
+
+Les réglages permettent d'**exporter** l'historique dans un fichier JSON lisible
+par un humain, puis de le partager (stockage en ligne, courriel, ordinateur) ; et
+de le **restaurer** ensuite, au choix :
+
+- **Fusionner** — ajoute ce qui manque et **n'efface jamais rien** : le pire
+  résultat possible est « rien n'a changé » ;
+- **Remplacer** — efface d'abord les données de l'appareil, puis réinscrit le
+  fichier.
+
+Ce qui n'est **pas** dans le fichier, et pourquoi :
+
+| Absent | Raison |
+|---|---|
+| Les photos | Une photo pèse quelques centaines de kilo-octets ; deux cents repas feraient un fichier inutilisable. Les chemins sont conservés, et la restauration **annonce** le nombre de photos non retrouvées au lieu de laisser des références mortes. |
+| La clé du fournisseur d'analyse | Elle vit dans le trousseau du système, pas dans la base. Un fichier de sauvegarde est un fichier en clair : c'est ce qui le rend partageable sans risque. |
+
+Un repas supprimé reste supprimé après restauration : la suppression est
+conservée sous forme de *pierre tombale*, sans quoi l'historique ferait
+réapparaître ce que l'utilisateur avait effacé.
 
 ## Comment les valeurs sont calculées
 
@@ -320,20 +342,23 @@ python tools/build_ciqual.py
 ## Tests
 
 ```bash
-python tools/lancer_tests_flutter.py    # toute la suite
+python tools/lancer_verifications_dart.py         # format, analyse, tests
+python tools/lancer_verifications_dart.py format  # une seule étape
 ```
 
-Sous Windows, ce lanceur pose les deux réglages que Flutter réclame et écarte la
-boucle locale du mandataire ; le pourquoi est documenté dans
-`docs/publication.md` §7.4. La CI, elle, exécute `flutter test` directement sur
-`ubuntu-latest`.
+Ce lanceur rejoue exactement les trois étapes Dart de `ci.yml`, dans le même
+environnement. Sous Windows, `dart` n'est pas dans le `PATH` (`bin/dart` est un
+script shell que Git Bash n'exécute pas), et `flutter` réclame deux variables
+dont une dont le nom contient des parenthèses — que `export` refuse. Le pourquoi
+est documenté dans `docs/publication.md` §7.4. La CI, elle, exécute les trois
+commandes directement sur `ubuntu-latest`.
 
 Les contrôles et les scripts qui décident de la version publiée sont éprouvés hors
 CI, sur cette machine :
 
 ```bash
 python tools/verifier_version_build.py    # 11 cas sur tools/version_build.sh
-python tools/lancer_bancs.py              # les sept bancs de falsification
+python tools/lancer_bancs.py              # les huit bancs de falsification
 ```
 
 Un banc de falsification retire un garde-fou à la fois et vérifie que le contrôle
@@ -343,7 +368,10 @@ juste. `docs/publication.md` §8 liste les bancs.
 
 `lancer_bancs.py` lit chaque code de sortie **directement**, sans tube : lire
 `$?` après un `| tail` rend le code du tube, pas celui de la commande, ce qui a
-déjà fait annoncer trois bancs verts alors que l'un d'eux avait planté.
+déjà fait annoncer trois bancs verts alors que l'un d'eux avait planté. Sa liste
+de bancs est **close et vérifiée dans les deux sens** : un banc écrit mais non
+déclaré serait ignoré en silence, et le rapport annoncerait « tous verts » sur un
+ensemble incomplet.
 
 Après avoir téléchargé un APK ou un IPA, son nom et son contenu se vérifient :
 
@@ -373,7 +401,12 @@ Couverture actuelle :
   415, 429 avec délai, 500) ;
 - lecture des réponses Open Food Facts (deux formats de schéma, cache, erreurs 404 /
   429 / 503) ;
-- recherche Ciqual (accents, ligatures, classement, appariement approximatif).
+- recherche Ciqual (accents, ligatures, classement, appariement approximatif) ;
+- **sauvegarde et restauration** : aller-retour sans perte de valeurs ni de
+  provenance, total de glucides identique, suppression conservée après
+  restauration, fusion qui n'écrase ni ne ressuscite rien, clé sensible absente du
+  fichier, photo disparue retirée et annoncée, et sept refus de fichier dont
+  chacun nomme sa cause.
 
 ## Notes d'environnement
 
@@ -389,8 +422,8 @@ Flutter, chacune avec un message qui ne dit pas sa cause :
    propre port d'écoute, et **tous** les fichiers échouent d'un coup, avec un
    message qui désigne le WebSocket.
 
-`tools/lancer_tests_flutter.py` et `tools/environnement_flutter.py` posent les
-deux derniers réglages ; `docs/publication.md` §7.4 détaille le diagnostic. Sur
+`tools/lancer_verifications_dart.py` et `tools/environnement_flutter.py` posent
+les deux derniers réglages ; `docs/publication.md` §7.4 détaille le diagnostic. Sur
 macOS et Linux, `flutter` fonctionne normalement.
 
 ---
@@ -405,6 +438,7 @@ macOS et Linux, `flutter` fonctionne normalement.
 | Recherche, code-barres, étiquettes | Écrit |
 | Historique, favoris, repas types, statistiques, objectifs | Écrit |
 | Réglages, thème clair/sombre, confidentialité | Écrit |
+| Sauvegarde : export JSON et restauration (fusion ou remplacement) | Écrit, testé |
 | Notifications (rappels de repas, résumé du soir) | Écrit, testé |
 | Compte et synchronisation | Schéma serveur prêt, interface à brancher |
 | APK et AAB signés, IPA non signée | Produits et vérifiés — release `v0.1.2` |

@@ -13,6 +13,7 @@ import '../models/app_settings.dart';
 import '../models/goals.dart';
 import '../models/meal.dart';
 import '../models/nutrition_values.dart';
+import '../services/backup_service.dart';
 import '../services/image_service.dart';
 import '../services/meal_analysis_service.dart';
 import '../services/notification_service.dart';
@@ -63,6 +64,79 @@ final notificationServiceProvider = Provider<NotificationService>(
     'notificationServiceProvider doit etre surcharge au demarrage',
   ),
 );
+
+final backupServiceProvider = Provider<BackupService>(
+  (ref) => BackupService(
+    database: ref.watch(appDatabaseProvider),
+    appVersion: AppConfig.version,
+  ),
+);
+
+/// Relit les reglages persistes.
+///
+/// Une valeur illisible ou absente retombe sur la valeur par defaut : un
+/// reglage corrompu ne doit jamais empecher l'application de demarrer.
+///
+/// Vit ici, et non dans `main.dart` : la restauration d'une sauvegarde reecrit
+/// la table `settings` et doit relire exactement la meme chose. Deux copies de
+/// cette lecture divergeraient, et la divergence se verrait au redemarrage —
+/// c'est-a-dire trop tard pour la comprendre.
+Future<AppSettings> lireLesReglages(
+  AppDatabase database,
+  SecureStore secureStore,
+) async {
+  try {
+    final themeMode = await database.readSetting('theme_mode');
+    final analysisMode = await database.readSetting('analysis_mode');
+    final onboardingDone = await database.readSetting('onboarding_done');
+    final keepPhotos = await database.readSetting('keep_photos');
+    final mealReminders = await database.readSetting('meal_reminders');
+    final dailySummary = await database.readSetting('daily_summary');
+    final reminderHour = await database.readSetting('reminder_hour');
+    final reminderMinute = await database.readSetting('reminder_minute');
+    final disclaimerSeen = await database.readSetting('disclaimer_seen');
+    final privacyVersion = await database.readSetting('privacy_version');
+    final goals = await database.readGoals();
+    final hasKey = await secureStore.hasProviderKey();
+
+    return AppSettings(
+      themeMode: _themeMode(themeMode),
+      analysisMode: _analysisMode(analysisMode),
+      hasProviderKey: hasKey,
+      onboardingDone: onboardingDone == '1',
+      keepPhotos: keepPhotos != '0',
+      mealRemindersEnabled: mealReminders == '1',
+      dailySummaryEnabled: dailySummary == '1',
+      reminderHour: int.tryParse(reminderHour ?? '') ?? 20,
+      reminderMinute: int.tryParse(reminderMinute ?? '') ?? 0,
+      privacyPolicyAcceptedVersion: privacyVersion,
+      goals: goals,
+      useEstimatesDisclaimerSeen: disclaimerSeen == '1',
+    );
+  } catch (_) {
+    return const AppSettings();
+  }
+}
+
+ThemeMode _themeMode(String? value) => ThemeMode.values.firstWhere(
+  (mode) => mode.name == value,
+  orElse: () => ThemeMode.system,
+);
+
+AnalysisModeSetting _analysisMode(String? value) {
+  if (value == null) {
+    // Aucun reglage enregistre : on suit ce que la compilation permet.
+    //
+    // Source unique de verite : AppConfig. Un build qui embarque un point
+    // d'entree serveur doit demarrer en mode proxy, sinon on demanderait a
+    // l'utilisateur une cle dont ce build n'a precisement pas besoin.
+    return switch (AppConfig.defaultAnalysisMode) {
+      AnalysisMode.proxy => AnalysisModeSetting.proxy,
+      AnalysisMode.personal => AnalysisModeSetting.personal,
+    };
+  }
+  return AnalysisModeSetting.fromId(value);
+}
 
 // ---------------------------------------------------------------------------
 // Reglages
@@ -175,6 +249,23 @@ class SettingsNotifier extends Notifier<AppSettings> {
     ref.invalidate(mealsProvider);
     ref.invalidate(favoritesProvider);
     ref.invalidate(templatesProvider);
+  }
+
+  /// Relit les reglages et recharge les listes apres une restauration.
+  ///
+  /// Sans cette relecture, l'ecran continuerait d'afficher les reglages d'avant
+  /// la restauration jusqu'au prochain demarrage : les donnees seraient bien
+  /// revenues, mais l'application les ignorerait — theme, objectifs, rappels.
+  Future<void> rechargerApresRestauration() async {
+    state = await lireLesReglages(
+      ref.read(appDatabaseProvider),
+      ref.read(secureStoreProvider),
+    );
+    ref.invalidate(mealsProvider);
+    ref.invalidate(favoritesProvider);
+    ref.invalidate(templatesProvider);
+    // Les rappels programmes decoulent des reglages : ils doivent suivre.
+    await ref.read(notificationServiceProvider).applySettings(state);
   }
 }
 

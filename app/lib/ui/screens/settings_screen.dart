@@ -1,10 +1,17 @@
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../core/config.dart';
 import '../../core/theme.dart';
 import '../../models/app_settings.dart';
+import '../../models/sauvegarde.dart';
+import '../../services/backup_service.dart';
 import '../../state/providers.dart';
 import '../router.dart';
 import '../widgets/common.dart';
@@ -246,6 +253,40 @@ class SettingsScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.lg),
 
             SectionCard(
+              title: 'Sauvegarde',
+              subtitle: 'Emporter vos donnees, ou les remettre en place',
+              child: Column(
+                children: [
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.ios_share_rounded, size: 20),
+                    title: const Text('Exporter mes donnees'),
+                    subtitle: const Text(
+                      'Fichier lisible par un humain, a conserver ou a envoyer. '
+                      'Les photos ne sont pas incluses.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    onTap: () => _exporter(context, ref),
+                  ),
+                  const Divider(height: AppSpacing.lg),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.restore_rounded, size: 20),
+                    title: const Text('Restaurer une sauvegarde'),
+                    subtitle: const Text(
+                      'Fusionner ajoute ce qui manque, sans rien effacer. '
+                      'Remplacer efface d\'abord les donnees de ce telephone.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    onTap: () => _restaurer(context, ref),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: AppSpacing.lg),
+
+            SectionCard(
               title: 'Donnees',
               child: Column(
                 children: [
@@ -379,6 +420,168 @@ class SettingsScreen extends ConsumerWidget {
     await appliquer(true);
   }
 
+  /// Exporte les donnees, puis ouvre la feuille de partage du systeme.
+  ///
+  /// Le fichier est d'abord ecrit dans le dossier prive de l'application, puis
+  /// propose au partage : c'est la feuille de partage qui permet de l'envoyer
+  /// vers un stockage en ligne ou de le retrouver depuis un ordinateur. Un
+  /// fichier qui ne quitte jamais le telephone ne serait pas une sauvegarde.
+  ///
+  /// Aucune erreur ne bloque l'ecran : tout echec devient un message lisible.
+  Future<void> _exporter(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final service = ref.read(backupServiceProvider);
+      final fichier = await service.ecrireFichier(await service.exporter());
+      if (!context.mounted) return;
+
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(fichier.path)],
+          subject: 'Sauvegarde Assiette',
+          text: 'Sauvegarde de mes repas Assiette.',
+          sharePositionOrigin: _origineDuPartage(context),
+        ),
+      );
+    } on Object catch (erreur) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('L\'export a echoue : $erreur')),
+      );
+    }
+  }
+
+  /// Choisit un fichier, demande le mode, puis applique la sauvegarde.
+  Future<void> _restaurer(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final choix = await FilePicker.platform.pickFiles(
+        dialogTitle: 'Choisir une sauvegarde Assiette',
+        type: FileType.custom,
+        allowedExtensions: const ['json'],
+        withData: true,
+      );
+      if (choix == null || choix.files.isEmpty) return;
+
+      final sauvegarde = SauvegardeLue.depuisTexte(
+        await _lireLeFichier(choix.files.single),
+      );
+
+      if (!context.mounted) return;
+      final mode = await _demanderLeMode(context, sauvegarde);
+      if (mode == null) return;
+
+      final rapport = await ref
+          .read(backupServiceProvider)
+          .restaurer(sauvegarde, mode: mode);
+      // Les reglages ont pu etre reecrits : l'application doit les relire, sans
+      // quoi elle afficherait encore ceux d'avant jusqu'au prochain demarrage.
+      await ref.read(settingsProvider.notifier).rechargerApresRestauration();
+
+      messenger.showSnackBar(SnackBar(content: Text(rapport.resume)));
+    } on SauvegardeIllisible catch (erreur) {
+      messenger.showSnackBar(SnackBar(content: Text(erreur.toString())));
+    } on Object catch (erreur) {
+      messenger.showSnackBar(
+        SnackBar(content: Text('La restauration a echoue : $erreur')),
+      );
+    }
+  }
+
+  /// Lit le contenu d'un fichier choisi, quel que soit le chemin fourni.
+  ///
+  /// `withData` remplit `bytes` sur toutes les plateformes ; `path` sert de
+  /// repli, car il peut pointer vers une copie temporaire selon la source.
+  Future<String> _lireLeFichier(PlatformFile fichier) async {
+    final octets = fichier.bytes;
+    if (octets != null) {
+      try {
+        return utf8.decode(octets);
+      } on FormatException {
+        throw const SauvegardeIllisible(
+          'Ce fichier n\'est pas du texte lisible (UTF-8).',
+          hint: 'Choisissez un fichier produit par Reglages > Sauvegarde.',
+        );
+      }
+    }
+
+    final chemin = fichier.path;
+    if (chemin == null) {
+      throw const SauvegardeIllisible(
+        'Le fichier choisi n\'est pas accessible.',
+        hint: 'Copiez-le dans le stockage du telephone, puis reessayez.',
+      );
+    }
+    return File(chemin).readAsString();
+  }
+
+  /// Demande comment appliquer la sauvegarde.
+  ///
+  /// Le choix est explicite parce que les deux modes n'ont pas les memes
+  /// consequences : l'un ne peut que completer, l'autre efface. Laisser
+  /// l'application decider a la place de l'utilisateur reviendrait a effacer
+  /// ses donnees sans le lui dire.
+  Future<ModeRestauration?> _demanderLeMode(
+    BuildContext context,
+    SauvegardeLue sauvegarde,
+  ) {
+    return showDialog<ModeRestauration>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Restaurer cette sauvegarde ?'),
+        content: Text(
+          'Sauvegarde du ${_dateLisible(sauvegarde.exporteLe)}.\n'
+          '${sauvegarde.mealsVivants} repas, '
+          '${sauvegarde.templates.length} repas enregistres, '
+          '${sauvegarde.favorites.length} favoris.\n\n'
+          'Fusionner ajoute ce qui manque et ne supprime jamais rien.\n'
+          'Remplacer efface d\'abord les donnees presentes sur ce telephone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Annuler'),
+          ),
+          TextButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(ModeRestauration.fusion),
+            child: const Text('Fusionner'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(ModeRestauration.remplacement),
+            child: const Text('Remplacer'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Rectangle d'ancrage de la feuille de partage.
+  ///
+  /// Obligatoire sur iPad et macOS : sans lui, le partage leve une exception au
+  /// lieu de s'ouvrir. On ancre a la tuile quand sa position est connue, sinon
+  /// au centre de l'ecran — un ancrage valide dans tous les cas.
+  Rect _origineDuPartage(BuildContext context) {
+    final boite = context.findRenderObject();
+    if (boite is RenderBox && boite.hasSize) {
+      return boite.localToGlobal(Offset.zero) & boite.size;
+    }
+    final taille = MediaQuery.sizeOf(context);
+    return Rect.fromCenter(
+      center: Offset(taille.width / 2, taille.height / 2),
+      width: 1,
+      height: 1,
+    );
+  }
+
+  String _dateLisible(DateTime? quand) {
+    if (quand == null) return 'date inconnue';
+    final local = quand.toLocal();
+    String deux(int valeur) => valeur.toString().padLeft(2, '0');
+    return '${deux(local.day)}/${deux(local.month)}/${local.year} '
+        'a ${deux(local.hour)}h${deux(local.minute)}';
+  }
+
   Future<void> _confirmErase(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -387,7 +590,9 @@ class SettingsScreen extends ConsumerWidget {
         content: const Text(
           'Vos repas, favoris, repas types, objectifs, les photos enregistrees et '
           'votre cle d\'analyse seront supprimes de cet appareil. Cette action est '
-          'definitive et ne peut pas etre annulee.',
+          'definitive et ne peut pas etre annulee.\n\n'
+          'Pour conserver votre historique, exportez d\'abord une sauvegarde '
+          'depuis la section Sauvegarde ci-dessus.',
         ),
         actions: [
           TextButton(

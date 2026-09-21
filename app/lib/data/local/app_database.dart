@@ -188,43 +188,49 @@ class AppDatabase {
         'deleted_at': null,
       }, conflictAlgorithm: ConflictAlgorithm.replace);
 
-      // Remplacement complet des lignes : plus simple et plus sur qu'un
-      // differentiel, et le volume par repas reste faible.
-      await txn.delete(
-        'meal_items',
-        where: 'meal_id = ?',
-        whereArgs: [meal.id],
-      );
-
-      final batch = txn.batch();
-      for (var index = 0; index < meal.items.length; index++) {
-        final item = meal.items[index];
-        batch.insert('meal_items', {
-          'id': item.id,
-          'meal_id': meal.id,
-          'name': item.food.name,
-          'quantity_g': item.quantityG,
-          'kcal_100g': item.food.per100g.kcal,
-          'carbs_100g': item.food.per100g.carbs,
-          'sugars_100g': item.food.per100g.sugars,
-          'starch_100g': item.food.per100g.starch,
-          'protein_100g': item.food.per100g.protein,
-          'fat_100g': item.food.per100g.fat,
-          'sat_fat_100g': item.food.per100g.saturatedFat,
-          'fiber_100g': item.food.per100g.fiber,
-          'salt_100g': item.food.per100g.salt,
-          'source': item.food.source.name,
-          'source_ref': item.food.sourceRef,
-          'brand': item.food.brand,
-          'image_url': item.food.imageUrl,
-          'confidence': item.confidence,
-          'portion': item.portionSize?.name,
-          'is_estimate': item.isEstimate ? 1 : 0,
-          'sort_order': index,
-        }, conflictAlgorithm: ConflictAlgorithm.replace);
-      }
-      await batch.commit(noResult: true);
+      await _ecrireItems(txn, meal);
     });
+  }
+
+  /// Remplace les lignes d'un repas, en conservant leur ordre.
+  ///
+  /// Partage par `saveMeal` et `restaurerMeal` : les deux doivent ecrire
+  /// **exactement** les memes colonnes. Deux copies divergeraient un jour, et
+  /// la divergence ne se verrait qu'a la restauration — c'est-a-dire au moment
+  /// ou l'utilisateur a deja perdu ses donnees.
+  Future<void> _ecrireItems(DatabaseExecutor txn, Meal meal) async {
+    // Remplacement complet des lignes : plus simple et plus sur qu'un
+    // differentiel, et le volume par repas reste faible.
+    await txn.delete('meal_items', where: 'meal_id = ?', whereArgs: [meal.id]);
+
+    final batch = txn.batch();
+    for (var index = 0; index < meal.items.length; index++) {
+      final item = meal.items[index];
+      batch.insert('meal_items', {
+        'id': item.id,
+        'meal_id': meal.id,
+        'name': item.food.name,
+        'quantity_g': item.quantityG,
+        'kcal_100g': item.food.per100g.kcal,
+        'carbs_100g': item.food.per100g.carbs,
+        'sugars_100g': item.food.per100g.sugars,
+        'starch_100g': item.food.per100g.starch,
+        'protein_100g': item.food.per100g.protein,
+        'fat_100g': item.food.per100g.fat,
+        'sat_fat_100g': item.food.per100g.saturatedFat,
+        'fiber_100g': item.food.per100g.fiber,
+        'salt_100g': item.food.per100g.salt,
+        'source': item.food.source.name,
+        'source_ref': item.food.sourceRef,
+        'brand': item.food.brand,
+        'image_url': item.food.imageUrl,
+        'confidence': item.confidence,
+        'portion': item.portionSize?.name,
+        'is_estimate': item.isEstimate ? 1 : 0,
+        'sort_order': index,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    await batch.commit(noResult: true);
   }
 
   Future<Meal?> mealById(String id) async {
@@ -456,6 +462,153 @@ class AppDatabase {
   Future<void> writeGoals(DailyGoals goals) =>
       writeSetting('daily_goals', jsonEncode(goals.toJson()));
 
+  // -------------------------------------------------------------------------
+  // Sauvegarde et restauration
+  //
+  // Les lectures ci-dessous rendent les lignes **telles qu'elles sont
+  // stockees**, horodatages compris, et les ecritures les reinscrivent a
+  // l'identique. `saveMeal` ne peut pas servir a restaurer : il remet
+  // `created_at` et `updated_at` a maintenant et surtout `deleted_at` a nul, ce
+  // qui **ressusciterait** un repas que l'utilisateur avait supprime.
+  // -------------------------------------------------------------------------
+
+  /// Toutes les lignes de `meals`, **supprimees comprises**.
+  ///
+  /// Une sauvegarde a besoin des pierres tombales : sans elles, une
+  /// restauration sur un appareil ou le repas avait ete supprime le ferait
+  /// reapparaitre, et l'utilisateur verrait revenir ce qu'il avait efface.
+  Future<List<MealEnregistre>> mealsPourSauvegarde() async {
+    final rows = await db.query('meals', orderBy: 'eaten_at ASC');
+    final resultat = <MealEnregistre>[];
+    for (final row in rows) {
+      resultat.add(
+        MealEnregistre(
+          meal: await _buildMeal(row),
+          createdAt: row['created_at'] as int,
+          updatedAt: row['updated_at'] as int,
+          deletedAt: row['deleted_at'] as int?,
+        ),
+      );
+    }
+    return resultat;
+  }
+
+  Future<List<TemplateEnregistre>> templatesPourSauvegarde() async {
+    final rows = await db.query('templates', orderBy: 'name ASC');
+    return rows.map((row) {
+      final raw = jsonDecode(row['items_json'] as String) as List;
+      return TemplateEnregistre(
+        template: MealTemplate(
+          id: row['id'] as String,
+          name: row['name'] as String,
+          items: raw
+              .map(
+                (item) =>
+                    MealItem.fromJson((item as Map).cast<String, dynamic>()),
+              )
+              .toList(),
+        ),
+        createdAt: row['created_at'] as int,
+        updatedAt: row['updated_at'] as int,
+      );
+    }).toList();
+  }
+
+  Future<List<FavoriteEnregistre>> favoritesPourSauvegarde() async {
+    final rows = await db.query('favorites', orderBy: 'created_at DESC');
+    return rows.map((row) {
+      return FavoriteEnregistre(
+        favorite: Favorite(
+          id: row['id'] as String,
+          kind: row['kind'] as String,
+          label: row['label'] as String,
+          payload: (jsonDecode(row['payload_json'] as String) as Map)
+              .cast<String, dynamic>(),
+        ),
+        createdAt: row['created_at'] as int,
+      );
+    }).toList();
+  }
+
+  /// Tous les reglages, sans exception.
+  ///
+  /// Aucun secret ne figure dans cette table : la cle du fournisseur
+  /// d'analyse vit dans le trousseau du systeme (`SecureStore`), pas ici. Le
+  /// service de sauvegarde applique malgre tout une liste d'exclusion, pour
+  /// qu'un reglage ajoute plus tard ne parte pas dans un fichier en clair sans
+  /// que personne ne le remarque.
+  Future<Map<String, String>> settingsPourSauvegarde() async {
+    final rows = await db.query('settings');
+    return {
+      for (final row in rows) row['key'] as String: row['value'] as String,
+    };
+  }
+
+  /// Inscrit un repas tel qu'il a ete sauvegarde, horodatages compris.
+  Future<void> restaurerMeal(MealEnregistre enregistre) async {
+    final meal = enregistre.meal;
+    await db.transaction((txn) async {
+      await txn.insert('meals', {
+        'id': meal.id,
+        'eaten_at': meal.eatenAt.millisecondsSinceEpoch,
+        'name': meal.name,
+        'source': meal.source.name,
+        'notes': meal.notes,
+        'photo_path': meal.photoPath,
+        'is_estimate': meal.isEstimate ? 1 : 0,
+        'created_at': enregistre.createdAt,
+        'updated_at': enregistre.updatedAt,
+        'deleted_at': enregistre.deletedAt,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+
+      await _ecrireItems(txn, meal);
+    });
+  }
+
+  Future<void> restaurerTemplate(TemplateEnregistre enregistre) async {
+    final template = enregistre.template;
+    await db.insert('templates', {
+      'id': template.id,
+      'name': template.name,
+      'items_json': jsonEncode(
+        template.items.map((item) => item.toJson()).toList(),
+      ),
+      'created_at': enregistre.createdAt,
+      'updated_at': enregistre.updatedAt,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> restaurerFavorite(FavoriteEnregistre enregistre) async {
+    final favorite = enregistre.favorite;
+    await db.insert('favorites', {
+      'id': favorite.id,
+      'kind': favorite.kind,
+      'label': favorite.label,
+      'payload_json': jsonEncode(favorite.payload),
+      'created_at': enregistre.createdAt,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<void> ecrireSettings(Map<String, String> valeurs) async {
+    final batch = db.batch();
+    for (final entree in valeurs.entries) {
+      batch.insert('settings', {
+        'key': entree.key,
+        'value': entree.value,
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    }
+    await batch.commit(noResult: true);
+  }
+
+  /// Identifiants des repas presents localement, supprimes compris.
+  ///
+  /// Sert a une fusion : ce qui existe deja ne doit pas etre ecrase, et ce qui
+  /// a ete supprime ici ne doit pas revenir.
+  Future<Set<String>> idsDeMeals() async {
+    final rows = await db.query('meals', columns: ['id']);
+    return {for (final row in rows) row['id'] as String};
+  }
+
   /// Efface toutes les donnees locales. Utilise par la suppression de compte et
   /// par la remise a zero depuis les reglages.
   Future<void> wipe() async {
@@ -467,6 +620,52 @@ class AppDatabase {
       await txn.delete('settings');
     });
   }
+}
+
+/// Un repas tel qu'il est **stocke** : le modele, plus les horodatages de la
+/// ligne.
+///
+/// `Meal` ne porte que `eaten_at` ; `created_at`, `updated_at` et `deleted_at`
+/// n'existent qu'en base. Une sauvegarde qui les perdrait ne pourrait ni
+/// conserver une suppression, ni arbitrer une fusion.
+class MealEnregistre {
+  const MealEnregistre({
+    required this.meal,
+    required this.createdAt,
+    required this.updatedAt,
+    this.deletedAt,
+  });
+
+  final Meal meal;
+  final int createdAt;
+  final int updatedAt;
+
+  /// Non nul lorsque le repas a ete supprime. La ligne reste en base : c'est
+  /// ce qui permet a une synchronisation de propager la suppression.
+  final int? deletedAt;
+
+  bool get estSupprime => deletedAt != null;
+}
+
+/// Un repas personnalise tel qu'il est stocke.
+class TemplateEnregistre {
+  const TemplateEnregistre({
+    required this.template,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  final MealTemplate template;
+  final int createdAt;
+  final int updatedAt;
+}
+
+/// Un favori tel qu'il est stocke.
+class FavoriteEnregistre {
+  const FavoriteEnregistre({required this.favorite, required this.createdAt});
+
+  final Favorite favorite;
+  final int createdAt;
 }
 
 /// Repas personnalise enregistre.

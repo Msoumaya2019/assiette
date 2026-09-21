@@ -366,12 +366,13 @@ doit s'y reconnecter. L'environnement définit `HTTP_PROXY` et `HTTPS_PROXY` san
 `NO_PROXY`, donc le trafic vers `127.0.0.1` part vers le proxy, qui répond `400`.
 
 **Conséquence pratique : `flutter test` tourne en local.** Les deux réglages sont
-encapsulés dans `tools/lancer_tests_flutter.py`, qui les pose et transmet la
-cible :
+posés par `tools/environnement_flutter.py`, que `tools/lancer_verifications_dart.py`
+applique sans passer par `env` — qui avale la sortie dans ce bac à sable :
 
 ```bash
-python tools/lancer_tests_flutter.py                        # toute la suite
-python tools/lancer_tests_flutter.py test/data/mon_test.dart
+python tools/lancer_verifications_dart.py                     # format, analyse, tests
+python tools/lancer_verifications_dart.py test                # les tests seuls
+python tools/lancer_verifications_dart.py test test/data/mon_test.dart
 ```
 
 `ci.yml` continue d'exécuter `flutter test` sur `ubuntu-latest`, où aucun des
@@ -384,6 +385,46 @@ Les flux émettent un avertissement : `actions/checkout@v4` et
 `actions/upload-artifact@v4` visent Node.js 20, que GitHub force désormais sur
 Node.js 24. Les actions continuent de fonctionner — GitHub les met à niveau
 automatiquement. À reprendre le jour où ces versions cesseront d'être acceptées.
+
+### 7.6 Le Kotlin intégré d'AGP 9 divise l'écosystème des greffons
+
+Le projet utilise **AGP 9.1.0**. Or AGP 9 fait du « Kotlin intégré » (*built-in
+Kotlin*) le comportement par défaut : appliquer `org.jetbrains.kotlin.android`
+provoque désormais un échec explicite —
+
+> The 'org.jetbrains.kotlin.android' plugin is no longer required for Kotlin
+> support since AGP 9.0
+
+Le migrateur de Flutter réagit en écrivant `android.builtInKotlin=false` dans
+`app/android/gradle.properties`, ce qui rétablit l'ancien fonctionnement. C'est
+pourquoi ce fichier contient la ligne, avec le commentaire du gabarit.
+
+Conséquence : **deux familles de greffons, mutuellement exclusives**, puisque le
+drapeau est global au projet.
+
+| Famille | Ce qu'elle fait | Exige |
+| --- | --- | --- |
+| `share_plus`, `mobile_scanner`, `file_picker` 10.x | appliquent `kotlin-android` **sans condition** | `builtInKotlin=false` |
+| `file_picker` 11.x, `file_selector_android` 0.5.2+11 | ne l'appliquent plus, comptent sur le Kotlin intégré | `builtInKotlin=true` |
+
+Le projet reste sur `builtInKotlin=false`, parce que `share_plus` et
+`mobile_scanner` en dépendent. `file_picker` est donc **épinglé à `^10.3.10`**.
+
+Mesuré, et non supposé :
+
+- `file_picker 11.0.3` fait échouer `:app:compileReleaseJavaWithJavac` sur
+  `cannot find symbol: class FilePickerPlugin` — ses sources Kotlin ne sont
+  compilées par personne ;
+- `file_selector_android 0.5.2+11` (paquet officiel de l'équipe Flutter) a le
+  même défaut : ses sources Kotlin cohabitent avec le Java qui les appelle ;
+- `file_picker 10.3.10` applique `org.jetbrains.kotlin.android` sans condition et
+  compile ;
+- `file_picker 10.3.11` est **retirée** par son auteur : `pub` la refuse avec
+  `which doesn't match any versions`. D'où `^10.3.10`, et non `^10.3.11`.
+
+Contrepartie assumée : la 10.x embarque `org.apache.tika:tika-core` (~300 Ko),
+que la 11.0.3 a retiré. À reprendre le jour où Flutter basculera sur le Kotlin
+intégré — le jour où `android.builtInKotlin` disparaîtra du gabarit.
 
 ---
 
@@ -402,7 +443,7 @@ pourquoi aucun ne doit être retiré sans être remplacé.
 | `tools/check_ios.py` | 92 vérifications iOS : icônes, storyboard, `Info.plist`, cible, Podfile |
 | `tools/check_adresses_du_depot.py` | une adresse GitHub du code qui désigne un autre dépôt |
 | `tools/verifier_version_build.py` | une régression dans la logique qui décide de la version publiée |
-| `tools/check_workflows.py` | YAML invalide, action non épinglée, `permissions` absentes, `run:` qui ne passe pas `bash -n`, script du dépôt appelé mais absent, et un flux qui ne tire plus la version du même endroit que l'autre |
+| `tools/check_workflows.py` | YAML invalide, action non épinglée, `permissions` absentes, `run:` qui ne passe pas `bash -n`, script du dépôt appelé mais absent, un flux qui ne tire plus la version du même endroit que l'autre, et une compilation qui n'injecte pas `APP_VERSION` depuis la sortie du script de version |
 
 ### La version publiée, décidée à un seul endroit
 
@@ -463,7 +504,19 @@ python3 tools/bancs/falsifier_client_deepseek.py       # 2 cas — serveur (Deno
 python3 tools/bancs/falsifier_client_deepseek_dart.py  # 6 cas — application (Flutter)
 python3 tools/bancs/falsifier_proxy_dart.py            # 6 cas — mode proxy (Flutter)
 python3 tools/bancs/falsifier_version_build.py         # 6 cas — version publiée
+python3 tools/bancs/falsifier_check_workflows.py       # 19 cas — validation des flux
 ```
+
+`falsifier_check_workflows.py` éprouve le seul contrôle qui lit `.github/workflows`,
+et qui n'en avait aucun. Trois de ses cas méritent d'être cités :
+
+- une commande `flutter build` qui reçoit un `APP_ENV` mais **pas** d'`APP_VERSION` :
+  l'écran des réglages annoncerait une version sans rapport avec le binaire ;
+- une `APP_VERSION` **recopiée en dur** (`0.1.2`) : elle se désynchroniserait au
+  premier oubli de mise à jour ;
+- l'`APP_ENV` sur une commande et l'`APP_VERSION` sur la **suivante**, dans le même
+  bloc `run:`. Un contrôle qui chercherait les deux chaînes dans le script entier
+  passerait ; celui-ci les attribue à la bonne commande, et tombe.
 
 Chaque banc inclut un **témoin négatif** — un `.bat` en CRLF conforme à son
 attribut n'est pas signalé, citer `flutter/flutter` reste permis, reformuler un
@@ -498,16 +551,21 @@ python3 tools/normaliser_fins_de_ligne.py             # mesure, ne touche à rie
 python3 tools/normaliser_fins_de_ligne.py --appliquer
 ```
 
-### Lancer les tests Flutter en local
+### Lancer les vérifications Dart en local
 
 ```bash
-python tools/lancer_tests_flutter.py                        # toute la suite
-python tools/lancer_tests_flutter.py test/data/mon_test.dart
+python tools/lancer_verifications_dart.py                     # format, analyse, tests
+python tools/lancer_verifications_dart.py test                # les tests seuls
+python tools/lancer_verifications_dart.py test test/data/mon_test.dart
 ```
 
 `tools/environnement_flutter.py` porte les deux réglages que la machine réclame,
 et pourquoi (voir §7.4). Le script les applique sans passer par `env`, qui avale
 la sortie dans ce bac à sable.
+
+Il rejoue **exactement** les trois étapes Dart de `ci.yml`. Deux lanceurs
+distincts finiraient par ne plus poser le même environnement, et celui qu'on
+n'utilise pas est celui qui ment.
 
 
 ---

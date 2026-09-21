@@ -19,8 +19,8 @@ par leur message d'erreur.
    sans `NO_PROXY`, cette connexion part vers le proxy et se fait repondre 400.
    On exclut donc le loopback.
 
-Ce module est partage par `tools/lancer_tests_flutter.py` et par le banc de
-falsification, pour que les deux mesurent dans les memes conditions.
+Ce module est partage par `tools/lancer_verifications_dart.py` et par les bancs
+de falsification, pour que tous mesurent dans les memes conditions.
 """
 
 from __future__ import annotations
