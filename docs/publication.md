@@ -467,10 +467,11 @@ intégré — le jour où `android.builtInKotlin` disparaîtra du gabarit.
 
 ## 8. La chaîne de garde
 
-Sept contrôles tournent à chaque `push` : six dans `ci.yml` (travail « Analyse et
-tests »), et `check_workflows.py` dans un travail séparé. Chacun lit une propriété
-que **rien d'autre ne lit** : c'est ce qui justifie sa présence, et c'est aussi
-pourquoi aucun ne doit être retiré sans être remplacé.
+Neuf contrôles tournent à chaque `push` : sept dans `ci.yml` (travail « Analyse et
+tests »), `check_workflows.py` dans un travail séparé, et l'épreuve des migrations
+dans un troisième. Chacun lit une propriété que **rien d'autre ne lit** : c'est ce
+qui justifie sa présence, et c'est aussi pourquoi aucun ne doit être retiré sans
+être remplacé.
 
 | Contrôle | Ce qu'il attrape |
 | --- | --- |
@@ -479,8 +480,10 @@ pourquoi aucun ne doit être retiré sans être remplacé.
 | `tools/check_fins_de_ligne.py` | un blob CRLF dans l'index, ou une copie de travail hors `eol=lf` |
 | `tools/check_ios.py` | 92 vérifications iOS : icônes, storyboard, `Info.plist`, cible, Podfile |
 | `tools/check_adresses_du_depot.py` | une adresse GitHub du code qui désigne un autre dépôt |
+| `tools/check_migration_serveur.py` | une colonne du schéma local sans destination côté serveur, une table ajoutée d'un côté seulement, une politique RLS sans son `drop` |
 | `tools/verifier_version_build.py` | une régression dans la logique qui décide de la version publiée |
 | `tools/check_workflows.py` | YAML invalide, action non épinglée, `permissions` absentes, `run:` qui ne passe pas `bash -n`, script du dépôt appelé mais absent, un flux qui ne tire plus la version du même endroit que l'autre, et une compilation qui n'injecte pas `APP_VERSION` depuis la sortie du script de version |
+| `tools/eprouver_migration_sur_postgres.mjs` | du SQL qui ne s'exécute pas : colonne mal nommée, `references` vers une table absente, parenthèse en trop — et une politique RLS qui laisserait écrire au nom d'un autre |
 
 ### Le schéma local ne change que par une seule liste
 
@@ -507,6 +510,69 @@ cassée serait testée contre la forme cassée, et le test resterait vert.
 
 Le test a été **falsifié** : remplacer `if (from < 2)` par `if (from < 1)` fait
 tomber 4 des 7 cas. Un test de migration qui n'a jamais échoué ne prouve rien.
+
+### Le schéma serveur, remis d'accord avec le schéma local
+
+La même vérité est écrite à deux endroits qui ne peuvent pas se lire :
+`app_database.dart` décrit ce que l'application stocke, `backend/supabase/migrations/`
+ce que le serveur acceptera. Rien ne les reliait.
+
+Le 21 septembre, la comparaison a été faite à la main, et le serveur était **en
+retard de deux versions** : il ne connaissait ni les portions nommées, ni les
+pesées, ni les mensurations, et `meal_items` lui manquait huit colonnes. Aucune
+erreur ne se déclenchait — parce que rien ne lit ce schéma aujourd'hui. Le jour où
+la synchronisation aurait été branchée, tout le suivi du poids aurait été perdu
+**en silence**, chez l'utilisateur, sur des données qu'il avait saisies.
+
+`0002_portions_et_suivi.sql` comble le retard. `tools/check_migration_serveur.py`
+tient l'accord, dans les deux sens : chaque colonne locale doit avoir une
+destination serveur, et l'ensemble des colonnes serveur sans équivalent local est
+**déclaré une à une** — un `user_id` ou un `total_carbs_g` dénormalisé sont
+normaux, un oubli ne l'est pas. Les deux ensembles sont clos : une table ajoutée
+d'un côté fait échouer le contrôle tant qu'elle n'a pas été prise en compte.
+
+Deux détails de lecture, tous deux mesurés en écrivant ce contrôle :
+
+**Un `create table` se lit ligne à ligne, un `alter table … add column` s'écrit sur
+plusieurs lignes.** Aplatir le fichier avant d'extraire les colonnes d'un bloc ne
+rend que la première — mesuré : `meals` ne donnait qu'une colonne sur dix-neuf. Les
+deux lectures coexistent, chacune sur la forme de texte qui lui convient.
+
+**Un commentaire qui cite une colonne la déclare présente.** Le fichier de migration
+*documente* ce qu'il ajoute : un lecteur qui garde les commentaires trouve
+`portion_label` dans la phrase qui l'explique. Le retrait des commentaires est donc
+éprouvé **dans les deux sens** — colonne retirée avec le commentaire qui la nomme :
+le contrôle tombe ; le même état, retrait désactivé : il reste vert sur un fichier
+fautif. Le second temps est le seul qui établisse que ce retrait porte quelque
+chose.
+
+### Le contrôle qui était vert en n'ayant rien mesuré
+
+Un validateur de syntaxe écrit plus tôt annonçait, sur `0001_init.sql` :
+
+```
+Politiques : 0 | tables : 6
+[OK] forme rejouable : chaque politique a son drop
+```
+
+Le fichier porte **six** politiques. Le motif de lecture exigeait un retour à la
+ligne entre le nom de la politique et `on` ; aucune des six n'en a. Le lecteur en
+voyait donc zéro, la boucle de vérification ne s'exécutait pas, et le verdict était
+**vert en n'ayant rien mesuré** — depuis le premier jour.
+
+Le contrôle écrit ici ne se contente pas de corriger le motif. Chaque lecteur est
+double d'un **comptage brut indépendant** — le nombre d'occurrences du texte
+`create policy`, sans motif élaboré — et si le lecteur voit moins que le comptage
+brut, le contrôle échoue. C'est le comptage brut qui l'emporte. Le banc reproduit
+l'aveuglement historique, motif fautif remis en place, et exige que le contrôle
+tombe malgré tout.
+
+### Ce qui n'est pas prouvé
+
+L'épreuve PGlite établit que le SQL s'exécute et que les politiques filtrent. Elle
+ne dit rien des droits par défaut de Supabase, qui n'y sont pas reproduits, ni des
+extensions, ni de Realtime. Un essai contre le vrai projet reste nécessaire avant
+de s'y fier — la marche à suivre est dans `backend/README.md`.
 
 ### La version publiée, décidée à un seul endroit
 
@@ -568,7 +634,22 @@ python3 tools/bancs/falsifier_client_deepseek_dart.py  # 6 cas — application (
 python3 tools/bancs/falsifier_proxy_dart.py            # 6 cas — mode proxy (Flutter)
 python3 tools/bancs/falsifier_version_build.py         # 6 cas — version publiée
 python3 tools/bancs/falsifier_check_workflows.py       # 19 cas — validation des flux
+python3 tools/bancs/falsifier_migration_serveur.py     # 12 cas — accord des deux schémas
 ```
+
+`falsifier_migration_serveur.py` couvre les deux côtés et les deux sens. Il
+mutationne le schéma local (colonne ou table ajoutée sans destination), le schéma
+serveur (colonne retirée, table renommée, colonne non déclarée), et les politiques
+(une politique privée de son `drop`). Deux de ses cas méritent d'être cités :
+
+- **l'aveuglement historique, reproduit.** Le motif fautif qui rendait le
+  validateur aveugle aux six politiques de `0001` est remis en place, et le banc
+  exige que le contrôle tombe **malgré tout** — c'est le comptage brut qui l'y
+  oblige ;
+- **le retrait des commentaires, éprouvé dans les deux sens.** Colonne retirée avec
+  le commentaire qui la nomme : le contrôle tombe. Le même état, retrait
+  désactivé : il reste **vert sur un fichier fautif**, et c'est ce second temps qui
+  établit que ce retrait porte quelque chose.
 
 `falsifier_check_workflows.py` éprouve le seul contrôle qui lit `.github/workflows`,
 et qui n'en avait aucun. Trois de ses cas méritent d'être cités :

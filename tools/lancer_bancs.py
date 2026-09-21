@@ -38,6 +38,7 @@ ORDRE = [
     "falsifier_version_build.py",
     "falsifier_check_workflows.py",
     "falsifier_client_deepseek.py",
+    "falsifier_migration_serveur.py",
 ]
 
 

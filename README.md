@@ -259,7 +259,7 @@ Trois flux, déclenchables manuellement depuis l'onglet *Actions* :
 
 | Flux | Produit | Exécuteur |
 |---|---|---|
-| `ci.yml` | Analyse, tests, contrôle des secrets | ubuntu |
+| `ci.yml` | Analyse, tests, neuf contrôles — dont les migrations exécutées sur un vrai PostgreSQL | ubuntu |
 | `android.yml` | `app-release.apk`, `app-release.aab` | ubuntu |
 | `ios.yml` | IPA non signé (installable via eSign / Sideloadly) ou IPA signé | macOS |
 
@@ -308,7 +308,7 @@ publication, et il est bloquant. Détail dans `docs/publication.md` §9.
 
 ## Intégration continue
 
-Avant chaque compilation, la CI exécute six contrôles :
+Avant chaque compilation, la CI exécute sept contrôles :
 
 - `tools/check_no_secrets.py` — refuse tout fichier ou motif ressemblant à un secret
   (clés d'API, keystores, `.env`, certificats, jetons).
@@ -321,6 +321,9 @@ Avant chaque compilation, la CI exécute six contrôles :
   minimale, permissions, icônes), que Windows ne peut pas compiler.
 - `tools/check_adresses_du_depot.py` — vérifie que les adresses sortant dans le
   binaire désignent bien ce dépôt.
+- `tools/check_migration_serveur.py` — tient l'accord entre le schéma SQLite de
+  l'appareil et le schéma Supabase : chaque colonne locale doit avoir une
+  destination serveur, et les deux ensembles sont clos.
 - `tools/verifier_version_build.py` — éprouve la logique qui décide de la version
   publiée, laquelle ne tourne sinon que sur un tag.
 
@@ -328,6 +331,12 @@ Puis `dart format --set-exit-if-changed`, `flutter analyze` et `flutter test`, e
 dans un travail séparé, `tools/check_workflows.py` — qui valide la structure des
 flux de travail, la présence des scripts qu'ils appellent, et le fait que
 `android.yml` et `ios.yml` tirent la version du même endroit.
+
+Un troisième travail, `migrations`, exécute les deux migrations Supabase sur un vrai
+PostgreSQL compilé en WebAssembly (`tools/eprouver_migration_sur_postgres.mjs`) :
+sans Docker et sans service, il vérifie qu'elles s'appliquent, qu'elles se
+**rejouent**, et que les politiques RLS filtrent par utilisateur — y compris du côté
+écriture. C'est le seul contrôle qui lit du SQL **exécuté** plutôt que du SQL relu.
 
 ### La version publiée vient du tag, et d'un seul endroit
 
@@ -401,7 +410,15 @@ CI, sur cette machine :
 
 ```bash
 python tools/verifier_version_build.py    # 11 cas sur tools/version_build.sh
-python tools/lancer_bancs.py              # les huit bancs de falsification
+python tools/check_migration_serveur.py   # accord des schémas local et serveur
+python tools/lancer_bancs.py              # les neuf bancs de falsification
+```
+
+L'épreuve des migrations, elle, demande Node et le paquet `@electric-sql/pglite`,
+qui n'est pas vendoré dans le dépôt :
+
+```bash
+NODE_PATH=<espace-node>/node_modules node tools/eprouver_migration_sur_postgres.mjs
 ```
 
 Un banc de falsification retire un garde-fou à la fois et vérifie que le contrôle

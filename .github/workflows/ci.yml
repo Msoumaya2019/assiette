@@ -58,6 +58,14 @@ jobs:
       - name: Verifier les adresses du depot
         run: python3 tools/check_adresses_du_depot.py
 
+      # Le schema local et le schema serveur portent la meme verite sans pouvoir
+      # se lire. Le 21 septembre, le serveur etait en retard de deux versions :
+      # ni portions, ni pesees, ni mensurations. Rien ne le signalait, et le jour
+      # ou la synchronisation aurait ete branchee, tout le suivi du poids aurait
+      # ete perdu en silence. Ce controle tient l'accord dans les deux sens.
+      - name: Verifier l'accord des schemas local et serveur
+        run: python3 tools/check_migration_serveur.py
+
       # `tools/version_build.sh` decide de la version inscrite dans l'APK, l'AAB
       # et l'IPA. Il ne s'execute en vrai que dans les flux de publication, sur un
       # tag — donc sur une version qu'on ne peut pas rejouer sans en creer un
@@ -142,3 +150,43 @@ jobs:
 
       - name: Verifier la syntaxe des workflows
         run: python tools/check_workflows.py
+
+  migrations:
+    name: Migrations (PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Recuperer le depot
+        uses: actions/checkout@v4
+
+      # Node 22 plutot que le Node 20 preinstalle : les actions qui s'appuient
+      # sur Node 20 ont commence a emettre un avertissement de depreciation sur
+      # les executeurs recents, et un avertissement qu'on apprend a ignorer
+      # finit par cacher autre chose.
+      - name: Installer Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # PGlite est un PostgreSQL complet compile en WebAssembly : il execute du
+      # vrai SQL — roles, GRANT, politiques, transactions — sans Docker et sans
+      # service. Le paquet n'est pas vendore dans le depot, d'ou cette
+      # installation.
+      #
+      # La version est epinglee, et c'est deliberé : un controle dont le verdict
+      # peut changer parce qu'une dependance a monte ne mesure plus la meme
+      # chose. Une montee se decide, elle ne se subit pas.
+      - name: Installer PGlite
+        run: npm install --no-save @electric-sql/pglite@0.5.8
+
+      # Ce que ce controle etablit, et qu'aucun autre ne peut voir : que le SQL
+      # **s'execute**. Une colonne mal nommee, un `references` vers une table
+      # absente, une parenthese en trop : tout cela passe une lecture attentive
+      # et echoue ici.
+      #
+      # Il verifie aussi que les deux migrations se **rejouent**, et que les
+      # trois tables ajoutees filtrent par utilisateur — y compris du cote
+      # ecriture, la moitie qu'on oublie.
+      - name: Eprouver les migrations sur un vrai PostgreSQL
+        run: node tools/eprouver_migration_sur_postgres.mjs

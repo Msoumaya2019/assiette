@@ -24,6 +24,7 @@ supabase/
       http.ts                    en-têtes CORS et réponses JSON
   migrations/
     0001_init.sql                schéma, index, RLS et politiques
+    0002_portions_et_suivi.sql   rattrapage : portions nommées, poids, mensurations
 ```
 
 ## Les deux fonctions
@@ -72,10 +73,14 @@ exécuté à chaque poussée par le flux `CI`.
 supabase login
 supabase link --project-ref <reference-du-projet>
 supabase secrets set DEEPSEEK_API_KEY=sk-...
-supabase db push                       # applique migrations/0001_init.sql
+supabase db push                       # applique migrations/0001 puis 0002
 supabase functions deploy analyze-meal --no-verify-jwt
 supabase functions deploy analyze-label --no-verify-jwt
 ```
+
+Les deux migrations sont **rejouables** : chaque table, colonne et index est
+gardé, chaque politique précédée de son `drop`. Une exécution interrompue peut
+donc être relancée sans être défaite à la main.
 
 `--no-verify-jwt` est nécessaire tant que l'application fonctionne sans compte :
 aucun jeton de session n'accompagne alors la requête. **À retirer dès que
@@ -100,14 +105,109 @@ n'a plus besoin de clé personnelle. C'est ce que font les flux
 
 ## Base de données
 
-`0001_init.sql` crée `profiles`, `meals`, `meal_items`, `meal_templates`,
-`favorites` et `api_usage`. Les six tables ont la sécurité au niveau des lignes
-activée, avec une politique par table : chacun ne voit que ses propres lignes
-(`auth.uid() = user_id`).
+### Les tables
 
-Ce schéma est **prêt mais non utilisé** : la phase actuelle est locale, tout vit
-dans SQLite sur le téléphone. Il existe pour que l'ajout du compte et de la
-synchronisation ne demande pas de réécrire le modèle de données.
+`0001_init.sql` crée `profiles`, `meals`, `meal_items`, `meal_templates`,
+`favorites` et `api_usage`. `0002_portions_et_suivi.sql` ajoute `portions`,
+`weight_entries` et `body_measurements`, complète `meal_items` de huit colonnes
+et `profiles` de l'objectif de poids.
+
+Les **neuf** tables ont la sécurité au niveau des lignes activée, avec une
+politique par table, `using` et `with check` : chacun ne lit et n'écrit que ses
+propres lignes (`auth.uid() = user_id`).
+
+### Le serveur était en retard, et rien ne le disait
+
+Le schéma local est passé en version 2 le 21 septembre — portions nommées, suivi
+du poids. Le serveur, lui, est resté en version 1. Il ne connaissait ni
+`portions`, ni `pesees`, ni `mesures`, et `meal_items` lui manquait huit
+colonnes.
+
+Le retard n'était **visible nulle part** : les deux schémas restaient valides,
+aucun test ne tombait, aucune erreur ne se déclenchait — parce que rien ne lit ce
+schéma aujourd'hui. Le jour où la synchronisation aurait été branchée, tout le
+suivi du poids et toutes les portions auraient été perdus **en silence**, chez
+l'utilisateur, sur des données qu'il avait saisies.
+
+`0002_portions_et_suivi.sql` comble ce retard. Et pour qu'il ne se rouvre pas,
+`tools/check_migration_serveur.py` tient l'accord entre les deux schémas :
+
+- chaque colonne locale doit avoir une **destination serveur** — les renommages
+  (`poids_kg` vers `weight_kg`, `payload_json` vers `payload`) et les
+  changements de table (`templates` vers `meal_templates`) sont déclarés une
+  fois, dans le contrôle ;
+- l'ensemble des tables locales est **clos** : en ajouter une fait échouer le
+  contrôle tant qu'elle n'a pas été prise en compte ;
+- l'ensemble des colonnes serveur **sans équivalent local** est clos aussi : un
+  `user_id` ou un `total_carbs_g` dénormalisé sont normaux, un oubli ne l'est
+  pas ;
+- la table `settings` n'a **pas** d'équivalent, et c'est délibéré — son contenu
+  est décomposé en colonnes de `profiles`. Le contrôle exige que cette
+  décomposition soit réelle, sinon l'exception ne serait qu'un prétexte.
+
+```bash
+python3 tools/check_migration_serveur.py
+python3 tools/bancs/falsifier_migration_serveur.py    # 12 cas
+```
+
+### Épreuve des migrations
+
+Un contrôle de forme lit du texte : il établit que les deux schémas
+**s'accordent**, pas que le SQL **s'exécute**. Une colonne mal nommée, un
+`references` vers une table absente ou une parenthèse en trop passent une lecture
+attentive et échouent sur la vraie base.
+
+`tools/eprouver_migration_sur_postgres.mjs` exécute les deux migrations sur un
+PostgreSQL complet compilé en WebAssembly (`@electric-sql/pglite`) : pas de
+Docker, pas de service. Mesuré — **27 épreuves sur 27** :
+
+- les deux migrations s'appliquent, **et se rejouent** sans erreur ;
+- les neuf tables et les trois colonnes de rattrapage existent ;
+- les trois tables ajoutées filtrent par utilisateur — deux lignes pour l'un,
+  une pour l'autre ;
+- une revendication **absente** refuse au lieu de lever, et une revendication
+  **nulle** aussi : ce sont deux chemins différents dans la fonction de
+  revendication ;
+- un utilisateur ne peut pas écrire une ligne au nom d'un autre
+  (`42501 — new row violates row-level security policy`) — c'est la moitié
+  qu'on oublie, et une politique `for all` sans `with check` la laisserait
+  ouverte ;
+- le témoin : le propriétaire voit bien les trois lignes de chaque table, sans
+  quoi un « 0 ligne » ne distinguerait pas « la politique refuse » de « la table
+  est vide ».
+
+Le paquet n'est pas vendoré dans le dépôt. En local :
+
+```bash
+NODE_PATH=<espace-node>/node_modules node tools/eprouver_migration_sur_postgres.mjs
+```
+
+Ce que cette épreuve **ne dit pas** : `auth.users`, `auth.uid()` et les droits
+par défaut de Supabase n'existent pas dans PGlite. Ils sont remplacés par une
+doublure écrite dans le script. On éprouve donc **nos** politiques, pas celles de
+Supabase, et un essai contre le vrai projet reste nécessaire avant de s'y fier.
+
+### Ce qui reste à savoir avant de brancher la synchronisation
+
+Le schéma est prêt, mais trois points ne se règlent pas tout seuls :
+
+- **Les portions n'ont pas de pierre tombale.** Le schéma local les supprime
+  définitivement, et la table serveur fait de même — il n'y a donc rien à
+  propager. Une portion supprimée sur un appareil reviendrait depuis un autre.
+  Corriger cela demande une colonne `deleted_at` **des deux côtés**, donc une
+  migration locale en version 3 ; ajouter la colonne côté serveur seule
+  donnerait une colonne que le client ne remplit jamais.
+- **`templates` et `favorites` non plus**, côté local. Le serveur a bien un
+  `deleted_at` sur ces deux tables, mais le client ne le remplit pas : une
+  suppression locale y serait définitive aussi.
+- **Les préférences d'appareil ne se synchronisent pas**, volontairement : le
+  thème, les rappels et le mode d'analyse restent sur le téléphone. Les
+  synchroniser ferait changer le thème du téléphone de bureau parce qu'on a
+  touché à celui de la cuisine.
+
+La phase actuelle reste **locale** : tout vit dans SQLite sur le téléphone. Ce
+schéma existe pour que l'ajout du compte et de la synchronisation ne demande pas
+de réécrire le modèle de données.
 
 ## Limites connues
 
