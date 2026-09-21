@@ -160,7 +160,7 @@ app/                        Application Flutter (Android + iOS)
       vision/               Fournisseurs d'analyse d'image + prompts
       local/                Base SQLite
       ciqual_repository.dart, openfoodfacts_repository.dart
-    services/               Calcul nutritionnel, images, trousseau, notifications
+    services/               Calcul nutritionnel, images, trousseau, notifications, sauvegarde, synchronisation
     state/                  État applicatif (Riverpod)
     ui/                     Écrans, widgets, navigation
   assets/nutrition/         Base Ciqual générée (3 185 aliments)
@@ -422,7 +422,7 @@ CI, sur cette machine :
 ```bash
 python tools/verifier_version_build.py    # 11 cas sur tools/version_build.sh
 python tools/check_migration_serveur.py   # accord des schémas local et serveur
-python tools/lancer_bancs.py              # les treize bancs de falsification
+python tools/lancer_bancs.py              # les quatorze bancs de falsification
 ```
 
 L'épreuve des migrations, elle, demande Node et le paquet `@electric-sql/pglite`,
@@ -518,6 +518,20 @@ Couverture actuelle :
   colonne *absente* lui échappait — exactement le défaut qu'il devait attraper.
   Il vérifie désormais la présence, **puis** la participation, pour chaque
   colonne du schéma ;
+- **le service qui fait converger deux appareils** : lire, comparer, écrire,
+  table par table, sur un **transport** dont le contrat tient en trois méthodes.
+  Les tests ne simulent pas un appareil : ils en ouvrent **deux**, sur deux bases
+  distinctes, avec un faux serveur en mémoire, et vérifient qu'ils convergent —
+  modification, suppression, aliment ajouté puis retiré, et qu'un second passage
+  ne fait plus rien. Trois propriétés y sont tenues par des tests dédiés : le
+  service ne **redate jamais** une ligne (redater ferait de chaque passage une
+  modification, et les deux appareils se renverraient la même ligne sans fin) ;
+  une version que l'appareil **gagne** n'est pas écrasée par celle qu'il a
+  battue ; et une table que le serveur refuse n'empêche pas les cinq autres de
+  converger. L'écart d'horloge entre l'appareil et le serveur est **mesuré** —
+  au milieu de l'aller-retour — et signalé, jamais appliqué aux dates. Le
+  transport réel vers Supabase reste à écrire : le remplacer ne changera aucun
+  de ces tests ;
 - **l'interface, pilotée comme un utilisateur la pilote** — l'éditeur de quantité
   avec une portion (ce qui s'affiche, le pas des boutons, et le fait que ce qui
   est **transmis** reste des grammes), l'écran de suivi du poids de bout en bout
@@ -564,6 +578,6 @@ macOS et Linux, `flutter` fonctionne normalement.
 | Suivi du poids : courbe, objectif, mensurations | Écrit, testé |
 | Base locale en schéma v3 (migrations v1 → v3 et v2 → v3 éprouvées) | Écrit, testé |
 | Notifications (rappels de repas, résumé du soir) | Écrit, testé |
-| Compte et synchronisation | Socle éprouvé (arbitrage, plan, empreinte, lecture/écriture locales) ; transport vers Supabase à écrire |
+| Compte et synchronisation | Socle éprouvé (arbitrage, plan, empreinte, lecture/écriture locales, service de convergence à deux appareils) ; transport vers Supabase à écrire |
 | APK et AAB signés, IPA non signée | Produits et vérifiés — release `v0.1.5` (les `v0.1.3` et `v0.1.4` portent un affichage fautif des glucides par portion, ne pas les installer) |
 | Envoi sur l'App Store / le Play Store | Non entamé — demande un compte Google Play et un compte Apple Developer |

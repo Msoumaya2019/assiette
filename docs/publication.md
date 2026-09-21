@@ -11,10 +11,10 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Élément | État |
 | --- | --- |
 | Code source complet, analysé sans avertissement | prêt |
-| 410 tests de l'application, tous verts | prêt |
+| 430 tests de l'application, tous verts | prêt |
 | 18 tests du serveur, tous verts | prêt |
 | Dépôt public | https://github.com/Msoumaya2019/assiette |
-| Flux `ci.yml` — analyse, 410 tests, 9 contrôles | **vert** |
+| Flux `ci.yml` — analyse, 430 tests, 9 contrôles | **vert** |
 | Flux `ci.yml` — migrations Supabase exécutées sur un vrai PostgreSQL | **vert** (35 épreuves) |
 | Flux Android — APK et AAB | **vert**, artefacts signés et vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
@@ -819,6 +819,34 @@ tests avant qu'un serveur existe. Il ne **compose** pas non plus les agrégats :
 ses aliments sont une seule ligne, parce que `saveMeal` réécrit les aliments en bloc et
 horodate le repas dans le même geste.
 
+### Faire converger deux appareils, et ce que cela ajoute
+
+Le plan dit quoi faire ; le service le fait.
+`app/lib/services/synchronisation_service.dart` lit chaque table, demande le plan,
+applique les versions distantes gagnantes **en une transaction**, puis pousse les versions
+locales gagnantes. Le transport qu'il appelle n'est qu'un contrat de trois méthodes —
+l'heure du serveur, lire une table, écrire une table — si bien que l'épreuve se fait
+contre un faux serveur en mémoire, sans réseau et sans compte.
+
+Ce que cette épreuve ajoute au plan, et qu'aucun test sur une seule base ne pouvait voir :
+
+- **deux appareils, deux bases, un serveur.** Les tests ouvrent deux bases SQLite
+  distinctes et les font dialoguer. Deux appareils qui se recopient l'un l'autre ne
+  prouvent rien : il faut qu'ils diffèrent, puis qu'ils convergent ;
+- **l'ordre des échanges ne décide pas.** La modification la plus récente l'emporte, que
+  l'appareil qui la porte soit synchronisé en premier ou en dernier ;
+- **un second passage ne fait plus rien.** Après convergence, le plan est vide des deux
+  côtés — c'est la seule preuve que la boucle s'arrête ;
+- **rien n'est redaté.** Une ligne transporte sa date ; le service ne la remplace jamais.
+  Redater ferait de chaque passage une modification, et les deux appareils se renverraient
+  la même ligne sans fin ;
+- **une version gagnée n'est pas écrasée.** Appliquer tout ce que le serveur envoie, au
+  lieu des seules versions qu'il gagne, détruit la modification locale dans l'intervalle —
+  et le rapport annoncerait zéro ligne appliquée alors qu'il en aurait écrit ;
+- **une table en panne n'emporte pas les autres.** Un refus du serveur sur une table
+  laisse les cinq autres converger, et le rapport nomme celle qui a échoué. Comme tout est
+  idempotent, le passage suivant répare ce qui manque.
+
 ### Ce qui n'est pas prouvé
 
 L'épreuve PGlite établit que le SQL s'exécute et que les politiques filtrent. Elle
@@ -826,18 +854,23 @@ ne dit rien des droits par défaut de Supabase, qui n'y sont pas reproduits, ni 
 extensions, ni de Realtime. Un essai contre le vrai projet reste nécessaire avant
 de s'y fier — la marche à suivre est dans `backend/README.md`.
 
-La règle d'arbitrage est décidée, mais elle **ne corrige pas une horloge fausse**. Un
-appareil avancé de trois jours gagne pendant trois jours. Le remède est un horodatage
-venu du serveur, pas une règle de plus dans le client : une garde « la date est dans le
-futur » ne supprimerait pas la divergence, elle déplacerait seulement la perte sur
-l'appareil juste. À trancher quand la synchronisation existera.
+La règle d'arbitrage **ne corrige pas une horloge fausse**. Un appareil avancé de trois
+jours gagne pendant trois jours. Le remède est un horodatage venu du serveur, pas une
+règle de plus dans le client : une garde « la date est dans le futur » ne supprimerait pas
+la divergence, elle déplacerait seulement la perte sur l'appareil juste. Ce que le service
+fait désormais, c'est **mesurer** l'écart entre l'horloge de l'appareil et celle du
+serveur — au milieu de l'aller-retour — et le **signaler**, sans jamais l'appliquer aux
+dates. Une horloge fausse est donc visible ; elle n'est pas encore corrigée.
 
-La règle d'arbitrage est désormais **appelée** : le planificateur
-(`app/lib/models/synchronisation.dart`) l'appelle pour chaque ligne présente des deux
-côtés, et il est éprouvé sur cette base. Ce qui n'existe toujours pas, c'est le
-**transport** : rien ne lit ni n'écrit sur Supabase, et le projet Supabase n'est pas
-encore créé. Le socle est donc tenu par des tests ; la plomberie reste à faire. Une règle
-non branchée peut vieillir — c'est pourquoi elle est falsifiée plutôt que seulement écrite.
+La règle d'arbitrage est **appelée**, et la chaîne qui l'appelle est éprouvée de bout en
+bout : le planificateur (`app/lib/models/synchronisation.dart`) décide ligne par ligne, la
+couche locale (`app/lib/data/local/synchronisation_locale.dart`) lit et écrit les tables
+réelles, et le service (`app/lib/services/synchronisation_service.dart`) fait converger
+**deux appareils** contre un faux serveur en mémoire. Ce qui n'existe toujours pas, c'est
+le **transport** : rien ne lit ni n'écrit sur Supabase, et le projet Supabase n'est pas
+encore créé. Le contrat du transport tient en trois méthodes, et les tests de convergence
+n'en dépendent pas : les remplacer par le vrai client ne changera aucun d'entre eux. La
+plomberie reste à faire, et elle est désormais la seule.
 
 Dans une **liste** de résultats, les aliments qui portent une portion connue sont
 désormais chiffrés par portion, les autres pour 100 g : deux bases dans la même
@@ -907,6 +940,7 @@ python3 tools/bancs/falsifier_proxy_dart.py            # 6 cas — mode proxy (F
 python3 tools/bancs/falsifier_arbitrage_dart.py        # 5 cas — règle d'arbitrage (Flutter)
 python3 tools/bancs/falsifier_synchronisation_dart.py  # 7 cas — plan de synchronisation (Flutter)
 python3 tools/bancs/falsifier_synchronisation_locale_dart.py  # 7 cas — lecture/écriture locales (Flutter)
+python3 tools/bancs/falsifier_synchronisation_service_dart.py  # 7 cas — convergence de deux appareils (Flutter)
 python3 tools/bancs/falsifier_version_build.py         # 6 cas — version publiée
 python3 tools/bancs/falsifier_check_workflows.py       # 19 cas — validation des flux
 python3 tools/bancs/falsifier_migration_serveur.py     # 12 cas — accord des deux schémas
@@ -1003,6 +1037,33 @@ total attendu, et le banc déclarait « la mesure n'a pas pu tourner » sur une
 faute pourtant attrapée, en invitant à corriger la mutation — c'est-à-dire à
 retirer la faute que le contrôle venait de détecter. `error` compte désormais
 comme un échec.
+
+`falsifier_synchronisation_service_dart.py` éprouve la couche qui **fait
+converger deux appareils**. C'est le seul banc du dépôt dont les tests ouvrent
+deux bases distinctes et les font dialoguer par un faux serveur en mémoire :
+sans cela, on ne saurait pas si deux appareils convergent — on saurait seulement
+qu'un appareil se recopie lui-même. Ses fautes sont celles qu'on écrirait
+naturellement :
+
+- **redater la ligne appliquée.** La ligne transporte sa date ; la refabriquer
+  avec l'horloge locale fait de chaque passage une modification. Chaque appareil
+  trouve alors l'autre plus récent, et les deux se renvoient la même ligne **sans
+  fin**. Le défaut ne se voit ni sur un appareil seul, ni au premier échange : il
+  faut deux appareils et un troisième passage ;
+- **recopier le serveur au lieu d'arbitrer.** Écrire tout ce qui arrive écrase la
+  version que l'appareil venait de gagner. Elle est renvoyée juste après, donc
+  l'état final est juste — c'est ce qui rend la faute discrète. Ce qui est faux,
+  c'est l'intervalle : une application qui s'arrête là perd la modification. Le
+  rapport, lui, annonce zéro ligne appliquée alors qu'il en a écrit ;
+- **laisser une table en panne emporter les autres** — le refus du serveur sur
+  une table fait tomber la synchronisation entière ;
+- **mesurer l'écart d'horloge après l'aller-retour** au lieu du milieu, ce qui
+  compte le temps de la requête comme une avance de l'appareil ;
+- **tenir un écart inconnu pour nul** — un serveur qui ne sait pas donner l'heure
+  ferait afficher une horloge juste ;
+- **visiter une table sans cycle de vie**, c'est-à-dire transporter des réglages
+  qui ne portent ni date ni pierre tombale ;
+- et un **témoin négatif** : un commentaire reformulé ne fait rien tomber.
 
 `falsifier_check_workflows.py` éprouve le seul contrôle qui lit `.github/workflows`,
 et qui n'en avait aucun. Trois de ses cas méritent d'être cités :
