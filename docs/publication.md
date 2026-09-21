@@ -18,9 +18,10 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Flux `ci.yml` — migrations Supabase exécutées sur un vrai PostgreSQL | **vert** (35 épreuves) |
 | Flux Android — APK et AAB | **vert**, artefacts signés et vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
-| Déclenchement par étiquette `v*` | **vert** (`v0.1.0`, `v0.1.1`, `v0.1.2`, `v0.1.3`, `v0.1.4`) |
-| Dernière version publiée | **`v0.1.4`** — APK signé, AAB signé, IPA (portions nommées, suivi du poids, correctifs de mise en page) |
+| Déclenchement par étiquette `v*` | **vert** (`v0.1.0`, `v0.1.1`, `v0.1.2`, `v0.1.3`, `v0.1.4`, `v0.1.5`) |
+| Dernière version publiée | **`v0.1.5`** — APK signé, AAB signé, IPA (unité des valeurs remise d'accord avec la portion affichée) |
 | Version à **ne pas** installer | `v0.1.3` — l'écran de suivi du poids y tombe dès la première pesée. Ses notes portent l'avertissement. |
+| Version au chiffre trompeur | `v0.1.4` — utilisable, mais trois écrans annoncent « pour 1 pot (125 g) » sous le chiffre des 100 g. Corrigé en `v0.1.5` ; voir §8. |
 | Icônes et écran de démarrage (Android et iOS) | prêt |
 | Politique de confidentialité | `docs/confidentialite.md` |
 | Attributions Ciqual et Open Food Facts | `app/assets/legal/ATTRIBUTION.md` |
@@ -99,6 +100,37 @@ téléchargement sans rien dire coûterait la confiance de la personne qui
 l'installe. `tools/annoter_release.py` fait cet ajout, et retire un
 avertissement déjà présent avant d'en écrire un — sans quoi le relancer les
 empilerait.
+
+### Le correctif de `v0.1.5`, prouvé dans les deux binaires
+
+Le changement de `v0.1.5` est **arithmétique** : il ne pose aucun nouveau littéral
+dans le code, et un témoin de chaîne ne pouvait donc rien prouver. La sonde utile
+était ailleurs — **le nom de la fonction**, qui survit à la compilation AOT :
+
+| Sonde | `App.framework/App` (IPA) | `lib/arm64-v8a/libapp.so` (APK) |
+| --- | --- | --- |
+| `referenceDePortion` — l'accesseur supprimé | 0 | 0 |
+| `apercuDePortion` — la fonction qui le remplace | **1** | **1** |
+
+Témoin de contrôle : `Flutter`, 20 fois dans l'un et 28 fois dans l'autre. Sans lui,
+un zéro partout se lirait « absent » alors qu'il se lirait « fichier non lu ».
+
+Deux mesures ont dû être **localisées** avant d'être conclues, et les deux pièges
+sont propres à Flutter :
+
+- **`_CodeSignature` apparaît 6 fois dans un IPA non signé**, ce qui contredit la
+  règle « 0 attendu ». Les six appartiennent à trois **cadres** livrés déjà signés
+  par le moteur — `objective_c.framework`, `Flutter.framework`, `App.framework` —,
+  et une signature de cadre ne signe pas l'application. Ce qui tranche est
+  `Payload/Runner.app/_CodeSignature/` : **absente**. Compter la sous-chaîne dans
+  toute l'archive répond à la mauvaise question.
+- **`App.framework/App` commence par `bebafeca`** lu en petit-boutiste, et l'on
+  conclut à un fichier corrompu. C'est la même valeur que `cafebabe` lue en
+  **grand-boutiste** : un binaire **universel**, ici à une seule architecture
+  (arm64, 10 008 144 octets). La magie d'un fat se lit en grand-boutiste.
+
+La version inscrite est bien celle du tag — `0.1.5` / `8` dans l'IPA, `0.1.5+9` dans
+l'APK —, et l'application n'est pas signée : `embedded.mobileprovision` est absent.
 
 ---
 
