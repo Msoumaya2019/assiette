@@ -162,9 +162,12 @@ class _QuantityEditorState extends State<QuantityEditor> {
               _StepButton(
                 icon: Icons.remove_rounded,
                 onTap: () => _step(-1),
+                // « Retirer 1 gateau » plutot que « Retirer une gateau » : le
+                // genre de l'unite est inconnu (« une part », « un bol »), et
+                // aucune formule a article ne peut donc etre juste pour tous.
                 semanticLabel: portion == null
                     ? 'Reduire de 10 grammes'
-                    : 'Retirer une ${portion.nomSingulier}',
+                    : 'Retirer 1 ${portion.nomSingulier}',
               ),
               Expanded(
                 child: Center(
@@ -206,7 +209,7 @@ class _QuantityEditorState extends State<QuantityEditor> {
                 onTap: () => _step(1),
                 semanticLabel: portion == null
                     ? 'Augmenter de 10 grammes'
-                    : 'Ajouter une ${portion.nomSingulier}',
+                    : 'Ajouter 1 ${portion.nomSingulier}',
               ),
             ],
           ),

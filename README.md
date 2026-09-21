@@ -460,7 +460,17 @@ Couverture actuelle :
   objets SQLite comparés) ;
 - **suivi du poids** : une pesée par jour retenue, variation, bornes de la courbe
   élargies pour contenir l'objectif, mensurations par type, et refus des valeurs
-  nulles ou négatives.
+  nulles ou négatives ;
+- **l'interface, pilotée comme un utilisateur la pilote** — l'éditeur de quantité
+  avec une portion (ce qui s'affiche, le pas des boutons, et le fait que ce qui
+  est **transmis** reste des grammes), l'écran de suivi du poids de bout en bout
+  (saisie → enregistrement → relecture → affichage, y compris la suppression et
+  l'objectif), et le fait qu'une carte accepte un bouton plein en fin de ligne.
+
+Ces tests d'interface ont trouvé **deux défauts qu'aucun test de modèle ne pouvait
+voir** : un bouton pleine largeur placé dans l'en-tête d'une carte faisait tomber
+le rendu dès la première pesée, et la liste des types de mensuration débordait sur
+un téléphone de 360 points. Les deux sont corrigés, et tenus par un test dédié.
 
 ## Notes d'environnement
 

@@ -293,12 +293,20 @@ class _Puce extends StatelessWidget {
         children: [
           Icon(icone, size: 14, color: couleur),
           const SizedBox(width: 6),
-          Text(
-            texte,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: couleur,
+          // `Flexible` plutot qu'un `Text` nu : une puce posee dans un `Wrap`
+          // ne recoit qu'une largeur bornee. Sans cela, un libelle long — ou
+          // une taille de texte systeme augmentee — la fait deborder au lieu
+          // de se raccourcir.
+          Flexible(
+            child: Text(
+              texte,
+              softWrap: false,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: couleur,
+              ),
             ),
           ),
         ],
@@ -811,6 +819,11 @@ Future<void> _ajouterMesure(BuildContext context, WidgetRef ref) async {
             children: [
               DropdownButtonFormField<TypeMesure>(
                 initialValue: type,
+                // Sans cela, la liste se dimensionne sur son libelle le plus
+                // long — « Tour de poitrine » — et deborde de la largeur d'une
+                // boite de dialogue sur un telephone de 360 points. Mesure :
+                // 88 pixels de debordement.
+                isExpanded: true,
                 decoration: const InputDecoration(labelText: 'Type'),
                 items: [
                   for (final valeur in TypeMesure.values)

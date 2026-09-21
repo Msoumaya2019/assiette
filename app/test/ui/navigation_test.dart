@@ -12,11 +12,18 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 /// Navigation et structure de l'application.
 ///
 /// Ces tests montent l'application entiere, routeur compris, et n'utilisent
-/// volontairement que `pump`, jamais `pumpAndSettle` : les ecrans lisent la
-/// base, et une requete non encore terminee affiche un indicateur de chargement
-/// qui tourne sans fin. Les assertions portent donc sur ce qui se construit de
-/// facon synchrone — la barre de navigation, les actions de l'accueil, l'ecran
-/// de secours — ce qui suffit a prouver que la navigation tient.
+/// volontairement que `pump`, jamais `pumpAndSettle` : ils se contentent de ce
+/// qui se construit de facon synchrone — la barre de navigation, les actions de
+/// l'accueil, l'ecran de secours — ce qui suffit a prouver que la navigation
+/// tient.
+///
+/// **Pourquoi la base ne repond pas ici.** `databaseFactoryFfi` envoie chaque
+/// appel dans un isolate separe. Sous `testWidgets`, le corps du test tourne
+/// dans une zone asynchrone simulee, qui ne delivre jamais ce message : le
+/// fournisseur ne se resout pas, l'ecran reste sur son indicateur de chargement,
+/// et `pumpAndSettle` expire. Les tests qui ont besoin de **donnees** reelles
+/// prennent donc `databaseFactoryFfiNoIsolate`, qui execute l'appel dans
+/// l'isolate courant — voir `poids_screen_test.dart`, ou le defaut est mesure.
 ///
 /// Les onglets sont montes dans un `IndexedStack` : les cinq ecrans restent
 /// presents dans l'arbre meme quand ils ne sont pas visibles. On ne peut donc

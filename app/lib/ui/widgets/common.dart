@@ -59,7 +59,7 @@ class SectionCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (trailing != null) trailing!,
+                if (trailing != null) _LargeurBornee(child: trailing!),
               ],
             ),
             const SizedBox(height: AppSpacing.md),
@@ -72,6 +72,57 @@ class SectionCard extends StatelessWidget {
     return Card(
       clipBehavior: Clip.antiAlias,
       child: onTap == null ? content : InkWell(onTap: onTap, child: content),
+    );
+  }
+}
+
+/// Rend aux boutons pleins une largeur minimale finie, le temps d'un
+/// emplacement situe dans un `Row`.
+///
+/// Le theme demande aux boutons pleins `minimumSize: Size.fromHeight(54)`, ce
+/// qui veut dire « au moins toute la largeur » — le bon defaut pour une action
+/// de page. Mais un `Row` presente a ses enfants **non flexibles** une largeur
+/// **non bornee**, pour qu'ils puissent se dimensionner sur leur contenu : la
+/// demande « toute la largeur » n'y a alors aucun sens, et Flutter leve
+/// `BoxConstraints forces an infinite width`.
+///
+/// Le `trailing` de [SectionCard] est exactement un emplacement de ce genre.
+/// Sans cette borne, un bouton plein y fait tomber l'ecran au premier rendu —
+/// mesure faite, et non suppose : une carte avec un bouton en `trailing`, dans
+/// une simple `ListView`, suffit a reproduire l'assertion.
+///
+/// Seules les largeurs **infinies** sont corrigees : un bouton dont la largeur
+/// minimale est deja finie, ou un widget qui n'est pas un bouton, traversent
+/// cet emplacement sans etre touches. La hauteur minimale du theme est
+/// conservee, pour que la cible tactile ne retrecisse pas.
+class _LargeurBornee extends StatelessWidget {
+  const _LargeurBornee({required this.child});
+
+  final Widget child;
+
+  /// Une largeur minimale infinie devient « 0 », la hauteur est gardee.
+  ButtonStyle? _borner(ButtonStyle? style) {
+    final minimum = style?.minimumSize?.resolve(const <WidgetState>{});
+    if (minimum == null || minimum.width.isFinite) return style;
+    return style!.copyWith(
+      minimumSize: WidgetStatePropertyAll(Size(0, minimum.height)),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Theme(
+      data: theme.copyWith(
+        filledButtonTheme: FilledButtonThemeData(
+          style: _borner(theme.filledButtonTheme.style),
+        ),
+        outlinedButtonTheme: OutlinedButtonThemeData(
+          style: _borner(theme.outlinedButtonTheme.style),
+        ),
+      ),
+      child: child,
     );
   }
 }
