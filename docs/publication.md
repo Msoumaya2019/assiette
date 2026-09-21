@@ -11,10 +11,10 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Élément | État |
 | --- | --- |
 | Code source complet, analysé sans avertissement | prêt |
-| 389 tests de l'application, tous verts | prêt |
+| 410 tests de l'application, tous verts | prêt |
 | 18 tests du serveur, tous verts | prêt |
 | Dépôt public | https://github.com/Msoumaya2019/assiette |
-| Flux `ci.yml` — analyse, 389 tests, 9 contrôles | **vert** |
+| Flux `ci.yml` — analyse, 410 tests, 9 contrôles | **vert** |
 | Flux `ci.yml` — migrations Supabase exécutées sur un vrai PostgreSQL | **vert** (35 épreuves) |
 | Flux Android — APK et AAB | **vert**, artefacts signés et vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
@@ -906,6 +906,7 @@ python3 tools/bancs/falsifier_client_deepseek_dart.py  # 6 cas — application (
 python3 tools/bancs/falsifier_proxy_dart.py            # 6 cas — mode proxy (Flutter)
 python3 tools/bancs/falsifier_arbitrage_dart.py        # 5 cas — règle d'arbitrage (Flutter)
 python3 tools/bancs/falsifier_synchronisation_dart.py  # 7 cas — plan de synchronisation (Flutter)
+python3 tools/bancs/falsifier_synchronisation_locale_dart.py  # 7 cas — lecture/écriture locales (Flutter)
 python3 tools/bancs/falsifier_version_build.py         # 6 cas — version publiée
 python3 tools/bancs/falsifier_check_workflows.py       # 19 cas — validation des flux
 python3 tools/bancs/falsifier_migration_serveur.py     # 12 cas — accord des deux schémas
@@ -966,6 +967,42 @@ et la plus instructive est celle-ci :
   version perdante ;
 - une **clé en double acceptée** — la ligne gagnante devient celle qui a été lue en dernier ;
 - et un **témoin négatif** : un commentaire reformulé ne fait rien tomber.
+
+`falsifier_synchronisation_locale_dart.py` éprouve la couche qui **lit et écrit
+réellement** les lignes dans SQLite — celle qui relie le plan au disque. Sa
+première faute est la plus instructive, parce qu'elle a d'abord échappé au
+contrôle :
+
+- **une colonne oubliée dans le contenu.** `notes` n'entre plus dans le contenu
+  d'un repas. Deux repas qui ne diffèrent que par leurs notes deviennent
+  identiques à date égale, et la modification cesse de circuler — sans erreur.
+  Le contrôle par colonne devait le voir, et ne le voyait pas : il itérait sur
+  les clés **présentes**, donc la colonne absente lui échappait, et écrire dans
+  une clé absente *ajoutait* une entrée au contenu — l'empreinte changeait, le
+  contrôle passait, pour la mauvaise raison. Il vérifie maintenant que la colonne
+  est là **puis** que la changer change l'empreinte. C'est le banc qui a révélé
+  ce défaut, pas la relecture ;
+- **les colonnes de service dans le contenu** — redondantes, la date étant déjà
+  comparée et la suppression déjà tranchée ;
+- **les aliments d'un repas non lus** — le contenu d'un repas devient aveugle à
+  tout changement d'aliment à date égale ;
+- **la colonne de lien répétée dans l'aliment** (`meal_id`) — une valeur dérivée
+  du parent ferait dépendre l'empreinte d'une donnée qui n'appartient pas à la
+  ligne ;
+- **une table à pierre tombale non déclarée** — une donnée entière ne serait
+  jamais synchronisée ;
+- **une date absente tenue pour la plus récente** — or c'est ce que porte une
+  ligne relue d'une sauvegarde ancienne : elle écraserait toutes les
+  modifications réelles ;
+- et un **témoin négatif** : un commentaire reformulé ne fait rien tomber.
+
+Ce banc a aussi mis au jour un **défaut du harnais partagé** `banc_flutter.py` :
+un test peut échouer autrement que par un `expect` — `result` vaut alors `error`
+et non `failure`. Ne compter que `failure` faisait passer le total **sous** le
+total attendu, et le banc déclarait « la mesure n'a pas pu tourner » sur une
+faute pourtant attrapée, en invitant à corriger la mutation — c'est-à-dire à
+retirer la faute que le contrôle venait de détecter. `error` compte désormais
+comme un échec.
 
 `falsifier_check_workflows.py` éprouve le seul contrôle qui lit `.github/workflows`,
 et qui n'en avait aucun. Trois de ses cas méritent d'être cités :

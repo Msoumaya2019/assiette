@@ -422,7 +422,7 @@ CI, sur cette machine :
 ```bash
 python tools/verifier_version_build.py    # 11 cas sur tools/version_build.sh
 python tools/check_migration_serveur.py   # accord des schémas local et serveur
-python tools/lancer_bancs.py              # les douze bancs de falsification
+python tools/lancer_bancs.py              # les treize bancs de falsification
 ```
 
 L'épreuve des migrations, elle, demande Node et le paquet `@electric-sql/pglite`,
@@ -510,6 +510,14 @@ Couverture actuelle :
   `1.0` sont la même valeur), et **refusant** un type qu'elle ne sait pas
   représenter plutôt que de retomber sur un `toString()` instable. Ce socle est
   éprouvé sans serveur ; le transport vers Supabase reste à écrire ;
+- **lecture et écriture locales** : la couche qui fait le pont entre ce plan et
+  SQLite. Les colonnes n'y sont **pas recopiées** — elles sont lues dans le
+  schéma (`PRAGMA table_info`), si bien qu'une colonne ajoutée plus tard entre
+  dans le contenu d'elle-même. Le contrôle par colonne a été **renforcé après
+  falsification** : il portait sur les clés présentes dans le contenu, donc une
+  colonne *absente* lui échappait — exactement le défaut qu'il devait attraper.
+  Il vérifie désormais la présence, **puis** la participation, pour chaque
+  colonne du schéma ;
 - **l'interface, pilotée comme un utilisateur la pilote** — l'éditeur de quantité
   avec une portion (ce qui s'affiche, le pas des boutons, et le fait que ce qui
   est **transmis** reste des grammes), l'écran de suivi du poids de bout en bout
@@ -556,6 +564,6 @@ macOS et Linux, `flutter` fonctionne normalement.
 | Suivi du poids : courbe, objectif, mensurations | Écrit, testé |
 | Base locale en schéma v3 (migrations v1 → v3 et v2 → v3 éprouvées) | Écrit, testé |
 | Notifications (rappels de repas, résumé du soir) | Écrit, testé |
-| Compte et synchronisation | Socle éprouvé (arbitrage, plan, empreinte) ; transport vers Supabase à écrire |
+| Compte et synchronisation | Socle éprouvé (arbitrage, plan, empreinte, lecture/écriture locales) ; transport vers Supabase à écrire |
 | APK et AAB signés, IPA non signée | Produits et vérifiés — release `v0.1.5` (les `v0.1.3` et `v0.1.4` portent un affichage fautif des glucides par portion, ne pas les installer) |
 | Envoi sur l'App Store / le Play Store | Non entamé — demande un compte Google Play et un compte Apple Developer |

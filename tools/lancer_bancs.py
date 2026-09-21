@@ -42,6 +42,7 @@ ORDRE = [
     "falsifier_proxy_dart.py",
     "falsifier_arbitrage_dart.py",
     "falsifier_synchronisation_dart.py",
+    "falsifier_synchronisation_locale_dart.py",
     "falsifier_version_build.py",
     "falsifier_check_workflows.py",
     "falsifier_client_deepseek.py",

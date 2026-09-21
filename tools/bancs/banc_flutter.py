@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
 """Banc de falsification pour les tests Flutter.
 
-Deux pieges de lecture, tous deux fermes ici
---------------------------------------------
+Trois pieges de lecture, tous trois fermes ici
+----------------------------------------------
 
 1. Les noms des tests **reussis** apparaissent aussi dans la sortie de
    `flutter test`. Chercher un nom dans le texte brut conclurait « detecte »
    sans qu'aucun test ne tombe. Le rapport JSON est donc lu, et seuls les tests
-   dont `result` vaut `failure` sont retenus.
+   qui n'ont pas reussi sont retenus.
 
 2. Une mutation qui casse la compilation rend un code de sortie non nul **sans
    aucun test en echec**. Un banc qui ne distingue pas les deux conclut
    « non detecte » sur une mutation qui n'a jamais ete mesuree. D'ou le comptage
    des tests executes, et le refus de conclure autrement.
+
+3. Un test peut echouer **autrement que par un `expect`** : `result` vaut alors
+   `error` et non `failure`. Ne compter que `failure` faisait passer le total
+   sous le total attendu, et le banc refusait de conclure sur une faute pourtant
+   detectee — en invitant a corriger la mutation, c'est-a-dire a retirer la faute
+   que le controle venait d'attraper. `error` compte donc comme un echec.
 
 Partage par les bancs qui falsifient des tests Flutter, pour que tous mesurent
 dans les memes conditions.
@@ -61,10 +67,21 @@ def lire_rapport(sortie: str) -> tuple[int, list[str]]:
             if evenement.get("hidden"):
                 continue
             resultat = evenement.get("result")
-            if resultat not in ("success", "failure"):
+            # `error` compte comme un echec, au meme titre que `failure`. Un
+            # test qui leve une exception non rattrapee — un `!` sur un null,
+            # un mauvais type — n'a pas reussi : il a echoue autrement.
+            #
+            # L'ignorer faisait passer le total **sous** le total attendu, et le
+            # banc declarait « la mesure n'a pas pu tourner » sur une faute
+            # pourtant detectee. Le lecteur etait alors invite a corriger la
+            # mutation, c'est-a-dire a retirer la faute que le controle venait
+            # d'attraper. Une compilation cassee, elle, ne produit aucun
+            # `testDone` : le total reste a zero, et le refus de conclure joue
+            # toujours.
+            if resultat not in ("success", "failure", "error"):
                 continue
             executes += 1
-            if resultat == "failure":
+            if resultat != "success":
                 echecs.append(noms.get(evenement.get("testID"), "<test inconnu>"))
 
     return executes, echecs
