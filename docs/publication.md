@@ -11,10 +11,10 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Élément | État |
 | --- | --- |
 | Code source complet, analysé sans avertissement | prêt |
-| 342 tests de l'application, tous verts | prêt |
+| 389 tests de l'application, tous verts | prêt |
 | 18 tests du serveur, tous verts | prêt |
 | Dépôt public | https://github.com/Msoumaya2019/assiette |
-| Flux `ci.yml` — analyse, 342 tests, 9 contrôles | **vert** |
+| Flux `ci.yml` — analyse, 389 tests, 9 contrôles | **vert** |
 | Flux `ci.yml` — migrations Supabase exécutées sur un vrai PostgreSQL | **vert** (35 épreuves) |
 | Flux Android — APK et AAB | **vert**, artefacts signés et vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
@@ -754,6 +754,71 @@ Trois décisions de méthode valent d'être notées :
   sauvegarde écrite avant que la colonne existe n'en porte pas. Deux dates inconnues ne
   se départagent pas par la date, et retombent sur l'empreinte.
 
+### Le plan de synchronisation, et ce qu'il ajoute à la règle
+
+La règle d'arbitrage tranche pour **une** ligne. `app/lib/models/synchronisation.dart`
+tranche pour **un ensemble**, et c'est là que se posent trois questions qui n'existent pas
+à l'échelle d'une ligne :
+
+- une ligne présente **d'un seul côté** n'est pas un arbitrage, c'est une insertion.
+  L'oublier fait disparaître une donnée sans aucune erreur ;
+- l'**ordre** du plan ne doit pas dépendre de l'ordre des lectures SQL, qui n'est garanti
+  par rien. Les listes du plan sont donc triées par clé ;
+- une **clé en double** rendrait la ligne gagnante dépendante de celle qui a été lue en
+  dernier. C'est refusé, en nommant la clé et le côté fautif.
+
+Le plan est **symétrique** comme la règle : appelé avec `(locales: a, distantes: b)`, il
+rend en `aPousser` exactement les clés qu'il rend en `aAppliquer` appelé avec
+`(locales: b, distantes: a)`. Les tests ne vérifient pas des exemples mais cette
+**propriété**, sur toutes les paires d'un jeu d'états — plus deux conséquences : aucune clé
+n'est à la fois poussée et appliquée, et les deux appareils finissent avec la même version.
+Un quatrième vérifie l'**idempotence** : une fois le plan appliqué des deux côtés, le plan
+suivant est vide. Sans cette dernière, deux appareils pourraient s'échanger la même ligne
+indéfiniment.
+
+#### L'empreinte de contenu, et pourquoi ce n'est pas la clé
+
+Le départage à date égale a besoin d'une empreinte du **contenu**. L'écriture la plus
+tentante est d'utiliser la **clé** : elle est stable, disponible, et « suffit » en
+apparence. Elle est fausse — deux contenus différents d'une même ligne partagent leur clé,
+donc deux modifications simultanées seraient déclarées identiques et **cesseraient de
+circuler**. Le banc de falsification remplace précisément l'empreinte de contenu par la clé,
+et c'est un cas qu'il détecte.
+
+`app/lib/models/empreinte.dart` produit cette empreinte. Trois propriétés la rendent
+utilisable :
+
+- **non ambiguë par construction** : chaque champ est précédé de sa longueur
+  (`<n>:<valeur>`), et chaque valeur porte une étiquette de type. Sans les longueurs,
+  `{'a': 'bc'}` et `{'ab': 'c'}` rendraient la même empreinte — deux lignes différentes
+  déclarées identiques ;
+- **insensible à l'ordre des clés**, mais sensible à l'ordre des **listes** : l'ordre
+  d'insertion d'une `Map` n'est pas une information, celui d'une liste en est une ;
+- **les nombres sont normalisés** : `1` et `1.0` rendent la même chose. Le cas est réel —
+  la même valeur lue depuis SQLite (`REAL`) et depuis JSON peut arriver entière ou
+  flottante, et les séparer ferait passer une ligne inchangée pour modifiée, que la
+  synchronisation pousserait sans fin.
+
+Elle **refuse** un type qu'elle ne sait pas représenter, au lieu de retomber sur
+`toString()`. Le `toString()` par défaut d'un objet contient son adresse mémoire :
+l'empreinte changerait d'une exécution à l'autre, et la modification fantôme serait
+attribuée à l'utilisateur.
+
+#### Pourquoi pas de hachage
+
+Un hachage bornerait la taille, au prix d'une dépendance (`crypto`) pour un besoin qui tient
+en quelques lignes, et il rendrait l'empreinte **opaque** : devant deux empreintes
+différentes, on ne saurait pas dire ce qui diffère. La forme canonique se lit, se compare et
+se journalise. Le projet évite déjà les dépendances qui ne gagnent pas leur place.
+
+#### Ce que le plan ne fait pas
+
+Il ne lit ni le réseau, ni la base, ni l'heure. C'est ce qui permet de l'éprouver sans
+serveur — et c'est délibéré : la partie qui peut se tromper en silence est tenue par des
+tests avant qu'un serveur existe. Il ne **compose** pas non plus les agrégats : un repas et
+ses aliments sont une seule ligne, parce que `saveMeal` réécrit les aliments en bloc et
+horodate le repas dans le même geste.
+
 ### Ce qui n'est pas prouvé
 
 L'épreuve PGlite établit que le SQL s'exécute et que les politiques filtrent. Elle
@@ -767,9 +832,12 @@ venu du serveur, pas une règle de plus dans le client : une garde « la date es
 futur » ne supprimerait pas la divergence, elle déplacerait seulement la perte sur
 l'appareil juste. À trancher quand la synchronisation existera.
 
-Et la règle n'est encore **appelée par personne** : elle est la condition préalable de
-la synchronisation, et elle est éprouvée comme telle. Une règle non branchée peut
-vieillir ; c'est pourquoi elle est falsifiée plutôt que seulement écrite.
+La règle d'arbitrage est désormais **appelée** : le planificateur
+(`app/lib/models/synchronisation.dart`) l'appelle pour chaque ligne présente des deux
+côtés, et il est éprouvé sur cette base. Ce qui n'existe toujours pas, c'est le
+**transport** : rien ne lit ni n'écrit sur Supabase, et le projet Supabase n'est pas
+encore créé. Le socle est donc tenu par des tests ; la plomberie reste à faire. Une règle
+non branchée peut vieillir — c'est pourquoi elle est falsifiée plutôt que seulement écrite.
 
 Dans une **liste** de résultats, les aliments qui portent une portion connue sont
 désormais chiffrés par portion, les autres pour 100 g : deux bases dans la même
@@ -837,6 +905,7 @@ python3 tools/bancs/falsifier_client_deepseek.py       # 2 cas — serveur (Deno
 python3 tools/bancs/falsifier_client_deepseek_dart.py  # 6 cas — application (Flutter)
 python3 tools/bancs/falsifier_proxy_dart.py            # 6 cas — mode proxy (Flutter)
 python3 tools/bancs/falsifier_arbitrage_dart.py        # 5 cas — règle d'arbitrage (Flutter)
+python3 tools/bancs/falsifier_synchronisation_dart.py  # 7 cas — plan de synchronisation (Flutter)
 python3 tools/bancs/falsifier_version_build.py         # 6 cas — version publiée
 python3 tools/bancs/falsifier_check_workflows.py       # 19 cas — validation des flux
 python3 tools/bancs/falsifier_migration_serveur.py     # 12 cas — accord des deux schémas
@@ -882,6 +951,20 @@ qui compte, parce qu'il décrit l'erreur qu'on écrirait sans y penser :
 - la comparaison des dates inversée — chaque synchronisation ramène le passé ;
 - une date inconnue tenue pour la plus récente — une ligne relue d'une sauvegarde
   ancienne écraserait toutes les modifications réelles ;
+- et un **témoin négatif** : un commentaire reformulé ne fait rien tomber.
+
+`falsifier_synchronisation_dart.py` éprouve le plan de synchronisation, c'est-à-dire la
+couche qui appelle la règle. Il remet en place les six fautes qu'on écrirait naturellement,
+et la plus instructive est celle-ci :
+
+- **l'empreinte prise sur la clé de la ligne.** La clé est stable, disponible, et « suffit »
+  en apparence. Elle déclare identiques deux contenus qui diffèrent dès que les dates sont
+  égales : les modifications **cessent de circuler**, sans erreur et sans trace ;
+- une ligne présente **d'un seul côté** oubliée — elle n'existe plus que sur un appareil ;
+- le **plan non trié**, donc dépendant de l'ordre des lectures SQL ;
+- les **côtés inversés** dans l'appel à l'arbitrage — l'appareil écrit systématiquement la
+  version perdante ;
+- une **clé en double acceptée** — la ligne gagnante devient celle qui a été lue en dernier ;
 - et un **témoin négatif** : un commentaire reformulé ne fait rien tomber.
 
 `falsifier_check_workflows.py` éprouve le seul contrôle qui lit `.github/workflows`,
