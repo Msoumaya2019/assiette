@@ -20,6 +20,25 @@ que de laisser accuser le banc.
 lui-meme et s'arrete en le disant s'il ne les trouve pas : un banc qui ne peut
 pas mesurer doit le dire, pas rendre « non detecte ».
 
+**L'environnement peut refuser un nettoyage sans le dire.** Mesure : sur cette
+machine, le garde de suppression bloque au-dela d'un seuil par tour, et le
+blocage ne leve **rien** cote Python — `Path.unlink()` rend la main alors que le
+fichier est toujours la. Quatre bancs ont donc laisse leurs temoins dans l'arbre,
+et **trois autres** se sont declares en echec en les accusant : le banc des flux
+sur un `__banc_essai.yml` qu'il avait fabrique, celui du projet iOS sur une icone
+qu'il avait fabriquee, celui des migrations sur une `0004_oubliee.sql` qu'il
+avait fabriquee. Un depot annonce casse par un nettoyage qui n'avait pas eu lieu.
+
+Chacun de ces bancs **retire donc son propre temoin au demarrage**, et le dit :
+
+```
+temoin d'un passage precedent, retire : __banc_essai.yml
+```
+
+C'est ce qui rend la campagne rejouable quel que soit l'etat laisse par la
+precedente — et c'est la seule facon de la rendre verte, puisque le nettoyage de
+fin ne peut pas etre garanti ici.
+
 Usage : python3 tools/lancer_bancs.py
 """
 
@@ -44,6 +63,8 @@ ORDRE = [
     "falsifier_synchronisation_dart.py",
     "falsifier_synchronisation_locale_dart.py",
     "falsifier_synchronisation_service_dart.py",
+    "falsifier_correspondance_types_dart.py",
+    "falsifier_dates_distantes_dart.py",
     "falsifier_version_build.py",
     "falsifier_check_workflows.py",
     "falsifier_client_deepseek.py",

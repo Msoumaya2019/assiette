@@ -32,13 +32,45 @@ SCRIPT = RACINE / "tools" / "check_fins_de_ligne.py"
 CIBLE = "tools/check_prompt_sync.py"
 
 
-def etat_suivi() -> set[str]:
-    """Les modifications suivies vues par git, hors fichiers non suivis.
+def etat_index() -> set[str]:
+    """L'index, compare a HEAD — et **non** l'etat de la copie de travail.
 
-    Repere pris **avant** et **apres** la campagne. Exiger un ensemble vide
-    serait un controle faux : un auteur travaille avec des modifications en
-    cours, et le banc declarerait alors « index divergent » en accusant sa
-    propre campagne d'avoir abime l'index — alors qu'il n'a rien abime.
+    Ce que la campagne doit rendre intact, c'est l'**index** : le cas « blob
+    indexe en CRLF » y ecrit directement, et `restaurer_index()` doit le
+    reconstruire a l'identique.
+
+    Mesurer `git status --short` confondait deux choses :
+
+      - l'index, que la campagne touche ;
+      - la copie de travail, qu'un auteur modifie **pendant** que le banc
+        tourne.
+
+    Mesure, et non precaution theorique : une campagne ou `docs/publication.md`
+    a ete edite en parallele a rendu « index reconstruit : DIVERGENT » alors que
+    l'index etait intact. Le banc accusait sa propre campagne d'avoir abime
+    l'index, et envoyait chercher un defaut qui n'existait pas — le vrai risque
+    d'un banc, qui est de faire corriger ce qui n'est pas casse.
+
+    Un repere pris avant et apres ne protege pas de cela : il protege d'une
+    modification **deja presente**, pas d'une modification **concurrente**.
+    Seule la mesure du bon objet le fait.
+    """
+    resultat = subprocess.run(
+        ["git", "diff", "--cached", "--name-status"],
+        cwd=RACINE,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return {ligne for ligne in resultat.stdout.splitlines() if ligne.strip()}
+
+
+def etat_copie_de_travail() -> set[str]:
+    """Les fichiers suivis modifies dans la copie de travail, hors non suivis.
+
+    Sert a **observer**, non a juger : une copie de travail qui bouge pendant la
+    campagne ne dit rien de l'index, mais elle dit que l'environnement n'etait
+    pas au repos. Le rapport le signale, sans faire echouer le banc.
     """
     resultat = subprocess.run(
         ["git", "status", "--short", "--", "app", "backend", "tools", "docs"],
@@ -55,11 +87,29 @@ def etat_suivi() -> set[str]:
 def principal() -> int:
     banc = Banc(SCRIPT)
 
+    # --- les temoins d'un passage precedent ------------------------------
+    #
+    # Ceinture et bretelles, apres le vrai remede (voir `Banc.retirer`) : sur
+    # cette machine, une suppression peut etre bloquee **sans le dire**, et un
+    # passage precedent peut donc avoir laisse son temoin. Le passage suivant
+    # refuse alors de demarrer sur « le controle echoue deja avant toute
+    # mutation », en accusant un fichier que ce banc fabrique lui-meme — un
+    # depot annonce casse pour un desordre que le banc a cause.
+    #
+    # Ces noms ne peuvent pas etre du contenu du depot : ils portent le prefixe
+    # que ce banc reserve a ses essais. Les retirer ne peut donc rien casser, et
+    # le retrait est **dit** — un nettoyage silencieux masquerait le meme defaut
+    # une autre fois.
+    for reste in sorted((RACINE / "tools").glob("__banc_essai*")):
+        print(f"temoin d'un passage precedent, retire : {reste.name}")
+        banc.retirer(reste)
+
     # Toutes les mutations de ce banc portent sur `tools/` : c'est la surface a
     # prouver intacte. Mesurer `app/` y ajouterait les artefacts de compilation,
     # qui ne sont jamais touches ici.
     avant = empreinte_arbre(RACINE / "tools")
-    index_avant = etat_suivi()
+    index_avant = etat_index()
+    travail_avant = etat_copie_de_travail()
 
     # --- etat initial : le controle doit etre vert -----------------------
     initial = banc.etat_initial()
@@ -181,7 +231,7 @@ def principal() -> int:
     # Le critere est la comparaison avec l'etat d'avant, pas la vacuite : le
     # cas « blob indexe en CRLF » ecrit dans l'index, et la campagne doit le
     # rendre tel qu'elle l'a trouve — qu'il ait ete vide ou non.
-    index_apres = etat_suivi()
+    index_apres = etat_index()
     print(
         f"index reconstruit                 : "
         f"{'conforme' if index_apres == index_avant else 'DIVERGENT'}"
@@ -190,6 +240,20 @@ def principal() -> int:
         for ligne in sorted(index_apres ^ index_avant):
             print(f"  - {ligne}", file=sys.stderr)
         return 1
+
+    # --- observation : la copie de travail a-t-elle bouge ? --------------
+    #
+    # Aucun verdict ici. Une modification concurrente ne dit rien de l'index —
+    # c'est justement ce que la mesure ci-dessus a appris a distinguer. Elle dit
+    # en revanche que l'environnement n'etait pas au repos, et cela merite d'etre
+    # dit plutot que tu : c'est ce qui explique qu'un resultat voisin, mesure
+    # ailleurs, puisse differer.
+    travail_apres = etat_copie_de_travail()
+    if travail_apres != travail_avant:
+        print(
+            "copie de travail                 : modifiee pendant la campagne "
+            "(l'index, lui, est intact)"
+        )
 
     # --- etat final : le controle doit etre redevenu vert ----------------
     final = banc.executer()

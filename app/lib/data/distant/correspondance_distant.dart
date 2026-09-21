@@ -107,6 +107,32 @@ const Map<String, Set<String>> colonnesServeurSeules = {
 /// n'appartiennent pas a un appareil.
 const Set<String> tablesEntierementDistantes = {'profiles', 'api_usage'};
 
+/// Colonnes que le serveur porte en `timestamptz` et le local en entier.
+///
+/// Nommees **en vocabulaire local** : le transport parcourt le contenu dans cet
+/// vocabulaire, et renomme apres conversion.
+///
+/// Ce n'est pas une commodite, c'est ce qui evite une boucle silencieuse. Sans
+/// conversion, la meme date serait `1700000000000` d'un cote et
+/// `« 2023-11-14T22:13:20.000Z »` de l'autre : les empreintes differeraient
+/// toujours, l'arbitrage trancherait toujours dans le meme sens, et chaque
+/// passage reecrirait la meme ligne sans jamais converger.
+const Map<String, Set<String>> colonnesDatesDistantes = {
+  'meals': {'eaten_at', 'created_at'},
+  'templates': {'created_at'},
+  'favorites': {'created_at'},
+  'pesees': {'mesure_le', 'created_at'},
+  'mesures': {'mesure_le', 'created_at'},
+};
+
+/// Colonnes que le serveur porte en `boolean` et le local en entier.
+///
+/// Meme piege, meme consequence : `true` et `1` ne font pas la meme empreinte.
+const Map<String, Set<String>> colonnesBooleennesDistantes = {
+  'meals': {'is_estimate'},
+  'meal_items': {'is_estimate'},
+};
+
 /// Le nom serveur d'une colonne locale.
 ///
 /// Rend la colonne telle quelle quand elle n'est pas renommee — ce qui est le
@@ -120,3 +146,23 @@ String colonneDistante(String tableLocale, String colonneLocale) =>
 /// partout, sauf `portions`, dont la cle locale est deja le nom de l'aliment.
 String colonneCleDistante(String tableLocale, String colonneCleLocale) =>
     colonneDistante(tableLocale, colonneCleLocale);
+
+/// Le nom **local** d'une colonne serveur — l'inverse de [colonneDistante].
+///
+/// Sert au sens descendant : une ligne lue sur le serveur revient en
+/// vocabulaire local, pour que le reste de l'application n'ait jamais a
+/// connaitre les noms du serveur.
+///
+/// Le renommage est cherche **dans la table** : `measured_at` est le nom
+/// serveur de `mesure_le` aussi bien dans `pesees` que dans `mesures`, et une
+/// recherche qui ignorerait la table rendrait la colonne de l'une pour l'autre.
+String colonneLocale(String tableLocale, String colonneDistante) {
+  for (final entree in renommagesDistants.entries) {
+    if (entree.value != colonneDistante) continue;
+    final parties = entree.key.split('.');
+    if (parties.length == 2 && parties.first == tableLocale) {
+      return parties.last;
+    }
+  }
+  return colonneDistante;
+}

@@ -32,6 +32,13 @@ PODFILE = "app/ios/Podfile"
 STORYBOARD = "app/ios/Runner/Base.lproj/LaunchScreen.storyboard"
 ICONE = "app/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-76x76@1x.png"
 
+# Le temoin du cas « icone orpheline » : un PNG que le banc **fabrique**, et
+# qu'il doit donc retirer. Nomme ici parce que le nettoyage de demarrage en a
+# besoin — voir `principal`.
+ICONE_ORPHELINE = (
+    "app/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-72x72@1x.png"
+)
+
 # Ancres ASCII, sans fin de ligne : c'est la lecon du banc precedent.
 CIBLE_15_5 = b"IPHONEOS_DEPLOYMENT_TARGET = 15.5;"
 CIBLE_14_0 = b"IPHONEOS_DEPLOYMENT_TARGET = 14.0;"
@@ -45,6 +52,24 @@ BUNDLE_DIVERGENT = b"PRODUCT_BUNDLE_IDENTIFIER = io.github.axox934.assietteIos;"
 
 def principal() -> int:
     banc = Banc(SCRIPT)
+
+    # --- le temoin d'un passage precedent --------------------------------
+    #
+    # Mesure : une campagne de seize bancs a laisse `Icon-App-72x72@1x.png` dans
+    # l'arbre, et ce banc a refuse de demarrer en l'accusant d'etre un defaut du
+    # projet iOS — « Icon-App-72x72@1x.png present mais non declare dans
+    # Contents.json ». Le projet etait annonce incomplet par un fichier que ce
+    # banc avait lui-meme fabrique.
+    #
+    # La cause est du cote de l'environnement : sur cette machine, le garde de
+    # suppression refuse parfois **sans le dire**, et `Path.unlink()` rend alors
+    # la main sans lever. Le banc ne peut donc pas compter sur son propre
+    # nettoyage pour la fois d'apres. Il retire son temoin au demarrage, et le
+    # dit — un nettoyage silencieux masquerait le meme defaut une autre fois.
+    temoin = RACINE / ICONE_ORPHELINE
+    if temoin.exists():
+        print(f"temoin d'un passage precedent, retire : {temoin.name}")
+        banc.retirer(temoin)
 
     avant = empreinte_arbre(IOS)
 
@@ -70,7 +95,7 @@ def principal() -> int:
         # Un PNG present mais non declare dans Contents.json n'est jamais
         # embarque par Xcode : le fichier existe pourtant.
         banc.creer(
-            "app/ios/Runner/Assets.xcassets/AppIcon.appiconset/Icon-App-72x72@1x.png",
+            ICONE_ORPHELINE,
             (RACINE / ICONE).read_bytes(),
         )
 

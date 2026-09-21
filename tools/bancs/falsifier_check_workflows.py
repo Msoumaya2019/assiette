@@ -51,6 +51,11 @@ ANDROID = ".github/workflows/android.yml"
 IOS = ".github/workflows/ios.yml"
 CI = ".github/workflows/ci.yml"
 
+# Le temoin du cas « flux non declare » : un flux que le banc **fabrique**, et
+# qu'il doit donc retirer. Nomme ici parce que le nettoyage de demarrage en a
+# besoin — voir `principal`.
+FLUX_ESSAI = ".github/workflows/__banc_essai.yml"
+
 # Le point d'insertion des etapes fabriquees. `actions/checkout` ouvre la liste
 # des etapes des deux flux, et n'y figure qu'une fois.
 ANCRE_ETAPES = b"      - name: Recuperer le depot\n        uses: actions/checkout@v4\n"
@@ -65,6 +70,23 @@ def etapes_supplementaires(corps: bytes) -> bytes:
 
 def principal() -> int:
     banc = Banc(SCRIPT)
+
+    # --- le temoin d'un passage precedent --------------------------------
+    #
+    # Mesure : une campagne de seize bancs a laisse `__banc_essai.yml` dans
+    # l'arbre, et ce banc a refuse de demarrer en l'accusant d'etre un flux non
+    # declare — un depot annonce casse par un fichier que ce banc avait
+    # lui-meme fabrique.
+    #
+    # La cause est du cote de l'environnement : sur cette machine, le garde de
+    # suppression refuse parfois **sans le dire**, et `Path.unlink()` rend alors
+    # la main sans lever. Le banc ne peut donc pas compter sur son propre
+    # nettoyage pour la fois d'apres. Il retire son temoin au demarrage, et le
+    # dit.
+    temoin = RACINE / FLUX_ESSAI
+    if temoin.exists():
+        print(f"temoin d'un passage precedent, retire : {temoin.name}")
+        banc.retirer(temoin)
 
     # La surface a prouver intacte : ce banc ne touche qu'aux flux.
     avant = empreinte_arbre(RACINE / ".github")
@@ -262,7 +284,7 @@ def principal() -> int:
 
     def flux_non_declare() -> None:
         banc.creer(
-            ".github/workflows/__banc_essai.yml",
+            FLUX_ESSAI,
             b"name: Banc\n"
             b"on: push\n"
             b"permissions:\n"

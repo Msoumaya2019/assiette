@@ -37,6 +37,39 @@ void main() {
       expect(renommagesDistants.containsKey('meals.mesure_le'), isFalse);
       expect(colonneDistante('meals', 'mesure_le'), 'mesure_le');
     });
+
+    test('l\'aller-retour du nom revient au nom local', () {
+      // La propriete qui compte pour le transport, qui traduit dans les deux
+      // sens : une colonne lue sur le serveur doit revenir exactement au nom
+      // que la base locale connait. C'est verifie sur **tous** les renommages
+      // declares, pas sur un exemple.
+      for (final entree in renommagesDistants.entries) {
+        final parties = entree.key.split('.');
+        final table = parties.first;
+        final locale = parties.last;
+        expect(
+          colonneLocale(table, colonneDistante(table, locale)),
+          locale,
+          reason: '${entree.key} ne revient pas a son nom local',
+        );
+      }
+    });
+
+    test('une colonne non renommee revient telle quelle', () {
+      expect(colonneLocale('meals', 'name'), 'name');
+      expect(colonneLocale('meal_items', 'carbs_100g'), 'carbs_100g');
+    });
+
+    test('measured_at revient dans la table ou il a ete lu', () {
+      // Le piege que la recherche par table ferme : sans elle, la premiere
+      // entree rencontree rendrait `mesure_le` pour les deux tables — ce qui
+      // tombe juste ici par chance, mais rendrait `type` pour `kind` dans
+      // `mesures` comme dans `pesees`.
+      expect(colonneLocale('pesees', 'measured_at'), 'mesure_le');
+      expect(colonneLocale('mesures', 'measured_at'), 'mesure_le');
+      expect(colonneLocale('mesures', 'kind'), 'type');
+      expect(colonneLocale('pesees', 'kind'), 'kind');
+    });
   });
 
   group('La cle qui reconnait une ligne d\'un appareil a l\'autre', () {

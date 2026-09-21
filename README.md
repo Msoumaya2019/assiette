@@ -426,7 +426,7 @@ CI, sur cette machine :
 ```bash
 python tools/verifier_version_build.py    # 11 cas sur tools/version_build.sh
 python tools/check_migration_serveur.py   # accord des schémas local et serveur
-python tools/lancer_bancs.py              # les quatorze bancs de falsification
+python tools/lancer_bancs.py              # les seize bancs de falsification
 ```
 
 L'épreuve des migrations, elle, demande Node et le paquet `@electric-sql/pglite`,
@@ -439,6 +439,15 @@ NODE_PATH=<espace-node>/node_modules node tools/eprouver_migration_sur_postgres.
 Le banc qui l'éprouve, `falsifier_epreuve_migrations.py`, cherche Node et PGlite
 lui-même et **s'arrête en le disant** s'il ne les trouve pas : un banc qui ne peut
 pas mesurer doit le dire, pas rendre « non détecté ».
+
+**Un banc mesure le dépôt : ne rien y modifier pendant qu'il tourne.** Une campagne
+lancée en arrière-plan pendant que l'on édite un fichier suivi produit un rouge qui
+n'existe pas — et le risque n'est pas le rouge, c'est de « corriger » ce qui n'est pas
+cassé. Deux défauts du harnais partagé `tools/bancs/banc.py` sont nés de là, et sont
+détaillés dans `docs/publication.md` : un repli de nettoyage qui utilisait `rename` là
+où il faut `replace` (`os.rename` échoue si la cible existe, donc le témoin restait dans
+l'arbre et le passage suivant refusait de démarrer), et une mesure d'index qui lisait
+`git status` — lequel confond l'index et la copie de travail.
 
 Un banc de falsification retire un garde-fou à la fois et vérifie que le contrôle
 tombe. Un contrôle qui n'a jamais échoué ne prouve rien : il peut regarder au
@@ -542,6 +551,29 @@ Couverture actuelle :
   se vérifie sans lire de fichier : le nom serveur d'une colonne renommée ou
   non, la clé qui reconnaît une ligne d'un appareil à l'autre, et le fait qu'une
   clé ne peut pas être une colonne que le serveur remplit lui-même ;
+- **les deux pièges de type**, déclarés eux aussi une seule fois, et confrontés
+  aux **migrations réelles** par un test qui lit les `.sql`. Il y en a **deux**,
+  pas un : le serveur porte `is_estimate` en `boolean` et le local en entier,
+  mais il porte aussi `eaten_at`, `created_at` et `mesure_le` en `timestamptz`
+  alors que le local compte en millisecondes entières. `true` et `1` ne font pas
+  la même empreinte, et une date ISO ne fait pas la même empreinte qu'un entier :
+  sans conversion, l'arbitrage trancherait toujours dans le même sens et chaque
+  passage réécrirait la même ligne, sans erreur et sans fin. La confrontation est
+  faite **dans les deux sens** — rien de déclaré qui ne soit du bon type, et
+  aucune colonne datée ou booléenne du serveur oubliée — et un garde-fou vérifie
+  que les migrations ont réellement été lues, sans quoi un lecteur aveugle
+  rendrait tout le reste vert ;
+- **la conversion des horodatages** elle-même, dont dépend toute la convergence :
+  une date devient un ISO-8601 **en UTC**, marqué d'un `Z` (sans lui, le serveur
+  lirait la date dans le fuseau de sa session, et deux appareils dans deux
+  fuseaux dateraient différemment la même modification) ; une date **absente
+  reste absente** et ne devient jamais 1970 — une pierre tombale nulle et une
+  date nulle sont deux choses différentes, et les confondre ferait d'une ligne
+  jamais supprimée une ligne supprimée en 1970, donc gagnante partout ; une
+  chaîne vide vaut une absence, parce que PostgREST en rend une pour une colonne
+  nulle ; et une date **illisible lève** au lieu de rendre `null`, parce que
+  « date inconnue » est une valeur, et qu'une valeur fausse qui se propage ne se
+  signale jamais ;
 - **l'interface, pilotée comme un utilisateur la pilote** — l'éditeur de quantité
   avec une portion (ce qui s'affiche, le pas des boutons, et le fait que ce qui
   est **transmis** reste des grammes), l'écran de suivi du poids de bout en bout
@@ -588,6 +620,6 @@ macOS et Linux, `flutter` fonctionne normalement.
 | Suivi du poids : courbe, objectif, mensurations | Écrit, testé |
 | Base locale en schéma v3 (migrations v1 → v3 et v2 → v3 éprouvées) | Écrit, testé |
 | Notifications (rappels de repas, résumé du soir) | Écrit, testé |
-| Compte et synchronisation | Socle éprouvé (arbitrage, plan, empreinte, lecture/écriture locales, service de convergence à deux appareils) ; transport vers Supabase à écrire |
+| Compte et synchronisation | Socle éprouvé (arbitrage, plan, empreinte, lecture/écriture locales, service de convergence à deux appareils, correspondance des noms et des types, conversion des horodatages) ; transport vers Supabase à écrire |
 | APK et AAB signés, IPA non signée | Produits et vérifiés — release `v0.1.5` (les `v0.1.3` et `v0.1.4` portent un affichage fautif des glucides par portion, ne pas les installer) |
 | Envoi sur l'App Store / le Play Store | Non entamé — demande un compte Google Play et un compte Apple Developer |

@@ -37,6 +37,43 @@ n'etait pas encore suivi par git, aucun `git checkout` ne pouvait le rendre.
 deux. Le harnais arme desormais une restauration d'urgence — gestionnaire de
 signal, `atexit`, et capture de `BaseException` autour des deux phases a risque.
 
+Le quatrieme piege : une suppression qui reussit sans supprimer
+--------------------------------------------------------------
+
+Sur cette machine, les suppressions sont **bloquees au-dela d'un seuil par
+tour**, et le blocage est **silencieux** : `Path.unlink()` rend la main sans
+lever, alors que le fichier est toujours la. Le refus n'existe que sur la sortie
+d'erreur du processus.
+
+Mesure : une campagne de seize bancs a laisse **quatre** temoins dans l'arbre —
+`tools/__banc_essai.txt`, `.github/workflows/__banc_essai.yml`,
+`backend/supabase/migrations/0004_oubliee.sql` et une icone iOS — et les bancs
+concernes se sont declares **en echec en accusant le depot**, chacun sur un
+fichier qu'il avait lui-meme fabrique :
+
+  - « le controle echoue deja avant toute mutation », pour les fins de ligne ;
+  - « Icon-App-72x72@1x.png present mais non declare dans Contents.json » ;
+  - « La migration 0004_oubliee.sql existe mais n'est pas dans
+    MIGRATIONS_ATTENDUES » ;
+  - un flux non declare, pour le controle des flux de travail.
+
+Chacun avait pourtant appele `restaurer()`. Le harnais croyait avoir nettoye.
+
+Deux remedes, et il faut les deux :
+
+  - `Banc.retirer` **deplace** au lieu de supprimer — un deplacement n'est pas
+    une suppression — et **verifie** que le chemin est libre. `replace`, et non
+    `rename`, qui echoue si la cible existe (`FileExistsError`, WinError 183) :
+    un premier reste dans `%TEMP%` suffisait a faire lever tous les replis
+    suivants ;
+  - chaque banc qui verifie l'**absence** d'un artefact retire le sien au
+    demarrage, et le dit. C'est le seul remede qui tienne : le nettoyage de fin
+    ne peut pas etre garanti ici, donc la campagne doit pouvoir repartir d'un
+    arbre ou le passage precedent a laisse quelque chose.
+
+Apres les deux, la campagne rend **16 bancs, tous verts**, et les quatre
+nettoyages de demarrage annoncent chacun leur temoin.
+
 Usage : voir `tools/bancs/falsifier_fins_de_ligne.py`.
 """
 
@@ -345,6 +382,45 @@ class Banc:
         print(f"  {conseil}", file=sys.stderr)
         self.restaurer()
 
+    def retirer(self, chemin: Path) -> None:
+        """Retire un fichier fabrique par le banc, et **verifie** qu'il est parti.
+
+        Pourquoi `unlink()` ne suffit pas
+        ---------------------------------
+        Sur cette machine, les suppressions sont **bloquees au-dela d'un seuil
+        par tour**, et le blocage est **silencieux** : `Path.unlink()` rend la
+        main sans lever, alors que le fichier est toujours la. Mesure : quatre
+        bancs d'une meme campagne ont laisse leurs temoins dans l'arbre —
+        `tools/__banc_essai.txt`, `.github/workflows/__banc_essai.yml`,
+        `backend/supabase/migrations/0004_oubliee.sql` et une icone iOS — et les
+        quatre se sont declares en echec en accusant un depot casse. Le harnais
+        croyait avoir nettoye.
+
+        Le remede est donc double : **deplacer** plutot que supprimer — un
+        deplacement n'est pas une suppression, donc le garde-fou ne le bloque
+        pas —, et **verifier** ensuite que le chemin est bien libre. Un nettoyage
+        non verifie est precisement ce qui a echoue ici.
+
+        `replace`, et non `rename` : `os.rename` echoue si la cible existe
+        (`FileExistsError`, WinError 183), et un premier reste dans `%TEMP%`
+        suffisait alors a faire lever tous les replis suivants. Mesure directe :
+        sur la meme cible deja presente, `rename` leve `WinError 183` quand
+        `replace` aboutit.
+        """
+        try:
+            chemin.unlink()
+        except OSError:
+            # La suppression passe par le mecanisme de corbeille du systeme, qui
+            # peut refuser (mesure : `SHFileOperationW: 0x2`).
+            pass
+
+        if not chemin.exists():
+            return
+
+        chemin.replace(Path(tempfile.gettempdir()) / f"banc-{chemin.name}")
+        if chemin.exists():
+            raise SystemExit(f"retrait impossible : {chemin}")
+
     def restaurer(self) -> None:
         for fichier in self.fichiers.values():
             if not fichier.restaurer():
@@ -356,16 +432,8 @@ class Banc:
                 raise SystemExit(f"restauration impossible : {fichier.chemin}")
         self.supprimes.clear()
         for chemin in self.crees:
-            if not chemin.exists():
-                continue
-            try:
-                chemin.unlink()
-            except OSError:
-                # La suppression passe par la corbeille du systeme, qui peut
-                # refuser (mesure : `SHFileOperationW: 0x2`). Deplacer hors de
-                # l'arbre obtient le meme effet sans dependre d'un service : le
-                # fichier n'a aucune valeur, l'arbre doit rester propre.
-                chemin.rename(Path(tempfile.gettempdir()) / f"banc-{chemin.name}")
+            if chemin.exists():
+                self.retirer(chemin)
         self.crees.clear()
 
         if self.index_a_reinitialiser:

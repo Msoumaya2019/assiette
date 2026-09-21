@@ -155,6 +155,23 @@ def principal() -> int:
         environnement=environnement,
     )
 
+    # --- le temoin d'un passage precedent --------------------------------
+    #
+    # Mesure : une campagne de seize bancs a laisse `0004_oubliee.sql` dans
+    # l'arbre, et ce banc a refuse de demarrer sur « La migration 0004_oubliee.sql
+    # existe mais n'est pas dans MIGRATIONS_ATTENDUES » — une migration oubliee
+    # annoncee comme un defaut du depot, alors que ce banc l'avait fabriquee.
+    #
+    # La cause est du cote de l'environnement : sur cette machine, le garde de
+    # suppression refuse parfois **sans le dire**, et `Path.unlink()` rend alors
+    # la main sans lever. Le banc ne peut donc pas compter sur son propre
+    # nettoyage pour la fois d'apres. Il retire son temoin au demarrage, et le
+    # dit.
+    temoin = RACINE / MIGRATION_OUBLIEE
+    if temoin.exists():
+        print(f"temoin d'un passage precedent, retire : {temoin.name}")
+        banc.retirer(temoin)
+
     avant = empreintes()
 
     initial = banc.etat_initial()

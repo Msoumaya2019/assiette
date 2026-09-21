@@ -11,7 +11,7 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Élément | État |
 | --- | --- |
 | Code source complet, analysé sans avertissement | prêt |
-| 438 tests de l'application, tous verts | prêt |
+| 455 tests de l'application, tous verts | prêt |
 | 18 tests du serveur, tous verts | prêt |
 | Dépôt public | https://github.com/Msoumaya2019/assiette |
 | Flux `ci.yml` — analyse, 438 tests, 9 contrôles | **vert** |
@@ -895,11 +895,25 @@ La règle d'arbitrage est **appelée**, et la chaîne qui l'appelle est éprouv�
 bout : le planificateur (`app/lib/models/synchronisation.dart`) décide ligne par ligne, la
 couche locale (`app/lib/data/local/synchronisation_locale.dart`) lit et écrit les tables
 réelles, et le service (`app/lib/services/synchronisation_service.dart`) fait converger
-**deux appareils** contre un faux serveur en mémoire. Ce qui n'existe toujours pas, c'est
-le **transport** : rien ne lit ni n'écrit sur Supabase, et le projet Supabase n'est pas
-encore créé. Le contrat du transport tient en trois méthodes, et les tests de convergence
-n'en dépendent pas : les remplacer par le vrai client ne changera aucun d'entre eux. La
-plomberie reste à faire, et elle est désormais la seule.
+**deux appareils** contre un faux serveur en mémoire. Les deux pièges de **type** qui
+auraient fait boucler la synchronisation sans fin — `boolean` contre entier, `timestamptz`
+contre millisecondes — sont désormais déclarés une seule fois et confrontés aux migrations
+réelles par un test qui les lit, dans les deux sens ; la conversion des horodatages est
+écrite et éprouvée, et un banc vérifie qu'elle tombe bien sur chacune de ses six fautes,
+y compris la plus discrète : les millisecondes tenues pour des secondes, où tout converge
+encore — les deux côtés étant d'accord — mais où les dates sont fausses d'un facteur mille.
+
+Ce qui n'existe toujours pas, c'est le **transport** : rien ne lit ni n'écrit sur Supabase,
+et le projet Supabase n'est pas encore créé. Le contrat du transport tient en trois
+méthodes, et les tests de convergence n'en dépendent pas : les remplacer par le vrai client
+ne changera aucun d'entre eux. Ce qui reste à écrire dans ce transport est connu et
+nommé : le **deuxième passage** sur les repas, parce que `meal_items.meal_id` désigne
+l'`uuid` que le serveur génère lui-même et non le `client_id` de l'appareil — il faut donc
+insérer le repas, relire son `uuid`, puis rattacher les aliments ; l'échappement du
+plafond de **mille lignes** que PostgREST applique à une lecture, par un découpage ou une
+sélection forcée ; le **découpage en lots** pour les grosses charges ; et l'authentification
+par jeton, avec les politiques RLS qui filtrent déjà par utilisateur. La plomberie reste à
+faire, et elle est désormais la seule.
 
 Dans une **liste** de résultats, les aliments qui portent une portion connue sont
 désormais chiffrés par portion, les autres pour 100 g : deux bases dans la même
@@ -970,6 +984,8 @@ python3 tools/bancs/falsifier_arbitrage_dart.py        # 5 cas — règle d'arbi
 python3 tools/bancs/falsifier_synchronisation_dart.py  # 7 cas — plan de synchronisation (Flutter)
 python3 tools/bancs/falsifier_synchronisation_locale_dart.py  # 7 cas — lecture/écriture locales (Flutter)
 python3 tools/bancs/falsifier_synchronisation_service_dart.py  # 7 cas — convergence de deux appareils (Flutter)
+python3 tools/bancs/falsifier_correspondance_types_dart.py     # 7 cas — types déclarés contre les migrations (Flutter)
+python3 tools/bancs/falsifier_dates_distantes_dart.py          # 7 cas — conversion des horodatages (Flutter)
 python3 tools/bancs/falsifier_version_build.py         # 6 cas — version publiée
 python3 tools/bancs/falsifier_check_workflows.py       # 19 cas — validation des flux
 python3 tools/bancs/falsifier_migration_serveur.py     # 15 cas — accord des deux schémas
@@ -1079,6 +1095,40 @@ faute pourtant attrapée, en invitant à corriger la mutation — c'est-à-dire 
 retirer la faute que le contrôle venait de détecter. `error` compte désormais
 comme un échec.
 
+Deux autres défauts du même harnais ont été trouvés plus tard, tous deux dans
+`banc.py`, et tous deux de la même famille : **le banc accuse le dépôt d'un
+désordre qu'il a lui-même causé.**
+
+- **Le repli de nettoyage ne repliait pas.** Quand `unlink()` échoue — un
+  handle Windows encore ouvert sur un fichier que le contrôle vient de lire —,
+  le harnais déplace le témoin hors de l'arbre. Il utilisait `rename`, et
+  `os.rename` **échoue si la cible existe** (`FileExistsError`, WinError 183).
+  Un premier reste dans `%TEMP%` suffisait donc à faire lever tous les replis
+  suivants, et le témoin restait dans `tools/`. Le passage **d'après** refusait
+  alors de démarrer sur « le contrôle échoue déjà avant toute mutation », en
+  accusant un fichier que le banc fabrique lui-même. Mesure : deux passages
+  consécutifs, le second rouge. Le remède — `replace`, qui écrase la cible — a
+  été vérifié directement sur la même cible déjà présente : `rename` lève
+  `WinError 183`, `replace` aboutit. Après correction, trois passages
+  consécutifs sont verts et ne laissent aucun reste.
+- **La mesure de l'index mesurait aussi l'arbre.** Le banc des fins de ligne
+  vérifie que la campagne rend l'index tel qu'elle l'a trouvé, et lisait pour
+  cela `git status --short` — qui confond l'index, que la campagne touche, et la
+  copie de travail, qu'un auteur modifie **pendant** que le banc tourne. Une
+  campagne où `docs/publication.md` a été édité en parallèle a rendu « index
+  reconstruit : DIVERGENT » alors que l'index était intact. Le repère pris avant
+  et après ne protège pas de cela : il protège d'une modification **déjà
+  présente**, pas d'une modification **concurrente**. La mesure porte désormais
+  sur `git diff --cached`, qui ne voit que l'index ; la copie de travail est
+  **observée** et signalée, sans verdict. Vérifié par sonde : en désactivant la
+  reconstruction de l'index, le banc rend bien `DIVERGENT`, avec la ligne
+  exacte.
+
+La leçon commune vaut d'être écrite : **un banc mesure le dépôt, donc il ne faut
+pas modifier le dépôt pendant qu'il tourne.** Une campagne lancée en arrière-plan
+pendant que l'on édite la documentation produit un rouge qui n'existe pas — et
+le risque n'est pas le rouge, c'est de « corriger » ce qui n'est pas cassé.
+
 `falsifier_synchronisation_service_dart.py` éprouve la couche qui **fait
 converger deux appareils**. C'est le seul banc du dépôt dont les tests ouvrent
 deux bases distinctes et les font dialoguer par un faux serveur en mémoire :
@@ -1105,6 +1155,50 @@ naturellement :
 - **visiter une table sans cycle de vie**, c'est-à-dire transporter des réglages
   qui ne portent ni date ni pierre tombale ;
 - et un **témoin négatif** : un commentaire reformulé ne fait rien tomber.
+
+`falsifier_correspondance_types_dart.py` éprouve la confrontation des **types**
+déclarés aux migrations réelles. `check_migration_serveur.py` tient l'accord des
+noms ; il ne dit rien des types, et c'est là que se cache une boucle silencieuse :
+le serveur porte `eaten_at` en `timestamptz` et `is_estimate` en `boolean`, le
+local les porte en entier. Sans conversion, les deux côtés ne décrivent jamais la
+même chose — l'arbitrage tranche toujours dans le même sens, chaque passage
+réécrit la même ligne, sans erreur et sans fin. Ses cas :
+
+- **une date oubliée dans la déclaration** (`eaten_at`) et **un booléen oublié**
+  (`meal_items.is_estimate`, arrivé par un `alter table`, pas par un
+  `create table`) — la synchronisation ne convergerait jamais ;
+- **une colonne déclarée datée à tort** et **une déclarée booléenne à tort** —
+  l'autre sens de l'accord ;
+- **le serveur change de type, la déclaration ne bouge pas.** C'est le cas qui
+  compte le plus : il est le seul à prouver que le test lit réellement les
+  fichiers `.sql`. Sans lui, un test qui se comparerait à lui-même serait vert
+  sur tous les autres cas en ne mesurant rien ;
+- **le lecteur des migrations devient aveugle** — six `create table if not
+  exists` redeviennent `create table`, la lecture ne trouve plus rien, et le
+  garde-fou « les migrations ont bien été lues » doit le dire. Sans ce cas, un
+  lecteur aveugle rendrait tous les autres tests verts ;
+- et un **témoin négatif** : un commentaire SQL reformulé ne fait rien tomber.
+
+`falsifier_dates_distantes_dart.py` éprouve la conversion des horodatages, sur
+laquelle repose toute la convergence : deux erreurs y font diverger les
+empreintes sans jamais lever. Ses six fautes sont celles qu'on écrirait
+naturellement — la marque `Z` qui disparaît (`toIso8601String()` sur une date
+locale n'en pose pas, et le serveur lirait alors la date dans le fuseau de sa
+session), une **absence tenue pour 1970** (une pierre tombale nulle et une date
+nulle sont deux choses différentes : les confondre ferait d'une ligne jamais
+supprimée une ligne supprimée en 1970, donc gagnante partout), la **chaîne vide
+non reconnue** — PostgREST en rend une pour une colonne nulle —, une **date
+cassée rendue nulle** au lieu de lever (« date inconnue » est une valeur, et une
+valeur fausse qui se propage ne se signale jamais), un **type inattendu rendu
+nul** par l'autre sortie, et les **millisecondes tenues pour des secondes** — où
+tout converge encore, les deux côtés étant d'accord, mais les dates sont fausses
+d'un facteur mille.
+
+Ce banc prend une précaution qui mérite d'être dite : **aucun de ses cas ne
+repose sur le fuseau de la machine**. La mutation évidente — remplacer `toUtc()`
+par `toLocal()` — serait détectée à Paris et **invisible** sur un exécuteur en
+UTC : le banc serait vert en local et rouge en intégration continue. Les
+mutations retenues sont déterministes partout.
 
 `falsifier_check_workflows.py` éprouve le seul contrôle qui lit `.github/workflows`,
 et qui n'en avait aucun. Trois de ses cas méritent d'être cités :
