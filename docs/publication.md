@@ -17,8 +17,8 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Flux `ci.yml` — analyse, 273 tests, 7 contrôles | **vert** |
 | Flux Android — APK et AAB | **vert**, artefacts signés et vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
-| Déclenchement par étiquette `v*` | **vert** (`v0.1.0`, `v0.1.1`, `v0.1.2`) |
-| Dernière version publiée | **`v0.1.2`** — APK signé, AAB signé, IPA |
+| Déclenchement par étiquette `v*` | **vert** (`v0.1.0`, `v0.1.1`, `v0.1.2`, `v0.1.3`) |
+| Dernière version publiée | **`v0.1.3`** — APK signé, AAB signé, IPA (portions nommées, suivi du poids) |
 | Icônes et écran de démarrage (Android et iOS) | prêt |
 | Politique de confidentialité | `docs/confidentialite.md` |
 | Attributions Ciqual et Open Food Facts | `app/assets/legal/ATTRIBUTION.md` |
@@ -35,6 +35,9 @@ contrôlés**, pas seulement lus dans le journal du flux :
 
 | Version | Artefact | Vérification |
 | --- | --- | --- |
+| `v0.1.3` | `app-release-0.1.3+7-signe.apk` | déclare `0.1.3` / `7`, 84 381 057 octets, signé avec la clé de release |
+| `v0.1.3` | `app-release-0.1.3+7-signe.aab` | 72 260 004 octets, version non lisible dans un AAB — non vérifiée, et le script l'écrit |
+| `v0.1.3` | `Assiette-0.1.3+6-non-signee.ipa` | déclare `0.1.3` / `6`, 17 059 881 octets |
 | `v0.1.2` | `app-release-0.1.2+6-signe.apk` | déclare `0.1.2` / `6`, signé avec la clé de release (`CN=Assiette`, empreinte `22518e30…`) |
 | `v0.1.2` | `app-release-0.1.2+6-signe.aab` | 549 entrées, signé (`META-INF/ASSIETTE.RSA`) |
 | `v0.1.2` | `Assiette-0.1.2+5-non-signee.ipa` | déclare `0.1.2` / `5`, `MinimumOSVersion` 15.5 |
