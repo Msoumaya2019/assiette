@@ -27,6 +27,15 @@
 /// `id`, le `user_id` qui porte la propriete, et les `total_*` de `meals`, qui
 /// denormalisent le calcul pour accelerer le tableau de bord.
 ///
+/// Et une colonne va dans l'autre sens
+/// -----------------------------------
+/// `meals.photo_path` existe des deux cotes, mais sa valeur n'est pas
+/// transportable : c'est un chemin **propre a l'appareil**. Elle est donc
+/// declaree dans [colonnesLocalesSeules] — la troisieme famille, apres les
+/// colonnes renommees et les colonnes serveur seules. Sans cette declaration,
+/// le transport ecraserait la photo locale d'un autre appareil sans la moindre
+/// erreur.
+///
 /// Ce que ce fichier n'est pas
 /// ---------------------------
 /// Il ne **convertit** rien : les dates locales sont des entiers en
@@ -132,6 +141,40 @@ const Map<String, Set<String>> colonnesBooleennesDistantes = {
   'meals': {'is_estimate'},
   'meal_items': {'is_estimate'},
 };
+
+/// Colonnes dont la **valeur** ne quitte pas cet appareil.
+///
+/// Nommees en vocabulaire **local**. Elles ont bien une colonne serveur — le
+/// controle d'accord entre les deux schemas reste donc satisfait — mais leur
+/// contenu n'est pas transportable.
+///
+/// Le cas qui a motive cette declaration : `meals.photo_path`. La valeur est un
+/// **chemin absolu propre a l'appareil** — `<documents>/meal_photos/<id>.jpg`,
+/// compose par `services/image_service.dart` a partir du dossier de documents
+/// du telephone. Le transporter ecraserait la photo locale d'un autre appareil
+/// **sans erreur** : le chemin arriverait, il serait valide, et l'image
+/// manquerait. La photo serait perdue pour l'appareil qui l'avait prise.
+///
+/// Ce n'est pas la meme chose qu'une colonne oubliee. Une colonne oubliee est
+/// un defaut ; celle-ci est une decision, et elle est nommee ici. C'est ce qui
+/// autorise le contenu a etre **deliberement aveugle** a `photo_path` sans que
+/// cette cecite se confonde avec un oubli — meme discipline que la liste close
+/// des bancs.
+///
+/// La colonne serveur `meals.photo_path` garde un sens : le jour ou les photos
+/// seront deposees sur un stockage distant, elle portera le chemin de l'objet
+/// distant. Deux valeurs differentes sous un meme nom — c'est exactement
+/// pourquoi ce n'est pas au transport de les confondre.
+const Map<String, Set<String>> colonnesLocalesSeules = {
+  'meals': {'photo_path'},
+};
+
+/// Les colonnes qui restent sur l'appareil, pour une table donnee.
+///
+/// Rend un ensemble vide plutot que `null` : l'appelant n'a pas a connaitre la
+/// difference entre « aucune » et « pas declaree ».
+Set<String> colonnesLocalesSeulesDe(String tableLocale) =>
+    colonnesLocalesSeules[tableLocale] ?? const <String>{};
 
 /// Le nom serveur d'une colonne locale.
 ///

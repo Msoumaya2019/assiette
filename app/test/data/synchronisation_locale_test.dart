@@ -1,3 +1,4 @@
+import 'package:assiette/data/distant/correspondance_distant.dart';
 import 'package:assiette/data/local/app_database.dart';
 import 'package:assiette/data/local/synchronisation_locale.dart';
 import 'package:assiette/models/empreinte.dart';
@@ -186,9 +187,11 @@ void main() {
       () async {
         for (final table in tablesSynchronisables) {
           final colonnes = await colonnesDe(db, table.nom);
+          final localesSeules = colonnesLocalesSeulesDe(table.nom);
           final attendues = colonnes
               .where((c) => c != table.colonneCle)
               .where((c) => !colonnesDeService.contains(c))
+              .where((c) => !localesSeules.contains(c))
               .toSet();
           // Un agregat ajoute ses enfants sous une cle qui n'est pas une
           // colonne : c'est le seul ecart admis, et il est nomme ici.
@@ -225,10 +228,17 @@ void main() {
           // presentes ne verrait jamais une colonne absente — c'est-a-dire
           // exactement le defaut qu'on cherche a attraper. Le controle porte
           // donc sur ce qui **doit** etre la, pas sur ce qui y est.
+          //
+          // Les colonnes de `colonnesLocalesSeules` sont retirees de la liste
+          // parce qu'elles sont exclues **par decision** : leur valeur est
+          // propre a l'appareil. Le test suivant verifie qu'elles sont bien
+          // exclues, et que la liste des exclusions est exactement celle-la.
+          final localesSeules = colonnesLocalesSeulesDe(table.nom);
           final aEssayer =
               (await colonnesDe(db, table.nom))
                   .where((c) => c != table.colonneCle)
                   .where((c) => !colonnesDeService.contains(c))
+                  .where((c) => !localesSeules.contains(c))
                   .toList()
                 ..sort();
           if (table.enfant != null) aEssayer.add(cleDesEnfants);

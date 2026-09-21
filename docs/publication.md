@@ -11,10 +11,10 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Élément | État |
 | --- | --- |
 | Code source complet, analysé sans avertissement | prêt |
-| 455 tests de l'application, tous verts | prêt |
+| 462 tests de l'application, tous verts | prêt |
 | 18 tests du serveur, tous verts | prêt |
 | Dépôt public | https://github.com/Msoumaya2019/assiette |
-| Flux `ci.yml` — analyse, 438 tests, 9 contrôles | **vert** |
+| Flux `ci.yml` — analyse, 462 tests, 9 contrôles | **vert** |
 | Flux `ci.yml` — migrations Supabase exécutées sur un vrai PostgreSQL | **vert** (35 épreuves) |
 | Flux Android — APK et AAB | **vert**, artefacts signés et vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
@@ -902,6 +902,11 @@ réelles par un test qui les lit, dans les deux sens ; la conversion des horodat
 écrite et éprouvée, et un banc vérifie qu'elle tombe bien sur chacune de ses six fautes,
 y compris la plus discrète : les millisecondes tenues pour des secondes, où tout converge
 encore — les deux côtés étant d'accord — mais où les dates sont fausses d'un facteur mille.
+Enfin, les colonnes dont la valeur **ne quitte pas l'appareil** sont nommées une à une :
+`meals.photo_path` porte un chemin absolu dans le dossier de documents du téléphone, et le
+transporter effacerait la photo de l'autre appareil sans la moindre erreur. La lecture ne
+l'émet plus, l'écriture la relit pour la remettre, et un banc séparé éprouve les deux
+moitiés.
 
 Ce qui n'existe toujours pas, c'est le **transport** : rien ne lit ni n'écrit sur Supabase,
 et le projet Supabase n'est pas encore créé. Le contrat du transport tient en trois
@@ -986,9 +991,10 @@ python3 tools/bancs/falsifier_synchronisation_locale_dart.py  # 7 cas — lectur
 python3 tools/bancs/falsifier_synchronisation_service_dart.py  # 7 cas — convergence de deux appareils (Flutter)
 python3 tools/bancs/falsifier_correspondance_types_dart.py     # 7 cas — types déclarés contre les migrations (Flutter)
 python3 tools/bancs/falsifier_dates_distantes_dart.py          # 7 cas — conversion des horodatages (Flutter)
+python3 tools/bancs/falsifier_colonnes_locales_dart.py         # 7 cas — colonnes propres à l'appareil (Flutter)
 python3 tools/bancs/falsifier_version_build.py         # 6 cas — version publiée
 python3 tools/bancs/falsifier_check_workflows.py       # 19 cas — validation des flux
-python3 tools/bancs/falsifier_migration_serveur.py     # 15 cas — accord des deux schémas
+python3 tools/bancs/falsifier_migration_serveur.py     # 18 cas — accord des deux schémas
 python3 tools/bancs/falsifier_epreuve_migrations.py    # 6 cas — épreuve PostgreSQL
 ```
 
@@ -1016,7 +1022,14 @@ ses cas méritent d'être cités :
   plancher exact se substitue au contrôle au lieu de le compléter : il a fallu lui
   donner une **marge**, assez large pour qu'une entrée retirée atteigne le contrôle
   d'accord, assez étroite pour qu'un lecteur cassé le fasse tomber. Le troisième
-  cas est ce qui établit que le plancher sert encore à quelque chose.
+  cas est ce qui établit que le plancher sert encore à quelque chose ;
+- **les colonnes retenues sur l'appareil.** Trois cas de plus : une exclusion qui
+  nomme une colonne que le schéma local ne connaît pas, une déclaration vidée, et
+  une reformulation en témoin négatif. Le contrôle refuse les deux premières et se
+  tait sur la troisième. Il ne peut pas, en revanche, savoir qu'une colonne
+  **devait** être retenue : c'est un jugement sur la nature de la valeur, pas un
+  fait de structure. Ce jugement-là appartient au fichier de tests Dart, et c'est
+  le banc suivant qui l'éprouve.
 
 `falsifier_epreuve_migrations.py` éprouve l'épreuve PGlite. C'est le premier banc
 qui n'éprouve pas un script Python : le harnais a reçu un paramètre d'interpréteur,
@@ -1199,6 +1212,35 @@ repose sur le fuseau de la machine**. La mutation évidente — remplacer `toUtc
 par `toLocal()` — serait détectée à Paris et **invisible** sur un exécuteur en
 UTC : le banc serait vert en local et rouge en intégration continue. Les
 mutations retenues sont déterministes partout.
+
+`falsifier_colonnes_locales_dart.py` éprouve la retenue des **colonnes propres à
+l'appareil**, dont le premier membre est `meals.photo_path`. La valeur est un
+chemin absolu dans le dossier de documents du téléphone : le transporter
+n'échouerait pas — le chemin arriverait, il serait valide, l'image manquerait —
+et l'écriture locale, qui remplace la ligne, effacerait la photo de l'appareil
+qui reçoit. Ses six fautes se répartissent sur les deux moitiés de la décision :
+
+- côté déclaration, **l'exclusion retirée** et **l'exclusion qui nomme une
+  colonne inconnue** : dans les deux cas `photo_path` redevient une colonne
+  ordinaire, sans que rien ne le dise ;
+- côté lecture, **la colonne remise dans le contenu** et **la table qui n'est
+  plus transmise** à la lecture — le second cas est le seul qui établit que ce
+  paramètre sert à quelque chose ;
+- côté écriture, **la préservation retirée** et **la relecture qui vise une autre
+  ligne** : le second ferait hériter un repas inconnu localement de la photo du
+  premier repas venu.
+
+Ce banc est le seul à falsifier cette retenue, et il y a une raison mesurée à
+cela : `falsifier_synchronisation_locale_dart.py` vise
+`test/data/synchronisation_locale_test.dart`, dont les deux listes ont été
+retirées de `photo_path` **par décision**. Sa couverture de cette exclusion est
+donc nulle, et une mutation qui la retirerait ne ferait tomber aucun de ses
+tests. Une mutation qui ne peut pas être détectée n'a rien à faire dans un banc —
+le fichier de tests de cette famille a donc été **séparé**, précisément pour
+qu'un banc puisse l'épingler. La mesure qui l'a imposé : ce fichier portait
+exactement 21 tests, le compte épinglé par le banc voisin, et y ajouter les cinq
+cas écrits d'abord aurait fait échouer ce banc — qui aurait alors eu l'air
+d'accuser le dépôt.
 
 `falsifier_check_workflows.py` éprouve le seul contrôle qui lit `.github/workflows`,
 et qui n'en avait aucun. Trois de ses cas méritent d'être cités :

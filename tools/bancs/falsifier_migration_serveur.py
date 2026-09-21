@@ -19,6 +19,13 @@ que le controle depend vraiment de la declaration ; le troisieme, que le
 plancher attrape un lecteur casse au lieu de rendre un accord verifie sur du
 vide.
 
+Trois cas de plus visent la **troisieme famille** : les colonnes retenues sur
+l'appareil. Le controle doit refuser une exclusion qui ne designe rien, refuser
+de rendre un accord sur une declaration videe, et ne rien dire d'une
+reformulation. Il ne peut pas, en revanche, savoir qu'une colonne **devait**
+etre retenue — c'est un jugement sur la nature de la valeur, et il appartient au
+fichier de tests Dart, falsifie par `falsifier_colonnes_locales_dart.py`.
+
 Usage : python3 tools/bancs/falsifier_migration_serveur.py
 """
 
@@ -115,6 +122,30 @@ TABLES_ENTIEREMENT_SERVEUR_SANS_PROFILS = (
 LECTEUR_DE_LA_DECLARATION = b"""    return dict(re.findall(r"'([^']+)'\\s*:\\s*'([^']*)'", corps))"""
 LECTEUR_DE_LA_DECLARATION_AVEUGLE = (
     b"""    return dict(re.findall(r"'ZZ([^']+)'\\s*:\\s*'([^']*)'", corps))"""
+)
+
+# --- la troisieme famille : les colonnes retenues sur l'appareil ------------
+
+# `meals.photo_path` porte un chemin absolu dans le dossier de documents du
+# telephone. Le controle doit refuser une exclusion qui ne designe rien, et
+# refuser de rendre un accord sur une declaration videe.
+EXCLUSION_PHOTO = b"  'meals': {'photo_path'},\n"
+EXCLUSION_PHOTO_FAUSSE = b"  'meals': {'photo_chemin'},\n"
+
+DECLARATION_EXCLUSIONS = (
+    b"const Map<String, Set<String>> colonnesLocalesSeules = {\n"
+    b"  'meals': {'photo_path'},\n"
+    b"};\n"
+)
+DECLARATION_EXCLUSIONS_VIDE = (
+    b"const Map<String, Set<String>> colonnesLocalesSeules = {};\n"
+)
+# La meme declaration sur une ligne. `dart format` ne l'ecrit pas ainsi, mais
+# rien ne doit dependre de la mise en forme : c'est le temoin negatif de cette
+# famille.
+DECLARATION_EXCLUSIONS_UNE_LIGNE = (
+    b"const Map<String, Set<String>> colonnesLocalesSeules = "
+    b"{'meals': {'photo_path'}};\n"
 )
 
 
@@ -269,6 +300,37 @@ def principal() -> int:
             LECTEUR_DE_LA_DECLARATION, LECTEUR_DE_LA_DECLARATION_AVEUGLE
         )
 
+    # --- 8. Les colonnes retenues sur l'appareil ---------------------------
+
+    def exclusion_qui_ne_designe_rien() -> None:
+        """L'exclusion nomme une colonne que le schema local ne connait pas.
+
+        Elle a alors l'air d'une decision sans en etre une : `photo_path`
+        redevient une colonne ordinaire, transportable, et la photo de l'autre
+        appareil serait ecrasee.
+        """
+        banc.suivre(CORRESPONDANCE).muter(
+            EXCLUSION_PHOTO, EXCLUSION_PHOTO_FAUSSE
+        )
+
+    def declaration_des_exclusions_videe() -> None:
+        """La declaration est videe : le plancher doit tomber.
+
+        C'est le seul signal possible ici, et il faut le dire : le controle ne
+        peut pas savoir qu'une colonne **devait** etre retenue — c'est un
+        jugement sur la nature de la valeur, pas un fait de structure. Le role du
+        plancher est d'empecher un accord rendu sur du vide, rien de plus.
+        """
+        banc.suivre(CORRESPONDANCE).muter(
+            DECLARATION_EXCLUSIONS, DECLARATION_EXCLUSIONS_VIDE
+        )
+
+    def declaration_des_exclusions_sur_une_ligne() -> None:
+        """Temoin negatif : la mise en forme ne doit rien changer."""
+        banc.suivre(CORRESPONDANCE).muter(
+            DECLARATION_EXCLUSIONS, DECLARATION_EXCLUSIONS_UNE_LIGNE
+        )
+
     # --- Enregistrement ----------------------------------------------------
 
     banc.cas(
@@ -316,6 +378,22 @@ def principal() -> int:
         "lecteur de la declaration aveugle",
         "attendues au moins",
         lecteur_de_la_declaration_aveugle,
+    )
+    banc.cas(
+        "exclusion qui ne designe rien",
+        "l'exclusion ne designe rien",
+        exclusion_qui_ne_designe_rien,
+    )
+    banc.cas(
+        "declaration des exclusions videe",
+        "colonnesLocalesSeules : 0 entree(s) lue(s)",
+        declaration_des_exclusions_videe,
+    )
+    banc.cas(
+        "declaration des exclusions sur une ligne",
+        "sans destination",
+        declaration_des_exclusions_sur_une_ligne,
+        attendu=False,
     )
     banc.cas(
         "commentaire tenu pour du code",

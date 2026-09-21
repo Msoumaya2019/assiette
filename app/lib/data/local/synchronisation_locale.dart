@@ -24,6 +24,15 @@
 /// comparee, `deleted_at` est deja l'etat compare. Les remettre dans l'empreinte
 /// n'ajouterait rien — l'empreinte ne sert qu'a departager des dates **egales**.
 ///
+/// Une troisieme famille est exclue, pour une raison differente : les colonnes
+/// de [colonnesLocalesSeules] — aujourd'hui `meals.photo_path` — portent une
+/// valeur **propre a cet appareil**, un chemin absolu dans son dossier de
+/// documents. Les faire circuler enverrait a l'autre appareil un chemin qui
+/// n'existe pas chez lui, et l'ecriture locale ecraserait sa photo. Cette
+/// exclusion-la est **nommee** dans la declaration, ce qui la distingue d'un
+/// oubli : une colonne oubliee reste un defaut, et le controle par colonne de
+/// `synchronisation_locale_test.dart` continue de la chercher.
+///
 /// L'agregat
 /// ---------
 /// Un repas et ses aliments sont **une seule ligne** : `saveMeal` reecrit les
@@ -36,6 +45,7 @@ library;
 import 'package:sqflite/sqflite.dart';
 
 import '../../models/synchronisation.dart';
+import '../distant/correspondance_distant.dart';
 
 /// Colonnes portees par [VersionArbitrable] plutot que par le contenu.
 const Set<String> colonnesDeService = {'updated_at', 'deleted_at'};
@@ -105,7 +115,12 @@ Future<List<LigneSynchronisable>> lireLignes(
 
   final resultat = <LigneSynchronisable>[];
   for (final ligne in lignes) {
-    final contenu = contenuDe(colonnes, ligne, table.colonneCle);
+    final contenu = contenuDe(
+      colonnes,
+      ligne,
+      table.colonneCle,
+      table: table.nom,
+    );
     final enfant = table.enfant;
     if (enfant != null) {
       contenu[cleDesEnfants] = await _lireEnfants(
@@ -131,6 +146,18 @@ Future<List<LigneSynchronisable>> lireLignes(
 /// L'ecriture est un **remplacement**, jamais une fusion : la ligne gagnante est
 /// celle qu'un arbitrage a designee, et melanger deux versions produirait une
 /// troisieme que personne n'a jamais vue.
+///
+/// Une exception a ce remplacement, et une seule : les colonnes de
+/// [colonnesLocalesSeules] ne viennent pas de la ligne distante, elles sont
+/// **relues** dans la base et remises telles quelles. `insert` avec
+/// `ConflictAlgorithm.replace` supprime la ligne puis la reinsere : une colonne
+/// absente du contenu retomberait a `NULL`. Pour `meals.photo_path`, cela
+/// effacerait la photo de l'utilisateur a chaque passage — sans erreur, et sans
+/// que rien ne le signale.
+///
+/// Quand la ligne n'existe pas encore localement, il n'y a rien a relire : la
+/// colonne reste absente et vaut `NULL`. C'est exact — cet appareil-la n'a pas
+/// cette photo.
 Future<void> ecrireLigne(
   DatabaseExecutor db,
   TableSynchronisable table,
@@ -138,6 +165,18 @@ Future<void> ecrireLigne(
 ) async {
   final charge = Map<String, Object?>.from(ligne.contenu)
     ..remove(cleDesEnfants);
+
+  final localesSeules = colonnesLocalesSeulesDe(table.nom);
+  if (localesSeules.isNotEmpty) {
+    final existante = await db.query(
+      table.nom,
+      columns: localesSeules.toList()..sort(),
+      where: '${table.colonneCle} = ?',
+      whereArgs: [ligne.cle],
+      limit: 1,
+    );
+    if (existante.isNotEmpty) charge.addAll(existante.first);
+  }
 
   await db.insert(table.nom, {
     table.colonneCle: ligne.cle,
@@ -177,19 +216,27 @@ Future<List<String>> colonnesDe(DatabaseExecutor db, String table) async {
   return [for (final colonne in description) colonne['name']! as String];
 }
 
-/// Le contenu d'une ligne : tout sauf la cle et les colonnes de service.
+/// Le contenu d'une ligne : tout sauf la cle, les colonnes de service, et les
+/// colonnes qui restent sur l'appareil.
 ///
 /// Fonction separee, et **pure**, pour que la regle d'exclusion soit visible et
 /// eprouvable sans base.
+///
+/// [table] est le nom de la table en vocabulaire **local** : c'est lui qui
+/// designe les colonnes de [colonnesLocalesSeules]. Le passer plutot que de le
+/// deduire evite qu'un appelant oublie la troisieme famille d'exclusions.
 Map<String, Object?> contenuDe(
   List<String> colonnes,
   Map<String, Object?> ligne,
-  String colonneCle,
-) {
+  String colonneCle, {
+  required String table,
+}) {
+  final localesSeules = colonnesLocalesSeulesDe(table);
   final contenu = <String, Object?>{};
   for (final colonne in colonnes) {
     if (colonne == colonneCle) continue;
     if (colonnesDeService.contains(colonne)) continue;
+    if (localesSeules.contains(colonne)) continue;
     contenu[colonne] = ligne[colonne];
   }
   return contenu;
@@ -207,6 +254,7 @@ Future<List<Map<String, Object?>>> _lireEnfants(
   );
   final colonnes = await colonnesDe(db, enfant.nom);
   return [
-    for (final ligne in lignes) contenuDe(colonnes, ligne, enfant.colonneLien),
+    for (final ligne in lignes)
+      contenuDe(colonnes, ligne, enfant.colonneLien, table: enfant.nom),
   ];
 }

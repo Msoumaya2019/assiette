@@ -42,18 +42,28 @@ TESTS_ATTENDUS = 21
 EXCLUSIONS = (
     b"    if (colonne == colonneCle) continue;\n"
     b"    if (colonnesDeService.contains(colonne)) continue;\n"
+    b"    if (localesSeules.contains(colonne)) continue;\n"
     b"    contenu[colonne] = ligne[colonne];\n"
 )
 COLONNE_OUBLIEE = (
     b"    if (colonne == colonneCle) continue;\n"
     b"    if (colonnesDeService.contains(colonne)) continue;\n"
+    b"    if (localesSeules.contains(colonne)) continue;\n"
     b"    if (colonne == 'notes') continue;\n"
     b"    contenu[colonne] = ligne[colonne];\n"
 )
 
 SERVICE_EXCLU = b"    if (colonnesDeService.contains(colonne)) continue;\n"
 
+# L'exclusion des colonnes retenues sur l'appareil n'est **pas** falsifiee ici.
+# Le fichier de tests vise par ce banc les a retirees de ses deux listes, par
+# decision : sa couverture de cette exclusion-la est nulle, et une mutation qui
+# la retirerait ne ferait tomber aucun de ses tests. Elle est falsifiee par
+# `falsifier_colonnes_locales_dart.py`, contre le fichier qui l'eprouve.
+# Le retirer d'ici est donc une mesure, pas un oubli.
+
 LECTURE_DES_ENFANTS = (
+    b"    final enfant = table.enfant;\n"
     b"    if (enfant != null) {\n"
     b"      contenu[cleDesEnfants] = await _lireEnfants(\n"
     b"        db,\n"
@@ -64,9 +74,11 @@ LECTURE_DES_ENFANTS = (
 )
 
 LIEN_EXCLU = (
-    b"    for (final ligne in lignes) contenuDe(colonnes, ligne, enfant.colonneLien),\n"
+    b"      contenuDe(colonnes, ligne, enfant.colonneLien, table: enfant.nom),\n"
 )
-LIEN_DANS_LE_CONTENU = b"    for (final ligne in lignes) contenuDe(colonnes, ligne, ''),\n"
+LIEN_DANS_LE_CONTENU = (
+    b"      contenuDe(colonnes, ligne, '', table: enfant.nom),\n"
+)
 
 TABLE_DECLAREE = b"  TableSynchronisable(nom: 'mesures', colonneCle: 'id'),\n"
 
@@ -76,10 +88,10 @@ DATE_ABSENTE_TENUE_POUR_RECENTE = (
 )
 
 COMMENTAIRE = (
-    b"/// Le contenu d'une ligne : tout sauf la cle et les colonnes de service.\n"
+    b"/// Le contenu d'une ligne : tout sauf la cle, les colonnes de service, et les\n"
 )
 COMMENTAIRE_REFORMULE = (
-    b"/// Le contenu d'une ligne, prive de sa cle et des colonnes de service.\n"
+    b"/// Le contenu d'une ligne, prive de sa cle et de ses colonnes de service,\n"
 )
 
 # --- noms des tests qui doivent tomber -----------------------------------------

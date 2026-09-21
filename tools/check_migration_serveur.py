@@ -38,6 +38,13 @@ Ce qu'il tient
    normaux ; un `user_id` oublie ne l'est pas. Les deux sens sont declares.
 4. **Les politiques RLS sont rejouables** — chaque `create policy` a son
    `drop policy if exists` — **et le lecteur qui les compte n'est pas aveugle.**
+5. **Les colonnes qui restent sur l'appareil sont nommees une a une.** Une
+   colonne peut avoir une colonne serveur et ne pas devoir y aller : c'est le
+   cas de `meals.photo_path`, un **chemin absolu propre a l'appareil**. Sans
+   cette troisieme famille, deux defauts opposes passaient tous les deux : la
+   colonne etait transportee — et la photo d'un appareil ecrasait celle de
+   l'autre — ou bien elle etait retiree du transport sans que rien ne le dise,
+   et l'exclusion devenait indiscernable d'un oubli.
 
 Le troisieme point a une histoire, et elle justifie la forme du controle
 -----------------------------------------------------------------------
@@ -117,6 +124,7 @@ MIN_TABLES_DECLAREES = 5
 MIN_RENOMMAGES = 10
 MIN_TABLES_SERVEUR_SEULES = 5
 MIN_TABLES_ENTIEREMENT_SERVEUR = 1
+MIN_TABLES_LOCALES_SEULES = 1
 
 
 def _sans_commentaires_dart(texte: str) -> str:
@@ -162,7 +170,7 @@ def _paires_denombres(corps: str) -> dict[str, set[str]]:
 
 
 def lire_correspondance() -> tuple[
-    dict[str, str], dict[str, str], dict[str, set[str]], set[str]
+    dict[str, str], dict[str, str], dict[str, set[str]], set[str], dict[str, set[str]]
 ]:
     """Lit la correspondance declaree cote Dart, et refuse d'en lire trop peu."""
     try:
@@ -179,12 +187,16 @@ def lire_correspondance() -> tuple[
             _corps_declaration(texte, "tablesEntierementDistantes"),
         )
     )
+    locales_seules = _paires_denombres(
+        _corps_declaration(texte, "colonnesLocalesSeules")
+    )
 
     planchers = (
         ("tablesDistantes", len(tables), MIN_TABLES_DECLAREES),
         ("renommagesDistants", len(renommages), MIN_RENOMMAGES),
         ("colonnesServeurSeules", len(seules), MIN_TABLES_SERVEUR_SEULES),
         ("tablesEntierementDistantes", len(entieres), MIN_TABLES_ENTIEREMENT_SERVEUR),
+        ("colonnesLocalesSeules", len(locales_seules), MIN_TABLES_LOCALES_SEULES),
     )
     for nom, trouve, attendu in planchers:
         if trouve < attendu:
@@ -194,10 +206,16 @@ def lire_correspondance() -> tuple[
                 "plancher."
             )
 
-    return tables, renommages, seules, entieres
+    return tables, renommages, seules, entieres, locales_seules
 
 
-TABLES, RENOMMAGES, SERVEUR_SEUL, TABLES_ENTIEREMENT_SERVEUR = lire_correspondance()
+(
+    TABLES,
+    RENOMMAGES,
+    SERVEUR_SEUL,
+    TABLES_ENTIEREMENT_SERVEUR,
+    LOCALES_SEULES,
+) = lire_correspondance()
 
 # Ou va le contenu de la table locale `settings`.
 #
@@ -477,7 +495,9 @@ def controler_extraction(
 
 
 def controler_accord(
-    local: dict[str, set[str]], serveur: dict[str, set[str]]
+    local: dict[str, set[str]],
+    serveur: dict[str, set[str]],
+    locales_seules: dict[str, set[str]],
 ) -> list[str]:
     """Chaque colonne locale a une destination serveur, et les deux ensembles sont clos."""
     defauts: list[str] = []
@@ -500,12 +520,35 @@ def controler_accord(
             f"`tablesDistantes` declare la table serveur `{nom}`, absente des migrations"
         )
 
+    # --- Les colonnes retenues sur l'appareil designent-elles quelque chose ? ---
+    #
+    # Une exclusion nommee qui ne designe rien est pire qu'une exclusion absente :
+    # elle donne l'air d'une decision la ou il ne reste qu'un renommage oublie.
+    # Les deux sens sont donc verifies, comme pour les autres ensembles.
+    for nom_local in sorted(locales_seules):
+        if nom_local not in TABLES:
+            defauts.append(
+                f"`colonnesLocalesSeules` declare la table `{nom_local}`, absente "
+                "de `tablesDistantes`"
+            )
+        for colonne in sorted(
+            locales_seules[nom_local] - local.get(nom_local, set())
+        ):
+            defauts.append(
+                f"`colonnesLocalesSeules` declare `{nom_local}.{colonne}`, que le "
+                "schema local ne connait pas : l'exclusion ne designe rien"
+            )
+
     # --- Chaque colonne locale a-t-elle une colonne serveur ? ---
+    #
+    # Sauf celles qui restent sur l'appareil : elles n'ont pas a en avoir une,
+    # et c'est meme le cas de `photo_path`, qui en a une quand meme.
     for nom_local, nom_serveur in sorted(TABLES.items()):
         if nom_local not in local or nom_serveur not in serveur:
             continue
         colonnes_serveur = serveur[nom_serveur]
-        for colonne in sorted(local[nom_local]):
+        retenues = locales_seules.get(nom_local, set())
+        for colonne in sorted(local[nom_local] - retenues):
             cible = RENOMMAGES.get(f"{nom_local}.{colonne}", colonne)
             if cible not in colonnes_serveur:
                 defauts.append(
@@ -526,21 +569,41 @@ def controler_accord(
             )
             continue
         declarees = SERVEUR_SEUL[nom_serveur]
-        alimentees = {
+        transportees = {
             RENOMMAGES.get(f"{nom_local}.{colonne}", colonne)
             for nom_local, cible in TABLES.items()
             if cible == nom_serveur
             for colonne in local.get(nom_local, set())
+            if colonne not in locales_seules.get(nom_local, set())
         }
-        for colonne in sorted(colonnes - alimentees - declarees):
+        # Les colonnes retenues sur l'appareil ont bien une colonne serveur : elle
+        # n'est simplement alimentee par personne. Elle est donc comptee comme
+        # declaree, au meme titre qu'un `user_id` — mais pour une autre raison,
+        # et c'est cette raison qui justifie qu'on la nomme ici.
+        #
+        # Ce que ce controle ne peut pas dire, et il vaut mieux l'ecrire : une
+        # colonne retenue peut legitimement **n'avoir aucune** colonne serveur.
+        # Sa disparition cote serveur n'est donc pas un defaut, et le controle ne
+        # peut pas savoir qu'un homologue existait. C'est un jugement sur la
+        # nature de la valeur, pas un fait de structure — il appartient au
+        # fichier de tests Dart, et a lui seul.
+        retenues_serveur = {
+            RENOMMAGES.get(f"{nom_local}.{colonne}", colonne)
+            for nom_local, cible in TABLES.items()
+            if cible == nom_serveur
+            for colonne in locales_seules.get(nom_local, set())
+        }
+        for colonne in sorted(colonnes - transportees - retenues_serveur - declarees):
             defauts.append(
                 f"colonne serveur `{nom_serveur}.{colonne}` n'est alimentee par aucune "
                 "colonne locale, et n'est pas declaree dans SERVEUR_SEUL"
             )
-        for colonne in sorted(declarees - (colonnes - alimentees)):
+        for colonne in sorted(
+            declarees - (colonnes - transportees - retenues_serveur)
+        ):
             defauts.append(
                 f"SERVEUR_SEUL declare `{nom_serveur}.{colonne}`, qui est en fait "
-                "alimentee par le local (ou n'existe plus)"
+                "alimentee par le local, retenue sur l'appareil, ou n'existe plus"
             )
 
     return defauts
@@ -623,7 +686,7 @@ def main() -> int:
         bruts_suppressions,
         bruts_tables_local,
     )
-    defauts += controler_accord(local, serveur)
+    defauts += controler_accord(local, serveur, LOCALES_SEULES)
     defauts += controler_reglages(serveur)
     defauts += controler_politiques(politiques)
 
@@ -645,6 +708,15 @@ def main() -> int:
     print(
         f"  OK  correspondance lue dans {CORRESPONDANCE.name} : "
         f"{len(TABLES)} table(s), {len(RENOMMAGES)} renommage(s)"
+    )
+    retenues = sum(len(colonnes) for colonnes in LOCALES_SEULES.values())
+    print(
+        f"  OK  {retenues} colonne(s) retenue(s) sur l'appareil : "
+        + ", ".join(
+            f"{table}.{colonne}"
+            for table in sorted(LOCALES_SEULES)
+            for colonne in sorted(LOCALES_SEULES[table])
+        )
     )
     print(
         f"  OK  reglages : {len(SETTINGS_DECOMPOSE)} decompose(s), "

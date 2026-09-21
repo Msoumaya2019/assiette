@@ -62,6 +62,7 @@ ORDRE = [
     "falsifier_arbitrage_dart.py",
     "falsifier_synchronisation_dart.py",
     "falsifier_synchronisation_locale_dart.py",
+    "falsifier_colonnes_locales_dart.py",
     "falsifier_synchronisation_service_dart.py",
     "falsifier_correspondance_types_dart.py",
     "falsifier_dates_distantes_dart.py",
