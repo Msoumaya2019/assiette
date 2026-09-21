@@ -12,6 +12,13 @@ Il verifie aussi ce qu'il ne doit **pas** signaler, et — c'est le cas le plus
 important — il reproduit l'aveuglement historique du validateur de politiques,
 pour prouver que le comptage brut le rattrape.
 
+Depuis que la correspondance est declaree en Dart et **lue** par le controle,
+trois cas visent cette lecture : retirer un renommage, oublier une table
+entierement serveur, et rendre le lecteur aveugle. Les deux premiers etablissent
+que le controle depend vraiment de la declaration ; le troisieme, que le
+plancher attrape un lecteur casse au lieu de rendre un accord verifie sur du
+vide.
+
 Usage : python3 tools/bancs/falsifier_migration_serveur.py
 """
 
@@ -29,6 +36,9 @@ MIGRATION_2 = "backend/supabase/migrations/0002_portions_et_suivi.sql"
 MIGRATION_1 = "backend/supabase/migrations/0001_init.sql"
 BASE_LOCALE = "app/lib/data/local/app_database.dart"
 PROVIDERS = "app/lib/state/providers.dart"
+# La correspondance que le controle **lit** : elle est declaree une seule fois,
+# la ou le transport la lira.
+CORRESPONDANCE = "app/lib/data/distant/correspondance_distant.dart"
 
 # ---------------------------------------------------------------------------
 # Ancres de mutation
@@ -82,6 +92,30 @@ MOTIF_TABLES_LOCALES = b'r"CREATE TABLE\\s+(\\w+)\\s*\\("'
 
 # Le retrait des commentaires SQL, dans sa forme juste.
 RETRAIT_COMMENTAIRES = b'    return re.sub(r"--[^\\n]*", "", texte)'
+
+# --- ancres visees dans la declaration, cote Dart --------------------------
+
+# Un renommage retire de la declaration : la colonne locale `poids_kg` n'a plus
+# de destination, et `weight_kg` n'est plus alimentee par personne. Le controle
+# ne peut le voir que s'il **lit vraiment** la declaration.
+RENOMMAGE_POIDS = b"  'pesees.poids_kg': 'weight_kg',\n"
+
+# Une table entierement serveur oubliee : `profiles` n'est alors ni alimentee
+# par le local, ni declaree comme volontairement sans equivalent.
+TABLES_ENTIEREMENT_SERVEUR = (
+    b"const Set<String> tablesEntierementDistantes = {'profiles', 'api_usage'};"
+)
+TABLES_ENTIEREMENT_SERVEUR_SANS_PROFILS = (
+    b"const Set<String> tablesEntierementDistantes = {'api_usage'};"
+)
+
+# Le lecteur de la declaration, rendu aveugle : il ne trouve plus aucune entree.
+# Le plancher doit alors tomber — sinon un lecteur casse rendrait un accord
+# verifie sur du vide.
+LECTEUR_DE_LA_DECLARATION = b"""    return dict(re.findall(r"'([^']+)'\\s*:\\s*'([^']*)'", corps))"""
+LECTEUR_DE_LA_DECLARATION_AVEUGLE = (
+    b"""    return dict(re.findall(r"'ZZ([^']+)'\\s*:\\s*'([^']*)'", corps))"""
+)
 
 
 # Les zones que ce banc touche. `empreinte_arbre` sur la racine entiere
@@ -209,6 +243,32 @@ def principal() -> int:
             COLONNE_POIDS, b"\n" + COLONNE_POIDS
         )
 
+    # --- 7. La declaration elle-meme, cote Dart ---------------------------
+    #
+    # Le controle ne tient plus sa propre copie de la correspondance : il la lit
+    # dans `correspondance_distant.dart`. Ces deux cas etablissent que cette
+    # lecture porte quelque chose — sans eux, un lecteur qui rendrait une
+    # correspondance vide, ou une autre, passerait pour juste.
+
+    def renommage_retire_de_la_declaration() -> None:
+        banc.suivre(CORRESPONDANCE).muter(RENOMMAGE_POIDS, b"")
+
+    def table_entierement_serveur_oubliee() -> None:
+        banc.suivre(CORRESPONDANCE).muter(
+            TABLES_ENTIEREMENT_SERVEUR, TABLES_ENTIEREMENT_SERVEUR_SANS_PROFILS
+        )
+
+    def lecteur_de_la_declaration_aveugle() -> None:
+        """Le lecteur ne trouve plus aucune entree : le plancher doit tomber.
+
+        Sans ce cas, rien ne prouve que le plancher sert a quelque chose : un
+        lecteur casse rendrait zero entree, l'accord ne verifierait plus rien, et
+        le verdict serait vert en n'ayant rien mesure.
+        """
+        banc.suivre("tools/check_migration_serveur.py").muter(
+            LECTEUR_DE_LA_DECLARATION, LECTEUR_DE_LA_DECLARATION_AVEUGLE
+        )
+
     # --- Enregistrement ----------------------------------------------------
 
     banc.cas(
@@ -242,6 +302,21 @@ def principal() -> int:
         "lecteur de tables aveugle", "le lecteur en a manque", lecteur_de_tables_aveugle
     )
     banc.cas("reglage sans decision", "nouveau_reglage", reglage_sans_decision)
+    banc.cas(
+        "renommage retire de la declaration",
+        "pesees.poids_kg",
+        renommage_retire_de_la_declaration,
+    )
+    banc.cas(
+        "table entierement serveur oubliee",
+        "table serveur `profiles`",
+        table_entierement_serveur_oubliee,
+    )
+    banc.cas(
+        "lecteur de la declaration aveugle",
+        "attendues au moins",
+        lecteur_de_la_declaration_aveugle,
+    )
     banc.cas(
         "commentaire tenu pour du code",
         "meal_items.portion_label",

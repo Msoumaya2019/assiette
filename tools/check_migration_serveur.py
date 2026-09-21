@@ -24,10 +24,12 @@ Ce qu'il tient
 --------------
 
 1. **Chaque colonne locale a une destination serveur.** La correspondance est
-   declaree ci-dessous — c'est elle qui porte les renommages (`poids_kg` vers
+   declaree dans `app/lib/data/distant/correspondance_distant.dart`, ou le
+   transport la lira — c'est elle qui porte les renommages (`poids_kg` vers
    `weight_kg`, `payload_json` vers `payload`) et les changements de table
-   (`templates` vers `meal_templates`). Une colonne sans destination est un
-   defaut nomme, pas une devinette.
+   (`templates` vers `meal_templates`). Ce fichier la **lit**, il ne la
+   recopie pas : deux copies de la meme verite ne se relisent jamais. Une
+   colonne sans destination est un defaut nomme, pas une devinette.
 2. **L'ensemble des tables locales est clos.** Ajouter une table au schema
    local fait echouer ce controle tant qu'elle n'a pas ete prise en compte. Un
    accord verifie entre A et B ne dit rien le jour ou C apparait.
@@ -80,94 +82,122 @@ BASE_LOCALE = RACINE / "app" / "lib" / "data" / "local" / "app_database.dart"
 SOURCE_DART = RACINE / "app" / "lib"
 
 # ---------------------------------------------------------------------------
-# La correspondance declaree
+# La correspondance, lue a la source
 #
-# Ce qui suit est la seule partie ecrite a la main du fichier, et c'est
-# volontaire : un accord se declare, sinon il n'y a rien a tenir. Chaque entree
-# correspond a une decision prise en ecrivant `0002_portions_et_suivi.sql` ou
-# `0003_pierres_tombales.sql`.
+# Elle est declaree **une seule fois**, en Dart, dans
+# `app/lib/data/distant/correspondance_distant.dart` — c'est la que le transport
+# la lira. La recopier ici creerait deux verites que rien ne relierait, et c'est
+# exactement le defaut que ce controle existe pour fermer.
+#
+# Ce fichier la **lit**, avec un lecteur strict : une declaration introuvable,
+# ou un nombre d'entrees sous un plancher, fait echouer le controle au lieu de
+# rendre un vert qui ne prouverait rien. Meme discipline que le comptage brut
+# des politiques, et pour la meme raison : le 21 septembre, un lecteur trop
+# exigeant a rendu « 0 politique » sur un fichier qui en portait six, et le
+# verdict etait vert en n'ayant rien mesure.
 # ---------------------------------------------------------------------------
 
-# Table locale -> table serveur.
-TABLES = {
-    "meals": "meals",
-    "meal_items": "meal_items",
-    "templates": "meal_templates",
-    "favorites": "favorites",
-    "portions": "portions",
-    "pesees": "weight_entries",
-    "mesures": "body_measurements",
-    # `settings` n'a pas de table serveur : voir SETTINGS_DECOMPOSE.
-}
+CORRESPONDANCE = (
+    RACINE / "app" / "lib" / "data" / "distant" / "correspondance_distant.dart"
+)
 
-# Colonnes renommees en passant du local au serveur.
-# (table locale, colonne locale) -> colonne serveur
-RENOMMAGES = {
-    # L'identifiant local devient `client_id` : le serveur genere son propre
-    # `uuid` et garde l'identifiant du telephone pour l'idempotence.
-    ("meals", "id"): "client_id",
-    ("meal_items", "id"): "client_id",
-    ("templates", "id"): "client_id",
-    ("favorites", "id"): "client_id",
-    ("pesees", "id"): "client_id",
-    ("mesures", "id"): "client_id",
-    # `portion` porte l'identifiant de la taille (« small », « medium »). Il est
-    # renomme parce que, voisin de `portion_label` et `portion_grams`, il se
-    # lirait comme l'objet portion entiere.
-    ("meal_items", "portion"): "portion_size",
-    # Les listes et charges utiles locales sont du JSON texte ; le serveur a une
-    # colonne `jsonb` du meme contenu.
-    ("templates", "items_json"): "items",
-    ("favorites", "payload_json"): "payload",
-    # Suivi du poids : noms anglais cote serveur, comme le reste de `0001`.
-    ("pesees", "mesure_le"): "measured_at",
-    ("pesees", "poids_kg"): "weight_kg",
-    ("mesures", "mesure_le"): "measured_at",
-    ("mesures", "type"): "kind",
-    ("mesures", "valeur_cm"): "value_cm",
-}
+# Planchers de lecture, avec une **marge volontaire**.
+#
+# Leur role est d'attraper un lecteur qui ne trouve presque rien — pas de se
+# substituer au controle d'accord. Un plancher pose a la valeur exacte (14
+# renommages, 7 tables) fait exactement l'inverse : retirer **une** entree de la
+# declaration declenche le plancher, qui sort avant que l'accord ne soit
+# verifie. Le banc l'a montre — deux cas « non detecte » alors que la faute
+# etait bien la, mais signalee par la mauvaise porte, avec un message qui ne
+# nommait pas la colonne perdue.
+#
+# La marge est donc ce qui rend les deux garde-fous complementaires : le
+# plancher voit l'aveuglement, l'accord voit l'oubli d'une entree.
+MIN_TABLES_DECLAREES = 5
+MIN_RENOMMAGES = 10
+MIN_TABLES_SERVEUR_SEULES = 5
+MIN_TABLES_ENTIEREMENT_SERVEUR = 1
 
-# Colonnes serveur sans equivalent local, **declarees une a une**.
-#
-# Elles sont de trois sortes, et les nommer evite qu'une quatrieme sorte
-# s'installe sans qu'on la voie :
-#   - `id` et `user_id` : ce que le serveur ajoute a toute table ;
-#   - `client_id` est deja compte comme la destination de l'`id` local ;
-#   - les `total_*` de `meals` : une denormalisation pour accelerer le tableau
-#     de bord, recalculee depuis les lignes de `meal_items` ;
-#   - `created_at`/`updated_at` sur `meal_items` : le local n'horodate pas les
-#     lignes d'un repas, seul le repas l'est.
-#
-# `meal_templates.deleted_at` et `favorites.deleted_at` etaient declares ici
-# jusqu'au 21 septembre : le local supprimait ces deux tables definitivement.
-# La version 3 du schema local leur a donne des pierres tombales, donc ces deux
-# colonnes sont desormais **alimentees** et n'ont plus rien a faire dans cette
-# liste. Le controle l'a signale de lui-meme, dans les deux sens a la fois — les
-# colonnes locales `portions.deleted_at` et `favorites.updated_at` sans
-# destination, et ces deux declarations devenues fausses.
-SERVEUR_SEUL = {
-    "meals": {
-        "id",
-        "user_id",
-        "total_kcal",
-        "total_carbs_g",
-        "total_sugars_g",
-        "total_protein_g",
-        "total_fat_g",
-        "total_fiber_g",
-        "total_salt_g",
-    },
-    "meal_items": {"id", "user_id", "created_at", "updated_at"},
-    "meal_templates": {"id", "user_id"},
-    "favorites": {"id", "user_id"},
-    "portions": {"user_id"},
-    "weight_entries": {"id", "user_id"},
-    "body_measurements": {"id", "user_id"},
-    # Tables entierement serveur : le compte, le quota d'appels, et le profil
-    # qui decompose les reglages locaux.
-    "profiles": None,
-    "api_usage": None,
-}
+
+def _sans_commentaires_dart(texte: str) -> str:
+    """Retire les commentaires `//` avant toute lecture.
+
+    Sans cela, une apostrophe de prose — « l'identifiant du telephone » — se
+    lirait comme une chaine, et le lecteur pourrait apparier deux morceaux de
+    commentaires en croyant lire une entree. Aucun `//` de ce fichier ne figure
+    dans une chaine : le retrait est donc sans perte.
+    """
+    return re.sub(r"//[^\n]*", "", texte)
+
+
+def _corps_declaration(texte: str, nom: str) -> str:
+    """Le corps d'une declaration `const ... nom = { ... };` de niveau racine.
+
+    Le motif accepte les deux formes que `dart format` produit : une accolade
+    fermante seule sur sa ligne, pour une table ou un ensemble long, et une
+    declaration tenant sur une ligne, pour un ensemble court. Aucun corps ne
+    contient `};` : les sous-ensembles se terminent par `},`.
+    """
+    motif = re.compile(rf"^const\s+[^\n=]*\b{nom}\s*=\s*\{{(.*?)\}};", re.S | re.M)
+    trouve = motif.search(texte)
+    if trouve is None:
+        raise SystemExit(
+            f"declaration `{nom}` introuvable dans {CORRESPONDANCE} : "
+            "le controle ne peut rien verifier."
+        )
+    return trouve.group(1)
+
+
+def _paires_de_textes(corps: str) -> dict[str, str]:
+    """`'cle': 'valeur',` -> dictionnaire."""
+    return dict(re.findall(r"'([^']+)'\s*:\s*'([^']*)'", corps))
+
+
+def _paires_denombres(corps: str) -> dict[str, set[str]]:
+    """`'cle': {'a', 'b'},` -> dictionnaire d'ensembles."""
+    return {
+        cle: set(re.findall(r"'([^']+)'", contenu))
+        for cle, contenu in re.findall(r"'([^']+)'\s*:\s*\{([^}]*)\}", corps, re.S)
+    }
+
+
+def lire_correspondance() -> tuple[
+    dict[str, str], dict[str, str], dict[str, set[str]], set[str]
+]:
+    """Lit la correspondance declaree cote Dart, et refuse d'en lire trop peu."""
+    try:
+        texte = _sans_commentaires_dart(CORRESPONDANCE.read_text(encoding="utf-8"))
+    except OSError as erreur:
+        raise SystemExit(f"correspondance illisible : {erreur}") from erreur
+
+    tables = _paires_de_textes(_corps_declaration(texte, "tablesDistantes"))
+    renommages = _paires_de_textes(_corps_declaration(texte, "renommagesDistants"))
+    seules = _paires_denombres(_corps_declaration(texte, "colonnesServeurSeules"))
+    entieres = set(
+        re.findall(
+            r"'([^']+)'",
+            _corps_declaration(texte, "tablesEntierementDistantes"),
+        )
+    )
+
+    planchers = (
+        ("tablesDistantes", len(tables), MIN_TABLES_DECLAREES),
+        ("renommagesDistants", len(renommages), MIN_RENOMMAGES),
+        ("colonnesServeurSeules", len(seules), MIN_TABLES_SERVEUR_SEULES),
+        ("tablesEntierementDistantes", len(entieres), MIN_TABLES_ENTIEREMENT_SERVEUR),
+    )
+    for nom, trouve, attendu in planchers:
+        if trouve < attendu:
+            raise SystemExit(
+                f"{nom} : {trouve} entree(s) lue(s), {attendu} attendues au moins. "
+                "Le lecteur a perdu un morceau : corriger le lecteur, pas le "
+                "plancher."
+            )
+
+    return tables, renommages, seules, entieres
+
+
+TABLES, RENOMMAGES, SERVEUR_SEUL, TABLES_ENTIEREMENT_SERVEUR = lire_correspondance()
 
 # Ou va le contenu de la table locale `settings`.
 #
@@ -453,18 +483,21 @@ def controler_accord(
     defauts: list[str] = []
 
     # --- Les tables locales sont-elles toutes declarees ? ---
+    #
+    # La declaration vit dans `correspondance_distant.dart` : les messages la
+    # nomment, pour que le lecteur sache ou corriger.
     for nom in sorted(set(local) - set(TABLES) - {"settings"}):
         defauts.append(
             f"table locale `{nom}` sans destination declaree : "
-            "l'ajouter a TABLES, ou expliquer son absence"
+            "l'ajouter a `tablesDistantes`, ou expliquer son absence"
         )
     for nom in sorted(set(TABLES) - set(local)):
         defauts.append(
-            f"TABLES declare `{nom}`, que le schema local ne connait pas"
+            f"`tablesDistantes` declare `{nom}`, que le schema local ne connait pas"
         )
     for nom in sorted(set(TABLES.values()) - set(serveur)):
         defauts.append(
-            f"TABLES declare la table serveur `{nom}`, absente des migrations"
+            f"`tablesDistantes` declare la table serveur `{nom}`, absente des migrations"
         )
 
     # --- Chaque colonne locale a-t-elle une colonne serveur ? ---
@@ -473,7 +506,7 @@ def controler_accord(
             continue
         colonnes_serveur = serveur[nom_serveur]
         for colonne in sorted(local[nom_local]):
-            cible = RENOMMAGES.get((nom_local, colonne), colonne)
+            cible = RENOMMAGES.get(f"{nom_local}.{colonne}", colonne)
             if cible not in colonnes_serveur:
                 defauts.append(
                     f"colonne locale `{nom_local}.{colonne}` sans destination : "
@@ -483,17 +516,18 @@ def controler_accord(
 
     # --- Le serveur a-t-il des colonnes qu'aucun local n'alimente ? ---
     for nom_serveur, colonnes in sorted(serveur.items()):
+        if nom_serveur in TABLES_ENTIEREMENT_SERVEUR:
+            continue
         if nom_serveur not in SERVEUR_SEUL:
             defauts.append(
                 f"table serveur `{nom_serveur}` absente de SERVEUR_SEUL : "
-                "declarer ses colonnes sans equivalent local, meme si l'ensemble est vide"
+                "declarer ses colonnes sans equivalent local, meme si l'ensemble "
+                "est vide — ou la nommer dans `tablesEntierementDistantes`"
             )
             continue
         declarees = SERVEUR_SEUL[nom_serveur]
-        if declarees is None:
-            continue
         alimentees = {
-            RENOMMAGES.get((nom_local, colonne), colonne)
+            RENOMMAGES.get(f"{nom_local}.{colonne}", colonne)
             for nom_local, cible in TABLES.items()
             if cible == nom_serveur
             for colonne in local.get(nom_local, set())
@@ -607,6 +641,10 @@ def main() -> int:
     print(f"  OK  schema serveur : {len(serveur)} tables, {len(politiques)} politiques")
     print(
         "  OK  chaque colonne locale a une destination, et les deux ensembles sont clos"
+    )
+    print(
+        f"  OK  correspondance lue dans {CORRESPONDANCE.name} : "
+        f"{len(TABLES)} table(s), {len(RENOMMAGES)} renommage(s)"
     )
     print(
         f"  OK  reglages : {len(SETTINGS_DECOMPOSE)} decompose(s), "

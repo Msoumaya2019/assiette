@@ -159,6 +159,7 @@ app/                        Application Flutter (Android + iOS)
     data/
       vision/               Fournisseurs d'analyse d'image + prompts
       local/                Base SQLite
+      distant/              Correspondance des noms entre schéma local et serveur
       ciqual_repository.dart, openfoodfacts_repository.dart
     services/               Calcul nutritionnel, images, trousseau, notifications, sauvegarde, synchronisation
     state/                  État applicatif (Riverpod)
@@ -332,7 +333,10 @@ Avant chaque compilation, la CI exécute sept contrôles :
   binaire désignent bien ce dépôt.
 - `tools/check_migration_serveur.py` — tient l'accord entre le schéma SQLite de
   l'appareil et le schéma Supabase : chaque colonne locale doit avoir une
-  destination serveur, et les deux ensembles sont clos.
+  destination serveur, et les deux ensembles sont clos. La correspondance des
+  noms n'est pas recopiée ici : il la **lit** dans
+  `app/lib/data/distant/correspondance_distant.dart`, où le transport la lira
+  aussi. Une seule déclaration, un seul endroit à corriger.
 - `tools/verifier_version_build.py` — éprouve la logique qui décide de la version
   publiée, laquelle ne tourne sinon que sur un tag.
 
@@ -532,6 +536,12 @@ Couverture actuelle :
   au milieu de l'aller-retour — et signalé, jamais appliqué aux dates. Le
   transport réel vers Supabase reste à écrire : le remplacer ne changera aucun
   de ces tests ;
+- **la correspondance des noms** entre schéma local et schéma serveur, déclarée
+  **une seule fois** (`app/lib/data/distant/correspondance_distant.dart`) et lue
+  par le contrôle qui tient l'accord des deux schémas. Les tests tiennent ce qui
+  se vérifie sans lire de fichier : le nom serveur d'une colonne renommée ou
+  non, la clé qui reconnaît une ligne d'un appareil à l'autre, et le fait qu'une
+  clé ne peut pas être une colonne que le serveur remplit lui-même ;
 - **l'interface, pilotée comme un utilisateur la pilote** — l'éditeur de quantité
   avec une portion (ce qui s'affiche, le pas des boutons, et le fait que ce qui
   est **transmis** reste des grammes), l'écran de suivi du poids de bout en bout

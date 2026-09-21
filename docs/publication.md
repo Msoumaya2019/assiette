@@ -11,10 +11,10 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Élément | État |
 | --- | --- |
 | Code source complet, analysé sans avertissement | prêt |
-| 430 tests de l'application, tous verts | prêt |
+| 438 tests de l'application, tous verts | prêt |
 | 18 tests du serveur, tous verts | prêt |
 | Dépôt public | https://github.com/Msoumaya2019/assiette |
-| Flux `ci.yml` — analyse, 430 tests, 9 contrôles | **vert** |
+| Flux `ci.yml` — analyse, 438 tests, 9 contrôles | **vert** |
 | Flux `ci.yml` — migrations Supabase exécutées sur un vrai PostgreSQL | **vert** (35 épreuves) |
 | Flux Android — APK et AAB | **vert**, artefacts signés et vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
@@ -676,6 +676,35 @@ brut, le contrôle échoue. C'est le comptage brut qui l'emporte. Le banc reprod
 l'aveuglement historique, motif fautif remis en place, et exige que le contrôle
 tombe malgré tout.
 
+### La correspondance des noms, déclarée une seule fois
+
+Les deux schémas ne se ressemblent pas : `templates` s'appelle `meal_templates`
+côté serveur, `pesees` s'appelle `weight_entries`, `mesures` s'appelle
+`body_measurements` ; `poids_kg` devient `weight_kg`, `payload_json` devient
+`payload`, `mesure_le` devient `measured_at` ; et l'identifiant du téléphone
+devient `client_id`, le serveur gardant le sien. Rien de tout cela ne se déduit :
+il faut le déclarer.
+
+Cette déclaration vivait dans `tools/check_migration_serveur.py`, c'est-à-dire
+dans le contrôle — alors que son lecteur naturel est le **transport**, qui doit
+traduire dans les deux sens. Deux copies auraient suivi deux chemins. Elle est
+donc désormais déclarée en Dart, dans
+`app/lib/data/distant/correspondance_distant.dart`, et le contrôle la **lit**.
+Un seul endroit porte la vérité ; le contrôle tient son accord avec les
+migrations, dans les deux sens.
+
+Le lecteur ajouté a sa propre faiblesse, et elle est instructive. Il refuse de
+conclure sous un **plancher** — même discipline que le comptage brut des
+politiques : un lecteur qui ne trouve rien rend un vert qui ne prouve rien. Mais
+un plancher posé **à la valeur exacte** fait pire que ne rien faire : retirer
+*une* entrée de la déclaration le déclenchait, et il sortait avant que le
+contrôle d'accord ne voie la colonne perdue. Deux cas du banc sont d'abord
+passés « non détectés » pour cette seule raison. Le plancher a donc reçu une
+**marge** : assez large pour qu'une entrée retirée atteigne le contrôle, assez
+étroite pour qu'un lecteur cassé le fasse tomber. Un garde-fou qui se substitue
+au contrôle qu'il protège n'est pas un garde-fou de plus, c'est un garde-fou de
+moins.
+
 ### Une migration neuve ne peut plus passer inaperçue
 
 L'épreuve PGlite listait ses migrations **en dur**, dans deux boucles. Une
@@ -943,14 +972,16 @@ python3 tools/bancs/falsifier_synchronisation_locale_dart.py  # 7 cas — lectur
 python3 tools/bancs/falsifier_synchronisation_service_dart.py  # 7 cas — convergence de deux appareils (Flutter)
 python3 tools/bancs/falsifier_version_build.py         # 6 cas — version publiée
 python3 tools/bancs/falsifier_check_workflows.py       # 19 cas — validation des flux
-python3 tools/bancs/falsifier_migration_serveur.py     # 12 cas — accord des deux schémas
+python3 tools/bancs/falsifier_migration_serveur.py     # 15 cas — accord des deux schémas
 python3 tools/bancs/falsifier_epreuve_migrations.py    # 6 cas — épreuve PostgreSQL
 ```
 
 `falsifier_migration_serveur.py` couvre les deux côtés et les deux sens. Il
 mutationne le schéma local (colonne ou table ajoutée sans destination), le schéma
-serveur (colonne retirée, table renommée, colonne non déclarée), et les politiques
-(une politique privée de son `drop`). Deux de ses cas méritent d'être cités :
+serveur (colonne retirée, table renommée, colonne non déclarée), les politiques
+(une politique privée de son `drop`), et — depuis que la correspondance est
+déclarée en Dart et **lue** par le contrôle — la déclaration elle-même. Trois de
+ses cas méritent d'être cités :
 
 - **l'aveuglement historique, reproduit.** Le motif fautif qui rendait le
   validateur aveugle aux six politiques de `0001` est remis en place, et le banc
@@ -959,7 +990,17 @@ serveur (colonne retirée, table renommée, colonne non déclarée), et les poli
 - **le retrait des commentaires, éprouvé dans les deux sens.** Colonne retirée avec
   le commentaire qui la nomme : le contrôle tombe. Le même état, retrait
   désactivé : il reste **vert sur un fichier fautif**, et c'est ce second temps qui
-  établit que ce retrait porte quelque chose.
+  établit que ce retrait porte quelque chose ;
+- **le plancher de lecture, et ce qu'il ne doit pas faire.** Trois cas visent la
+  déclaration : retirer un renommage, oublier une table entièrement serveur, et
+  rendre le lecteur aveugle. Les deux premiers ont d'abord été **non détectés** —
+  non parce que la faute échappait au contrôle, mais parce que les planchers de
+  lecture, posés **à la valeur exacte** (14 renommages, 7 tables), se déclenchaient
+  avant lui et sortaient avec un message qui ne nommait pas la colonne perdue. Un
+  plancher exact se substitue au contrôle au lieu de le compléter : il a fallu lui
+  donner une **marge**, assez large pour qu'une entrée retirée atteigne le contrôle
+  d'accord, assez étroite pour qu'un lecteur cassé le fasse tomber. Le troisième
+  cas est ce qui établit que le plancher sert encore à quelque chose.
 
 `falsifier_epreuve_migrations.py` éprouve l'épreuve PGlite. C'est le premier banc
 qui n'éprouve pas un script Python : le harnais a reçu un paramètre d'interpréteur,
