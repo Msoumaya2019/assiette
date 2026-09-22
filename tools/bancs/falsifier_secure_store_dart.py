@@ -36,6 +36,15 @@ un champ **absent** et un champ de **mauvais type**, qui sont deux chemins
 distincts — et ne rejoue pas quatre fois la meme faute pour le plaisir de
 compter.
 
+L'adresse du compte, et pourquoi elle se mesure ici
+---------------------------------------------------
+`Session` porte desormais l'adresse du compte, et deux fautes la menacent dans
+ce fichier precisement : ne plus l'**ecrire** dans le trousseau — elle
+disparaitrait au redemarrage, et l'ecran ne saurait plus de quel compte il
+s'agit, au pire moment pour le comprendre —, et la **refuser** quand son type
+est inattendu alors qu'elle est facultative, ce qui emporterait une session par
+ailleurs intacte pour une simple etiquette.
+
 Ce qu'il ne peut pas verifier
 -----------------------------
 Que le vrai trousseau — Keychain sur iOS, Keystore sur Android — se comporte
@@ -61,7 +70,7 @@ TESTS = "test/services/secure_store_test.dart"
 
 # A mettre a jour en meme temps que le fichier de tests, jamais pour faire
 # passer le banc.
-TESTS_ATTENDUS = 14
+TESTS_ATTENDUS = 15
 
 # --- ancres : au niveau octet, telles que `dart format` les ecrit ---
 
@@ -125,6 +134,7 @@ CHAMPS_EXIGES = (
     b"      jetonRafraichissement: rafraichissement,\n"
     b"      expireLe: expireLe,\n"
     b"      utilisateur: utilisateur,\n"
+    b"      adresse: adresseBrute is String ? adresseBrute : null,\n"
     b"    );\n"
 )
 CHAMPS_SECOURUS = (
@@ -143,8 +153,29 @@ CHAMPS_SECOURUS = (
     b"      jetonRafraichissement: rafraichissementSain,\n"
     b"      expireLe: echeanceSaine,\n"
     b"      utilisateur: utilisateurSain,\n"
+    b"      adresse: adresseBrute is String ? adresseBrute : null,\n"
     b"    );\n"
 )
+
+# 7. L'adresse du compte, ecrite puis relue.
+#
+# Le titre du test de relecture dit « a l'identique » : il porte donc sur
+# **tous** les champs. Sans cette ancre, retirer l'adresse de l'ecriture ne
+# ferait tomber aucun test — la session resterait valide, et l'ecran perdrait
+# seulement de savoir de quel compte il s'agit, apres un redemarrage.
+VERS_JSON_COMPLET = (
+    b"    'utilisateur': utilisateur,\n"
+    b"    'adresse': adresse,\n"
+    b"  };\n"
+)
+VERS_JSON_SANS_ADRESSE = (
+    b"    'utilisateur': utilisateur,\n"
+    b"  };\n"
+)
+
+# 8. L'adresse facultative : un type inattendu la rend absente, sans plus.
+ADRESSE_DEGRADEE = b"      adresse: adresseBrute is String ? adresseBrute : null,\n"
+ADRESSE_EXIGEE = b"      adresse: adresseBrute as String,\n"
 
 # --- temoin negatif : une reformulation legitime ---
 
@@ -172,6 +203,7 @@ T_WIPE = "wipe efface aussi"
 T_ILLISIBLE = "pas du JSON se lit"
 T_SANS_RAFRAICHISSEMENT = "sans jeton de rafraichissement est refusee"
 T_ACCES_VIDE = "est vide est refusee"
+T_ADRESSE_INATTENDUE = "type inattendu ne fait pas tomber"
 
 
 def principal() -> int:
@@ -268,6 +300,20 @@ def principal() -> int:
         CHAMPS_SECOURUS,
     )
 
+    # --- l'adresse du compte ---
+    cas_session(
+        "l'adresse n'est plus ecrite dans le trousseau",
+        T_RELECTURE,
+        VERS_JSON_COMPLET,
+        VERS_JSON_SANS_ADRESSE,
+    )
+    cas_session(
+        "une adresse d'un type inattendu fait tomber la session",
+        T_ADRESSE_INATTENDUE,
+        ADRESSE_DEGRADEE,
+        ADRESSE_EXIGEE,
+    )
+
     # --- temoin negatif ---
     banc.cas(
         "commentaire reformule",
@@ -296,7 +342,7 @@ def principal() -> int:
         return code
 
     print(
-        "vert — le trousseau tombe sur chacune de ses huit fautes, et pas sur une "
+        "vert — le trousseau tombe sur chacune de ses dix fautes, et pas sur une "
         "reformulation."
     )
     return 0

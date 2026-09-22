@@ -11,10 +11,10 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Élément | État |
 | --- | --- |
 | Code source complet, analysé sans avertissement | prêt |
-| 538 tests de l'application, tous verts | prêt |
+| 540 tests de l'application, tous verts | prêt |
 | 18 tests du serveur, tous verts | prêt |
 | Dépôt public | https://github.com/Msoumaya2019/assiette |
-| Flux `ci.yml` — analyse, 538 tests, 9 contrôles | **vert** |
+| Flux `ci.yml` — analyse, 540 tests, 9 contrôles | **vert** |
 | Flux `ci.yml` — migrations Supabase exécutées sur un vrai PostgreSQL | **vert** (35 épreuves) |
 | Flux Android — APK et AAB | **vert**, artefacts signés et vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
@@ -986,7 +986,17 @@ quelqu'un qui **est** en train de se connecter vers un écran où il est déjà.
 Le même `401` est d'ailleurs lu différemment selon l'opération : sur un rafraîchissement il dit
 exactement quoi faire, sur une connexion il ne dit rien de tel. C'est un cas du banc, et il tombe.
 
-Le banc fait tomber **21 fautes** et laisse passer une reformulation de commentaire. Un cas y a été
+La session porte aussi **l'adresse du compte** — et ce point a d'abord été écrit dans l'autre sens.
+Le raisonnement d'alors était : « elle n'est pas nécessaire à la synchronisation ». C'était vrai, et
+c'était répondre à côté : la question n'est pas ce dont la synchronisation a besoin, mais ce qu'un
+écran doit pouvoir dire. Une section « Compte » qui ne saurait pas *de quel compte* il s'agit ne
+servirait à rien, et le seul autre identifiant disponible est un `uuid`, qui ne dit rien à personne.
+La spécification ne classe pas `email` parmi les champs obligatoires de `user` : le champ est donc
+**facultatif**, et une adresse absente — ou vide — se lit comme une absence. Refuser la session
+entière pour une étiquette manquante priverait l'utilisateur de la synchronisation sans qu'il puisse
+rien y faire.
+
+Le banc fait tomber **23 fautes** et laisse passer une reformulation de commentaire. Un cas y a été
 ajouté après coup : la rupture de connexion (`ClientException`) n'était couverte par aucun test,
 donc la branche qui la traduit pouvait disparaître sans que rien ne tombe — c'est exactement ce que
 le banc vérifie maintenant.
@@ -1022,7 +1032,14 @@ résultat était *identique* avec et sans la règle, donc aucun test ne pouvait 
 d'un seul geste. Ce n'est pas une coquetterie : une branche qu'aucune mesure ne sépare est une
 branche qu'on relira sans pouvoir savoir si elle sert encore, et qui fait croire à une protection.
 
-Le banc du trousseau fait tomber **8 fautes** et laisse passer une reformulation de commentaire. Ce
+L'adresse du compte est rangée **avec** les jetons, dans le même trousseau — le même endroit protégé,
+et jamais la base locale. Le test de relecture s'appelle « une session rangée se relit à
+l'identique » : il porte donc sur *tous* les champs, et l'adresse y a été ajoutée le jour où elle a
+existé. Sans cette assertion, retirer l'adresse de l'écriture n'aurait fait tomber aucun test : la
+session serait restée valide, et l'écran aurait seulement cessé de savoir de quel compte il s'agit —
+après un redémarrage, c'est-à-dire au pire moment pour le comprendre. Un cas du banc mesure cela.
+
+Le banc du trousseau fait tomber **10 fautes** et laisse passer une reformulation de commentaire. Ce
 qu'il **ne peut pas** établir : que le vrai trousseau — Keychain, Keystore — se comporte comme le
 faux stockage en mémoire des tests. Cela demande un appareil, et cela reste à faire.
 
@@ -1099,8 +1116,8 @@ python3 tools/bancs/falsifier_correspondance_types_dart.py     # 10 cas — type
 python3 tools/bancs/falsifier_dates_distantes_dart.py          # 7 cas — conversion des horodatages (Flutter)
 python3 tools/bancs/falsifier_colonnes_locales_dart.py         # 7 cas — colonnes propres à l'appareil (Flutter)
 python3 tools/bancs/falsifier_transport_supabase_dart.py       # 22 cas — le transport réel, vers Supabase (Flutter)
-python3 tools/bancs/falsifier_client_authentification_dart.py  # 22 cas — le client d'authentification (Flutter)
-python3 tools/bancs/falsifier_secure_store_dart.py             # 9 cas — la session dans le trousseau (Flutter)
+python3 tools/bancs/falsifier_client_authentification_dart.py  # 24 cas — le client d'authentification (Flutter)
+python3 tools/bancs/falsifier_secure_store_dart.py             # 11 cas — la session dans le trousseau (Flutter)
 python3 tools/bancs/falsifier_version_build.py         # 7 cas — version publiée
 python3 tools/bancs/falsifier_check_workflows.py       # 19 cas — validation des flux
 python3 tools/bancs/falsifier_migration_serveur.py     # 18 cas — accord des deux schémas
@@ -1117,16 +1134,18 @@ conclure — et il rapporte désormais **le message du compilateur**, sans quoi 
 la mutation à la main pour savoir ce qui était reproché.
 
 Un mot sur le nombre de tests annoncé dans ce document : c'est celui que l'exécuteur **imprime**
-(`524 tests`), et non le nombre de déclarations `test(` présentes dans les fichiers. Mesure faite
-à quatre commits : 456 déclarations pour 462 annoncés, puis 492 pour 498, puis 518 pour 524, puis
-532 pour 538 — l'écart est petit et constant.
+(`540 tests`), et non le nombre de déclarations `test(` présentes dans les fichiers. Mesure faite
+à cinq commits : 456 déclarations pour 462 annoncés, puis 492 pour 498, puis 518 pour 524, puis
+532 pour 538, puis 534 pour 540 — l'écart est petit et constant.
 
 Ce paragraphe attribuait cet écart aux `setUpAll`/`tearDownAll`, « que l'exécuteur compte comme des
 tests ». **La mesure le contredit**, et c'est écrit ici plutôt que corrigé en silence : il y a
-**10** `setUpAll(` et **0** `tearDownAll(` dans `app/test/`, alors que l'écart vaut 5 ou 6. La cause
+**10** `setUpAll(` et **0** `tearDownAll(` dans `app/test/`, alors que l'écart vaut 6. La cause
 n'est donc pas établie. Compter les déclarations n'est d'ailleurs pas une base solide : le total
-change selon qu'on inclut `testWidgets(` — 466 `test(` seuls, 519 avec `testWidgets(` — et un
-`test(` peut apparaître dans un commentaire. Ce qui compte reste inchangé : le nombre cité est
+change selon qu'on inclut `testWidgets(` — 481 `test(` seuls, 534 avec `testWidgets(` — et un
+`test(` apparaît dans un commentaire. Il y en a exactement **un** — `poids_screen_test.dart`, à la
+ligne du commentaire qui explique que les tests de widgets n'ont pas cette contrainte — donc un
+compte brut rend 482 là où un compte en début de ligne rend 481. Ce qui compte reste inchangé : le nombre cité est
 celui que l'exécuteur **imprime**, parce que c'est le seul qu'un lecteur et la CI puissent vérifier
 de la même façon.
 

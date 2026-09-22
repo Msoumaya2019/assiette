@@ -626,7 +626,8 @@ macOS et Linux, `flutter` fonctionne normalement.
 | Notifications (rappels de repas, résumé du soir) | Écrit, testé |
 | Compte et synchronisation | Socle éprouvé (arbitrage, plan, empreinte, lecture/écriture locales, service de convergence à deux appareils, correspondance des noms et des types, conversion des horodatages, colonnes
 retenues sur l'appareil, **transport vers Supabase**, **client d'authentification**, **session
-rangée dans le trousseau**). Rien n'est encore **branché** dans l'interface : le service et le
+rangée dans le trousseau — jetons et adresse du compte**). Rien n'est encore **branché** dans
+l'interface : le service et le
 transport ne sont instanciés nulle part. Les tables du projet Supabase restent à créer |
 | APK et AAB signés, IPA non signée | Produits et vérifiés — release `v0.1.5` (les `v0.1.3` et `v0.1.4` portent un affichage fautif des glucides par portion, ne pas les installer) |
 | Envoi sur l'App Store / le Play Store | Non entamé — demande un compte Google Play et un compte Apple Developer |

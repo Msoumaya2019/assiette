@@ -26,13 +26,17 @@ import 'package:flutter_test/flutter_test.dart';
 
 const int _expireLe = 1790000000000;
 
-Session _session({String utilisateur = 'user-1', int expireLe = _expireLe}) =>
-    Session(
-      jetonAcces: 'jeton-acces',
-      jetonRafraichissement: 'jeton-rafraichissement',
-      expireLe: expireLe,
-      utilisateur: utilisateur,
-    );
+Session _session({
+  String utilisateur = 'user-1',
+  int expireLe = _expireLe,
+  String? adresse = 'personne@exemple.fr',
+}) => Session(
+  jetonAcces: 'jeton-acces',
+  jetonRafraichissement: 'jeton-rafraichissement',
+  expireLe: expireLe,
+  utilisateur: utilisateur,
+  adresse: adresse,
+);
 
 /// Un stockage en memoire, a la place du trousseau du systeme.
 ///
@@ -120,6 +124,12 @@ void main() {
       expect(relue.jetonRafraichissement, 'jeton-rafraichissement');
       expect(relue.expireLe, _expireLe);
       expect(relue.utilisateur, 'user-1');
+      // Le titre de ce test dit « a l'identique » : il doit donc porter sur
+      // **tous** les champs. Oublier l'adresse ici laisserait disparaitre son
+      // ecriture sans que rien ne tombe, et l'ecran ne saurait plus dire de quel
+      // compte il s'agit — apres un redemarrage seulement, c'est-a-dire au pire
+      // moment pour le comprendre.
+      expect(relue.adresse, 'personne@exemple.fr');
     });
 
     test('sans session rangee, la lecture rend null', () async {
@@ -244,5 +254,27 @@ void main() {
 
       expect(await store.lireSession(), isNull);
     });
+
+    test(
+      'une adresse d\'un type inattendu ne fait pas tomber la session',
+      () async {
+        // L'adresse est **facultative** : un type inattendu la rend absente, et
+        // rien de plus. Les quatre champs exiges refusent la session ; elle,
+        // elle degrade. Refuser la session entiere pour une etiquette priverait
+        // l'utilisateur de la synchronisation sans qu'il puisse rien y faire.
+        trousseau.valeurs['session'] = jsonEncode({
+          'acces': 'jeton-acces',
+          'rafraichissement': 'jeton-rafraichissement',
+          'expire_le': _expireLe,
+          'utilisateur': 'user-1',
+          'adresse': 42,
+        });
+
+        final relue = await store.lireSession();
+
+        expect(relue, isNotNull);
+        expect(relue!.adresse, isNull);
+      },
+    );
   });
 }

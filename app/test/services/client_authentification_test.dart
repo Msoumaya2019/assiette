@@ -66,13 +66,15 @@ http.Response _json(
 Map<String, Object?> _corpsSession({
   bool expiration = true,
   bool compte = true,
+  String? adresse = _adresseSaisie,
 }) => {
   'access_token': _jetonAcces,
   'token_type': 'bearer',
   'expires_in': 3600,
   if (expiration) 'expires_at': _expiresAt,
   'refresh_token': _jetonRafraichissement,
-  if (compte) 'user': {'id': _utilisateur, 'email': _adresseSaisie},
+  if (compte)
+    'user': {'id': _utilisateur, if (adresse != null) 'email': adresse},
 };
 
 Map<String, Object?> _erreur(String code) => {
@@ -186,6 +188,22 @@ void main() {
       // L'identifiant du compte, pas l'objet `user` entier : les politiques RLS
       // attendent un uuid.
       expect(session.utilisateur, _utilisateur);
+      // L'adresse, elle, ne sert a aucune requete : elle sert a ce que l'ecran
+      // des reglages puisse dire **de quel compte** il s'agit. Le seul autre
+      // identifiant disponible est un uuid, qui ne dit rien a personne.
+      expect(session.adresse, _adresseSaisie);
+    });
+
+    test('une adresse vide se lit comme une absence', () async {
+      // Le serveur ne classe pas `email` parmi les champs obligatoires de
+      // `user`. Une adresse vide n'est pas une adresse : la garder telle quelle
+      // ferait afficher « Connecte en tant que » suivi de rien.
+      banc.repond = (_) async => _json(_corpsSession(adresse: ''));
+
+      final session = await connecter();
+
+      expect(session.utilisateur, _utilisateur);
+      expect(session.adresse, isNull);
     });
 
     test('expires_at est lu en secondes', () async {

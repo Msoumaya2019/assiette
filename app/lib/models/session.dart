@@ -1,12 +1,21 @@
 /// Une session de compte, telle que le serveur d'authentification la rend.
 ///
-/// Ce que ce modele ne porte pas, et pourquoi
-/// ------------------------------------------
-/// Ni l'adresse electronique, ni le mot de passe. La premiere n'est pas
-/// necessaire a la synchronisation, et le second n'a aucune raison de survivre a
-/// la requete qui l'a transporte : le garder en memoire, c'est le garder
-/// jusqu'au prochain vidage, et le rendre disponible a tout ce qui sait lire un
-/// objet en memoire.
+/// Ce que ce modele porte, et ce qu'il ne porte pas
+/// ------------------------------------------------
+/// Le mot de passe, jamais : il n'a aucune raison de survivre a la requete qui
+/// l'a transporte. Le garder en memoire, c'est le garder jusqu'au prochain
+/// vidage, et le rendre disponible a tout ce qui sait lire un objet en memoire.
+///
+/// L'adresse electronique, oui — et ce point a d'abord ete ecrit dans l'autre
+/// sens. Le raisonnement d'alors etait : « elle n'est pas necessaire a la
+/// synchronisation ». C'etait vrai, et c'etait repondre a cote. La question
+/// n'est pas ce dont la synchronisation a besoin, mais ce qu'un ecran doit
+/// pouvoir dire : une section « Compte » qui ne saurait pas **de quel compte**
+/// il s'agit ne servirait a rien, et le seul autre identifiant disponible est un
+/// uuid, qui ne dit rien a personne.
+///
+/// L'adresse se range donc dans le trousseau du systeme, avec les jetons — le
+/// meme endroit protege — et jamais dans la base locale.
 library;
 
 class Session {
@@ -15,6 +24,7 @@ class Session {
     required this.jetonRafraichissement,
     required this.expireLe,
     required this.utilisateur,
+    this.adresse,
   });
 
   /// Le jeton qui accompagne chaque requete de donnees.
@@ -34,6 +44,16 @@ class Session {
 
   /// L'identifiant du compte, tel que les politiques RLS l'attendent.
   final String utilisateur;
+
+  /// L'adresse du compte, quand le serveur l'annonce.
+  ///
+  /// **Optionnelle**, et c'est le serveur qui le dit : sa specification ne
+  /// classe pas `email` parmi les champs obligatoires de l'objet `user` — un
+  /// compte ouvert par telephone n'en porte pas. Un champ facultatif absent se
+  /// lit donc comme une absence, jamais comme une erreur : refuser la session
+  /// entiere priverait l'utilisateur de la synchronisation pour une etiquette
+  /// manquante.
+  final String? adresse;
 
   /// La marge appliquee avant l'expiration reelle.
   ///
@@ -65,6 +85,7 @@ class Session {
     'rafraichissement': jetonRafraichissement,
     'expire_le': expireLe,
     'utilisateur': utilisateur,
+    'adresse': adresse,
   };
 
   /// Relit une session rangee, ou rend `null` si la forme ne s'y prete pas.
@@ -74,6 +95,11 @@ class Session {
   /// illisible doit se lire comme « pas de session » — donc « se reconnecter »
   /// — plutot que faire tomber l'application au demarrage. C'est le seul
   /// endroit du projet ou une donnee corrompue est une raison de continuer.
+  ///
+  /// Les quatre champs **exiges** refusent la session ; l'adresse, facultative,
+  /// degrade en absence. Deux traitements pour deux natures de champ : une
+  /// adresse d'un type inattendu ne doit pas emporter une session par ailleurs
+  /// intacte.
   static Session? depuisJson(Object? json) {
     if (json is! Map) return null;
 
@@ -81,6 +107,7 @@ class Session {
     final rafraichissement = json['rafraichissement'];
     final expireLe = json['expire_le'];
     final utilisateur = json['utilisateur'];
+    final adresseBrute = json['adresse'];
 
     if (acces is! String || acces.isEmpty) return null;
     if (rafraichissement is! String || rafraichissement.isEmpty) return null;
@@ -92,6 +119,7 @@ class Session {
       jetonRafraichissement: rafraichissement,
       expireLe: expireLe,
       utilisateur: utilisateur,
+      adresse: adresseBrute is String ? adresseBrute : null,
     );
   }
 }

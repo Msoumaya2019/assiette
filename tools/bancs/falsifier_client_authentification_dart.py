@@ -8,6 +8,15 @@ d'authentification. Rien d'autre ne l'appelle : le transport recoit un jeton dej
 obtenu, et le service de synchronisation ne connait ni jeton ni session. Ce
 fichier-la ne tombe donc que si on l'eprouve lui.
 
+Ce que l'adresse du compte a change
+-----------------------------------
+`Session` porte desormais l'adresse du compte, et c'est **ici** qu'elle est lue.
+La specification ne classe pas `email` parmi les champs obligatoires de `user` :
+elle est donc facultative, et deux fautes distinctes la menacent — la confondre
+avec l'identifiant ecrit sur la ligne du dessus, ou retenir une chaine vide qui
+ferait afficher « Connecte en tant que » suivi de rien. Deux cas, et **deux tests
+differents** qui tombent : aucun des deux ne rejoue l'autre.
+
 Ce que la specification a fait ecrire, puis retirer
 ---------------------------------------------------
 `openapi.yaml` de `supabase/auth` avertit : « Not all HTTP 5XX errors are
@@ -55,7 +64,7 @@ TESTS = "test/services/client_authentification_test.dart"
 
 # A mettre a jour en meme temps que le fichier de tests, jamais pour faire
 # passer le banc.
-TESTS_ATTENDUS = 26
+TESTS_ATTENDUS = 27
 
 # --- ancres : au niveau octet, telles que `dart format` les ecrit ---
 
@@ -88,6 +97,22 @@ COMPTE_PAR_DEFAUT = (
     b"        ? utilisateur['id']\n"
     b"        : 'compte-par-defaut';\n"
 )
+
+# 4 bis. L'adresse du compte, lue dans le meme objet `user`.
+#
+# La ligne est la copie conforme de celle du dessus, au champ lu pres : c'est
+# exactement la faute qu'un copier-coller produit, et elle serait silencieuse —
+# l'ecran afficherait l'uuid en croyant afficher une adresse.
+ADRESSE_EXTRAITE = (
+    b"    final adresse = utilisateur is Map ? utilisateur['email'] : null;\n"
+)
+ADRESSE_CONFONDUE = (
+    b"    final adresse = utilisateur is Map ? utilisateur['id'] : null;\n"
+)
+ADRESSE_RETENUE = (
+    b"      adresse: adresse is String && adresse.isNotEmpty ? adresse : null,\n"
+)
+ADRESSE_VIDE_RETENUE = b"      adresse: adresse is String ? adresse : null,\n"
 
 # 5. Les deux unites d'expiration.
 EXPIRES_AT_CONVERTI = b"    if (absolu is num) return absolu.toInt() * 1000;\n"
@@ -141,6 +166,7 @@ CHAMPS_EXIGES = (
     b"      jetonRafraichissement: rafraichissement,\n"
     b"      expireLe: _expiration(corps),\n"
     b"      utilisateur: identifiant,\n"
+    b"      adresse: adresse is String && adresse.isNotEmpty ? adresse : null,\n"
     b"    );\n"
 )
 CHAMPS_SECOURUS = (
@@ -158,6 +184,7 @@ CHAMPS_SECOURUS = (
     b"      jetonRafraichissement: rafraichissementSain,\n"
     b"      expireLe: _expiration(corps),\n"
     b"      utilisateur: identifiantSain,\n"
+    b"      adresse: adresse is String && adresse.isNotEmpty ? adresse : null,\n"
     b"    );\n"
 )
 
@@ -233,6 +260,7 @@ T_DELAI = "delai depasse est traduit"
 T_CLIENT = "client injecte n"
 T_EXPIRATION = "expiration inconnue ne declenche"
 T_MARGE = "marge fait expirer"
+T_ADRESSE_VIDE = "adresse vide se lit"
 
 
 def principal() -> int:
@@ -315,6 +343,18 @@ def principal() -> int:
         T_EXPIRES_IN,
         EXPIRES_IN_CONVERTI,
         EXPIRES_IN_BRUT,
+    )
+    cas(
+        "l'adresse du compte est confondue avec l'identifiant",
+        T_SESSION,
+        ADRESSE_EXTRAITE,
+        ADRESSE_CONFONDUE,
+    )
+    cas(
+        "une adresse vide est retenue telle quelle",
+        T_ADRESSE_VIDE,
+        ADRESSE_RETENUE,
+        ADRESSE_VIDE_RETENUE,
     )
 
     # --- les refus ---
@@ -421,7 +461,7 @@ def principal() -> int:
         return code
 
     print(
-        "vert — le client tombe sur chacune de ses vingt et une fautes, et pas "
+        "vert — le client tombe sur chacune de ses vingt-trois fautes, et pas "
         "sur une reformulation."
     )
     return 0

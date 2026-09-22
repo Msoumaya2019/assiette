@@ -137,11 +137,17 @@ class ClientAuthentification {
   /// passer pour une session : un jeton d'acces vide ferait echouer chaque
   /// requete de donnees plus tard, loin d'ici, avec un message qui ne dirait
   /// rien de la cause.
+  ///
+  /// L'adresse, elle, n'est **pas** exigee : le serveur ne la classe pas parmi
+  /// les champs obligatoires de `user`, et refuser une session entiere pour une
+  /// etiquette manquante priverait l'utilisateur de la synchronisation sans
+  /// qu'il puisse rien y faire.
   Session _session(Map<String, Object?> corps) {
     final acces = corps['access_token'];
     final rafraichissement = corps['refresh_token'];
     final utilisateur = corps['user'];
     final identifiant = utilisateur is Map ? utilisateur['id'] : null;
+    final adresse = utilisateur is Map ? utilisateur['email'] : null;
 
     if (acces is! String || acces.isEmpty) {
       throw const InvalidResponseFailure();
@@ -158,6 +164,7 @@ class ClientAuthentification {
       jetonRafraichissement: rafraichissement,
       expireLe: _expiration(corps),
       utilisateur: identifiant,
+      adresse: adresse is String && adresse.isNotEmpty ? adresse : null,
     );
   }
 
