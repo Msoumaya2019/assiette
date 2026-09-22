@@ -647,8 +647,8 @@ rangée dans le trousseau — jetons et adresse du compte**, la **section Compte
 connecter, se déconnecter, voir de quel compte il s'agit, et **la synchronisation branchée** : le
 passage part de la session du compte, renouvelle un jeton périmé **avant** de construire le
 transport, et l'écran dit ce qu'il a fait). Le passage est **manuel** — il n'a pas lieu tout seul à
-l'enregistrement d'un repas, et l'écran le dit. Les tables du projet Supabase restent à créer : sans
-elles, le premier passage annonce que les tables n'existent pas encore, au lieu de proposer de
-réessayer |
-| APK et AAB signés, IPA non signée | Produits et vérifiés — release `v0.1.5` (les `v0.1.3` et `v0.1.4` portent un affichage fautif des glucides par portion, ne pas les installer) |
+l'enregistrement d'un repas, et l'écran le dit. Les tables du projet Supabase ont été créées depuis l'éditeur SQL du tableau de bord. Reste à
+établir que le serveur accepte ce que l'application lui envoie — aucune machine de ce dépôt ne
+peut le vérifier, faute de canal privilégié |
+| APK et AAB signés, IPA non signée | Produits et vérifiés — release `v0.1.6` (les `v0.1.3` et `v0.1.4` portent un affichage fautif des glucides par portion, `v0.1.5` une horloge non corrigée : ne pas les installer) |
 | Envoi sur l'App Store / le Play Store | Non entamé — demande un compte Google Play et un compte Apple Developer |

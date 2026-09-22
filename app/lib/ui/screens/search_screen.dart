@@ -464,44 +464,12 @@ class _FoodTile extends ConsumerWidget {
                       ),
                     ],
                     const SizedBox(height: 6),
-                    Wrap(
-                      spacing: AppSpacing.sm,
-                      children: [
-                        _MiniValue(
-                          label: 'glucides',
-                          value: '${Format.number(apercu.valeurs.carbs)} g',
-                          color: palette.carb,
-                        ),
-                        _MiniValue(
-                          label: 'kcal',
-                          value: Format.number(apercu.valeurs.kcal),
-                          color: palette.mutedText,
-                        ),
-                        _MiniValue(
-                          label: 'prot.',
-                          value: '${Format.number(apercu.valeurs.protein)} g',
-                          color: palette.protein,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      apercu.reference,
-                      style: TextStyle(fontSize: 11, color: palette.mutedText),
-                    ),
-                    // Le chiffre comparable, et seulement quand les deux bases
-                    // different : sans lui, deux produits de la meme liste ne
-                    // se comparent qu'en lisant l'etiquette de chacun et en
-                    // faisant le calcul soi-meme. La ligne est construite
-                    // ailleurs, une seule fois pour les deux listes.
-                    if (ligneComparable(apercu) case final ligne?)
-                      Text(
-                        ligne,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: palette.mutedText,
-                        ),
-                      ),
+                    // Les valeurs, leur unite et le chiffre comparable viennent
+                    // d'un seul bloc, qui les recoit tous les trois ensemble :
+                    // une tuile qui recomposerait ce texte elle-meme pourrait
+                    // remettre le chiffre des 100 g sous l'unite du pot — le
+                    // defaut qui a vecu ici.
+                    ApercuValeurs(apercu: apercu),
                   ],
                 ),
               ),
@@ -538,37 +506,6 @@ class _PlaceholderIcon extends StatelessWidget {
             : Icons.restaurant_rounded,
         size: 20,
         color: context.palette.mutedText,
-      ),
-    );
-  }
-}
-
-class _MiniValue extends StatelessWidget {
-  const _MiniValue({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  final String label;
-  final String value;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return RichText(
-      text: TextSpan(
-        style: TextStyle(fontSize: 11, color: color),
-        children: [
-          TextSpan(
-            text: value,
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
-          TextSpan(
-            text: ' $label',
-            style: TextStyle(color: context.palette.mutedText),
-          ),
-        ],
       ),
     );
   }

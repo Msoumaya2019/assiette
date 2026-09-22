@@ -1,8 +1,10 @@
+import 'package:assiette/core/theme.dart';
 import 'package:assiette/models/apercu_aliment.dart';
 import 'package:assiette/models/food.dart';
 import 'package:assiette/models/nutrition_values.dart';
 import 'package:assiette/models/portion.dart';
 import 'package:assiette/ui/widgets/common.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// La ligne comparable des listes de resultats.
@@ -18,6 +20,11 @@ import 'package:flutter_test/flutter_test.dart';
 /// cette ligne est **toujours** celle des 100 g, jamais celle de la portion.
 /// C'est precisement ce qu'un ecran se tromperait a ecrire, et c'est pour cela
 /// que la ligne est construite une seule fois, pour les deux listes.
+///
+/// Les derniers tests montent `ApercuValeurs` — le bloc qui ecrit la ligne — et
+/// regardent ce qu'il affiche. Ils ne sont pas un doublon des precedents : une
+/// fonction juste que le bloc n'appelle pas laisse l'utilisateur sans chiffre
+/// comparable, et aucun test de fonction ne peut le voir. Le banc le fabrique.
 void main() {
   // 12 g de glucides pour 100 g, et un pot annonce a 125 g : le pot en
   // contient donc 15, et les deux chiffres ne se confondent pas.
@@ -62,5 +69,56 @@ void main() {
       const Portion(label: 'pot', grams: 0),
     );
     expect(ligneComparable(apercu), isNull);
+  });
+
+  /// Les valeurs sont rendues en `RichText`, pour que le chiffre soit plus gras
+  /// que son libelle : `find.text` ne les voit donc pas, et on cherche dans le
+  /// texte aplati.
+  Finder texteRiche(String extrait) => find.byWidgetPredicate(
+    (widget) =>
+        widget is RichText && widget.text.toPlainText().contains(extrait),
+  );
+
+  Future<void> monte(WidgetTester tester, Apercu apercu) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Scaffold(body: ApercuValeurs(apercu: apercu)),
+      ),
+    );
+  }
+
+  // Le defaut d'origine vivait **ici**, dans ce que l'ecran ecrivait : ces tests
+  // le tiennent au niveau du widget, et non plus seulement de la fonction.
+  group('Le bloc affiche', () {
+    testWidgets('les valeurs de la portion, sous l\'unite de la portion', (
+      tester,
+    ) async {
+      await monte(tester, apercuDePortion(yaourt, pot));
+
+      expect(texteRiche('15 g glucides'), findsOneWidget);
+      expect(find.text('pour 1 pot (125 g)'), findsOneWidget);
+    });
+
+    testWidgets('le chiffre comparable, et sous l\'unite des 100 g', (
+      tester,
+    ) async {
+      await monte(tester, apercuDePortion(yaourt, pot));
+
+      expect(find.text('soit 12 g de glucides pour 100 g'), findsOneWidget);
+      // Le pot et les 100 g ne portent jamais la meme etiquette : c'est
+      // exactement ce que l'ecran fautif faisait.
+      expect(find.text('pour 100 g'), findsNothing);
+    });
+
+    testWidgets('rien de comparable quand l\'apercu est deja pour 100 g', (
+      tester,
+    ) async {
+      await monte(tester, apercuDePortion(yaourt, null));
+
+      expect(find.text('pour 100 g'), findsOneWidget);
+      expect(find.textContaining('soit '), findsNothing);
+      expect(texteRiche('12 g glucides'), findsOneWidget);
+    });
   });
 }

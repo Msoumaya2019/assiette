@@ -4,15 +4,18 @@
 Ce que ce banc vise
 -------------------
 `ligneComparable` (`ui/widgets/common.dart`) rend le chiffre des 100 g, pret a
-ecrire, et le `null` quand il n'y a rien a comparer. Elle existe pour **une**
-raison : le nombre et son etiquette ne doivent pas pouvoir diverger.
+ecrire, et le `null` quand il n'y a rien a comparer. `ApercuValeurs`, dans le
+meme fichier, est le bloc qui l'ecrit — avec les valeurs et leur unite. Les deux
+sont ici : c'est le meme controle, et il ne suffit pas que la fonction soit juste
+si le bloc ne l'ecrit pas.
 
-Le defaut qu'elle rend impossible a vecu dans un ecran : « 12 g de glucides pour
-1 pot (125 g) », ou 12 est la valeur des 100 g — le pot en contient 15. Un nombre
-avec la mauvaise unite se lit comme une information ; c'est pourquoi la ligne est
-construite en un seul endroit, appele par les deux listes de l'application.
+Le defaut que les deux rendent impossible a vecu dans un ecran : « 12 g de
+glucides pour 1 pot (125 g) », ou 12 est la valeur des 100 g — le pot en contient
+15. Un nombre avec la mauvaise unite se lit comme une information ; c'est pourquoi
+la ligne est construite en un seul endroit, appele par les deux listes de
+l'application.
 
-Ce banc tient trois fautes, et la premiere est ce defaut lui-meme :
+Ce banc tient cinq fautes, et la premiere est ce defaut lui-meme :
 
 1. **L'etiquette de la ligne devient celle de la portion.** Le chiffre des 100 g
    sous l'unite du pot : exactement le defaut d'origine, reproduit a l'identique.
@@ -24,6 +27,16 @@ Ce banc tient trois fautes, et la premiere est ce defaut lui-meme :
 3. **La ligne est rendue meme sans comparable.** L'apercu **est** alors la valeur
    des 100 g : la ligne la repete, et deux formes du meme chiffre se lisent comme
    deux mesures.
+
+4. **Le bloc efface l'unite sous laquelle il chiffre.** « 15 g glucides » sans
+   « pour 1 pot (125 g) » : le chiffre n'a plus d'unite, et c'est precisement ce
+   qu'un nombre mal etiquette fait de pire.
+
+5. **Le bloc n'ecrit plus la ligne comparable.** La fonction reste juste, et rien
+   ne disparait des tests de fonction : ce cas n'est vu que par les tests de
+   widget. Il est la pour etablir que ceux-ci portent quelque chose que les
+   autres ne portent pas — sans lui, on ne saurait pas s'ils mesurent quoi que ce
+   soit.
 
 Le dernier cas est le temoin negatif : une reformulation de commentaire ne doit
 rien faire tomber.
@@ -47,7 +60,7 @@ TESTS = "test/ui/ligne_comparable_test.dart"
 
 # A mettre a jour en meme temps que le fichier de tests, jamais pour faire
 # passer le banc.
-TESTS_ATTENDUS = 4
+TESTS_ATTENDUS = 7
 
 # --- ancres : au niveau octet, telles que `dart format` les ecrit ---
 
@@ -79,11 +92,37 @@ COMMENTAIRE_REFORMULE = (
     b"/// Un seul endroit, donc : les deux listes de l'application l'appellent,\n"
 )
 
+# --- ancres du bloc qui affiche l'apercu ---------------------------------------
+
+REFERENCE_DU_BLOC = (
+    b"        Text(\n"
+    b"          apercu.reference,\n"
+    b"          style: TextStyle(fontSize: 11, color: palette.mutedText),\n"
+    b"        ),\n"
+)
+REFERENCE_VIDE = (
+    b"        Text(\n"
+    b"          '',\n"
+    b"          style: TextStyle(fontSize: 11, color: palette.mutedText),\n"
+    b"        ),\n"
+)
+
+LIGNE_DU_BLOC = (
+    b"        if (ligne != null)\n"
+    b"          Text(ligne, style: TextStyle(fontSize: 11, color: palette.mutedText)),\n"
+)
+LIGNE_VIDE = (
+    b"        if (ligne != null)\n"
+    b"          Text('', style: TextStyle(fontSize: 11, color: palette.mutedText)),\n"
+)
+
 # --- noms des tests qui doivent tomber -----------------------------------------
 
 T_CHIFFRE = "la ligne porte le chiffre des 100 g, et le dit"
 T_ETIQUETTE = "l'etiquette de la ligne n'est jamais celle de la portion"
 T_SANS_PORTION = "sans portion, il n'y a pas de ligne"
+T_BLOC_VALEURS = "les valeurs de la portion, sous l'unite de la portion"
+T_BLOC_COMPARABLE = "le chiffre comparable, et sous l'unite des 100 g"
 
 
 def principal() -> int:
@@ -122,6 +161,12 @@ def principal() -> int:
     def ligne_sans_comparable() -> None:
         banc.suivre(DEPOT).muter(GARDE_NUL, GARDE_QUI_REPETE)
 
+    def reference_du_bloc_effacee() -> None:
+        banc.suivre(DEPOT).muter(REFERENCE_DU_BLOC, REFERENCE_VIDE)
+
+    def ligne_du_bloc_effacee() -> None:
+        banc.suivre(DEPOT).muter(LIGNE_DU_BLOC, LIGNE_VIDE)
+
     def commentaire_reformule() -> None:
         banc.suivre(DEPOT).muter(COMMENTAIRE, COMMENTAIRE_REFORMULE)
 
@@ -139,6 +184,16 @@ def principal() -> int:
         "la ligne est rendue meme sans comparable",
         T_SANS_PORTION,
         ligne_sans_comparable,
+    )
+    banc.cas(
+        "le bloc efface l'unite sous laquelle il chiffre",
+        T_BLOC_VALEURS,
+        reference_du_bloc_effacee,
+    )
+    banc.cas(
+        "le bloc n'ecrit plus la ligne comparable",
+        T_BLOC_COMPARABLE,
+        ligne_du_bloc_effacee,
     )
     banc.cas("commentaire reformule", T_CHIFFRE, commentaire_reformule, attendu=False)
 
@@ -161,7 +216,10 @@ def principal() -> int:
     if code != 0:
         return code
 
-    print("vert — la ligne tombe sur ses trois fautes, et pas sur une reformulation.")
+    print(
+        "vert — la ligne et le bloc tombent sur leurs cinq fautes, et pas sur "
+        "une reformulation."
+    )
     return 0
 
 

@@ -543,3 +543,92 @@ String? ligneComparable(Apercu apercu) {
   }
   return 'soit ${Format.number(comparable.carbs)} g de glucides $reference100g';
 }
+
+/// Les valeurs d'un aliment, l'unite sur laquelle elles portent, et le chiffre
+/// comparable quand il y en a un.
+///
+/// Ce bloc est celui qui a menti : il annoncait « 12 g de glucides pour 1 pot
+/// (125 g) », ou 12 est la valeur des 100 g. Il recoit donc un apercu **entier**
+/// — valeurs, reference et comparable — et n'en compose rien lui-meme : il ne
+/// peut pas accoler une unite a un chiffre qui ne vient pas d'elle.
+///
+/// Il ne lit aucun fournisseur, et c'est deliberé : un widget qui va chercher sa
+/// portion lui-meme ne se teste qu'en montant tout l'ecran, et c'est ainsi que le
+/// defaut a survecu. Ici, on lui donne un apercu et on regarde ce qu'il ecrit.
+class ApercuValeurs extends StatelessWidget {
+  const ApercuValeurs({super.key, required this.apercu});
+
+  final Apercu apercu;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final ligne = ligneComparable(apercu);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Wrap(
+          spacing: AppSpacing.sm,
+          children: [
+            _MiniValue(
+              label: 'glucides',
+              value: '${Format.number(apercu.valeurs.carbs)} g',
+              color: palette.carb,
+            ),
+            _MiniValue(
+              label: 'kcal',
+              value: Format.number(apercu.valeurs.kcal),
+              color: palette.mutedText,
+            ),
+            _MiniValue(
+              label: 'prot.',
+              value: '${Format.number(apercu.valeurs.protein)} g',
+              color: palette.protein,
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          apercu.reference,
+          style: TextStyle(fontSize: 11, color: palette.mutedText),
+        ),
+        if (ligne != null)
+          Text(ligne, style: TextStyle(fontSize: 11, color: palette.mutedText)),
+      ],
+    );
+  }
+}
+
+/// Un chiffre et son libelle, sur une ligne.
+class _MiniValue extends StatelessWidget {
+  const _MiniValue({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return RichText(
+      text: TextSpan(
+        style: TextStyle(fontSize: 11, color: color),
+        children: [
+          TextSpan(
+            text: value,
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          TextSpan(
+            text: ' $label',
+            style: TextStyle(color: context.palette.mutedText),
+          ),
+        ],
+      ),
+    );
+  }
+}
