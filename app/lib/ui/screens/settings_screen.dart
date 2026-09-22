@@ -14,6 +14,7 @@ import '../../models/app_settings.dart';
 import '../../models/sauvegarde.dart';
 import '../../models/session.dart';
 import '../../services/backup_service.dart';
+import '../../services/synchronisation_service.dart';
 import '../../state/providers.dart';
 import '../router.dart';
 import '../widgets/common.dart';
@@ -838,11 +839,9 @@ class _CompteSectionState extends ConsumerState<_CompteSection> {
       if (!mounted) return;
       // `AppFailure.from` rend l'echec tel quel s'il en est deja un : les
       // messages ecrits dans `failures.dart` arrivent donc intacts.
-      final echec = AppFailure.from(erreur);
-      final hint = echec.hint;
       setState(() {
         _enCours = false;
-        _refus = hint == null ? echec.message : '${echec.message}. $hint';
+        _refus = _messageDe(AppFailure.from(erreur));
       });
     }
   }
@@ -941,13 +940,12 @@ class _CompteSectionState extends ConsumerState<_CompteSection> {
         ),
         if (_refus != null) ...[
           const SizedBox(height: AppSpacing.sm),
-          _ligneDeRefus(),
+          _ligneDeRefus(_refus!),
         ],
         const SizedBox(height: AppSpacing.md),
         _note(
           'Votre mot de passe n\'est jamais conserve : seule la session est '
-          'rangee dans le trousseau du telephone. Vos repas restent sur cet '
-          'appareil tant que la synchronisation n\'est pas branchee.',
+          'rangee dans le trousseau du telephone.',
         ),
       ],
     );
@@ -986,6 +984,8 @@ class _CompteSectionState extends ConsumerState<_CompteSection> {
           'l\'application se rouvre sans redemander le mot de passe.',
         ),
         const SizedBox(height: AppSpacing.md),
+        _synchronisation(),
+        const SizedBox(height: AppSpacing.md),
         OutlinedButton.icon(
           onPressed: _enCours ? null : _deconnecter,
           icon: const Icon(Icons.logout_rounded, size: 18),
@@ -993,20 +993,149 @@ class _CompteSectionState extends ConsumerState<_CompteSection> {
         ),
         if (_refus != null) ...[
           const SizedBox(height: AppSpacing.sm),
-          _ligneDeRefus(),
+          _ligneDeRefus(_refus!),
         ],
       ],
     );
   }
 
-  Widget _ligneDeRefus() => Text(
-    _refus!,
+  /// Le passage de synchronisation, et ce qu'il a fait.
+  ///
+  /// L'etat vit dans `synchronisationProvider`, pas dans cette section : un
+  /// passage survit ainsi a un changement d'onglet, et l'ecran n'a pas a
+  /// deviner s'il est en cours — il le lit.
+  Widget _synchronisation() {
+    final etat = ref.watch(synchronisationProvider);
+    final enCours = etat.isLoading;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        FilledButton.icon(
+          onPressed: enCours ? null : _synchroniser,
+          icon: enCours
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.sync_rounded, size: 18),
+          label: const Text('Synchroniser maintenant'),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        etat.when(
+          loading: () => _note('Passage en cours...'),
+          error: (erreur, pile) =>
+              _ligneDeRefus(_messageDe(AppFailure.from(erreur))),
+          data: (rapport) => rapport == null
+              ? _note('Aucun passage n\'a encore eu lieu depuis cet appareil.')
+              : _rapport(rapport),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        _note(
+          'Le passage est manuel : il n\'a pas lieu tout seul quand un repas '
+          'est enregistre. Les donnees restent sur cet appareil tant qu\'aucun '
+          'passage n\'a abouti.',
+        ),
+      ],
+    );
+  }
+
+  Future<void> _synchroniser() async {
+    // Aucun `try` ici, et c'est volontaire : le notifier publie l'echec dans son
+    // etat au lieu de le lever. Un `catch` de plus ne servirait qu'a le
+    // reformuler deux fois, et la deuxieme formulation finirait par diverger.
+    await ref.read(synchronisationProvider.notifier).synchroniser();
+  }
+
+  /// Ce qu'un passage a fait, en clair.
+  Widget _rapport(RapportSynchronisation rapport) {
+    final lignes = <Widget>[];
+
+    if (rapport.aEchoue) {
+      for (final table in rapport.tablesEnEchec) {
+        lignes.add(
+          _ligneDeRefus(
+            '${_libelleDeTable(table)} : '
+            '${_messageDe(rapport.parTable[table]?.panne)}',
+          ),
+        );
+      }
+    } else if (rapport.estVide) {
+      lignes.add(_note('Tout est deja a jour : rien n\'a eu a bouger.'));
+    } else {
+      lignes.add(
+        _note(
+          '${rapport.poussees} ligne(s) envoyee(s), '
+          '${rapport.appliquees} ligne(s) recue(s).',
+        ),
+      );
+    }
+
+    if (rapport.horlogeSuspecte) {
+      // L'ecart est **signale**, jamais applique : redater ferait de chaque
+      // passage une modification, et les deux appareils se renverraient la meme
+      // ligne sans fin. Le dire evite de chercher ailleurs une date etrange.
+      lignes.add(
+        _note(
+          'L\'horloge de cet appareil s\'ecarte de celle du serveur de '
+          '${(rapport.decalageMs! / 1000).round()} secondes. Les dates '
+          'enregistrees ne sont pas corrigees pour autant.',
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (final ligne in lignes) ...[
+          ligne,
+          const SizedBox(height: AppSpacing.xs),
+        ],
+      ],
+    );
+  }
+
+  Widget _ligneDeRefus(String texte) => Text(
+    texte,
     style: const TextStyle(
       fontSize: 12,
       color: AppColors.danger,
       fontWeight: FontWeight.w600,
     ),
   );
+
+  /// Le message d'un echec, suivi de son conseil quand il en porte un.
+  ///
+  /// Ecrit **une seule fois** : il l'etait a deux endroits — la connexion et,
+  /// depuis, le rapport de synchronisation — et deux copies de cette
+  /// concatenation finiraient par ne plus dire la meme chose.
+  String _messageDe(AppFailure? echec) {
+    if (echec == null) return 'Echec sans cause connue.';
+    final hint = echec.hint;
+    return hint == null ? echec.message : '${echec.message}. $hint';
+  }
+
+  /// Le nom d'une table, tel qu'un utilisateur le lit.
+  ///
+  /// Le rapport nomme les tables en vocabulaire **local** (`meals`, `pesees`),
+  /// qui n'est pas fait pour etre lu. Une table absente de cette table de
+  /// correspondance **garde son nom technique** plutot que d'etre masquee :
+  /// c'est un repli, pas une omission, et le jour ou une table est ajoutee, le
+  /// rapport la montre au lieu de la taire.
+  String _libelleDeTable(String table) =>
+      const {
+        'meals': 'Repas',
+        'templates': 'Modeles',
+        'favorites': 'Favoris',
+        'pesees': 'Pesees',
+        'mesures': 'Mensurations',
+        'portions': 'Portions',
+      }[table] ??
+      table;
 
   Widget _note(String texte) => Text(
     texte,

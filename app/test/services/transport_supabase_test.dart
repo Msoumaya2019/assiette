@@ -705,6 +705,64 @@ void main() {
       );
     });
 
+    test('une table absente est nommee, et n\'est pas reessayable', () async {
+      final banc = _Banc();
+
+      // Les deux codes qui signalent une table absente : celui de PostgREST,
+      // qui n'a pas la table dans son cache de schema, et celui de PostgreSQL,
+      // quand la requete l'atteint directement.
+      for (final code in ['PGRST205', '42P01']) {
+        banc.repondre = (_) async => _json({
+          'code': code,
+          'message': 'Could not find the table in the schema cache',
+        }, statut: 404);
+
+        await expectLater(
+          banc.transport.lire(_table('templates')),
+          throwsA(
+            isA<TablesAbsentesFailure>()
+                // Le nom **du serveur**, pas celui du local : `templates` se
+                // nomme `meal_templates` de l'autre cote. Nommer le local
+                // enverrait chercher dans le projet une table qui ne porte pas
+                // ce nom-la.
+                .having((e) => e.table, 'table', 'meal_templates')
+                // Relancer ne creera aucune table : le dire evite de faire
+                // chercher une panne passagere la ou il manque une etape.
+                .having((e) => e.isRetryable, 'isRetryable', isFalse),
+          ),
+        );
+      }
+    });
+
+    test('un 404 sans code reste une panne ordinaire', () async {
+      // Le temoin negatif de l'epreuve precedente. Sans lui, une detection
+      // ecrite « le statut vaut 404 » passerait au vert — et renommerait
+      // « table absente » tout 404, y compris ceux qui n'en sont pas.
+      final banc = _Banc();
+      banc.repondre = (_) async => http.Response('', 404);
+
+      await expectLater(
+        banc.transport.lire(_table('templates')),
+        throwsA(isA<ProviderFailure>()),
+      );
+    });
+
+    test('un corps d\'erreur illisible ne remplace pas la panne', () async {
+      // Le corps d'une erreur n'est pas garanti lisible : un intermediaire peut
+      // servir du HTML, et la specification d'authentification previent
+      // elle-meme que les `5xx` « may serve non-JSON content ». Lire le code
+      // pour reconnaitre une table absente ne doit donc pas **lever** : un corps
+      // qu'on ne sait pas lire rend une table vide, et la decision retombe sur
+      // le statut, qui est toujours la.
+      final banc = _Banc();
+      banc.repondre = (_) async => http.Response('<html>404</html>', 404);
+
+      await expectLater(
+        banc.transport.lire(_table('templates')),
+        throwsA(isA<ProviderFailure>()),
+      );
+    });
+
     test('une coupure reseau et un delai depasse sont traduits', () async {
       final banc = _Banc();
       banc.repondre = (_) async => throw http.ClientException('coupure');

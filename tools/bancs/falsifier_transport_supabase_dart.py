@@ -62,7 +62,7 @@ TESTS = "test/services/transport_supabase_test.dart"
 
 # A mettre a jour en meme temps que le fichier de tests, jamais pour faire
 # passer le banc.
-TESTS_ATTENDUS = 23
+TESTS_ATTENDUS = 26
 
 # --- ancres : au niveau octet, telles que `dart format` les ecrit ---
 
@@ -75,8 +75,32 @@ FENETRE_QUI_AVANCE = b"            'Range': '$debut-${debut + lignesParPage - 1}
 FENETRE_FIGEE = b"            'Range': '0-${lignesParPage - 1}',\n"
 
 # 3. Le `206`, reponse normale d'une lecture bornee.
-ACCEPTE_206 = b"      _verifier(reponse, acceptes: const {200, 206});\n"
-REFUSE_206 = b"      _verifier(reponse, acceptes: const {200});\n"
+#
+# Ces deux ancres ont ete **remesurees** le jour ou `_verifier` a recu le nom de
+# table : elles portaient la ligne sans cet argument, et une ancre qui ne
+# correspond plus fait lever `AncreIntrouvable` — le banc tombe, mais sur une
+# ancre, pas sur une faute. C'est le seul mode de defaillance que ce fichier ne
+# peut pas distinguer d'une vraie regression s'il n'est pas relu.
+ACCEPTE_206 = b"      _verifier(reponse, acceptes: const {200, 206}, table: table);\n"
+REFUSE_206 = b"      _verifier(reponse, acceptes: const {200}, table: table);\n"
+
+# 3 bis. La reconnaissance d'une table absente, par le code du corps.
+DETECTION_PAR_CODE = b"    if (code == 'PGRST205' || code == '42P01') {\n"
+DETECTION_PAR_STATUT = b"    if (reponse.statusCode == 404) {\n"
+TABLE_NOMMEE = b"      throw TablesAbsentesFailure(table ?? 'inconnue');\n"
+TABLE_SANS_NOM = b"      throw TablesAbsentesFailure('inconnue');\n"
+GARDE_DU_CORPS = (
+    b"    try {\n"
+    b"      final decode = jsonDecode(utf8.decode(reponse.bodyBytes));\n"
+    b"      return decode is Map ? decode.cast<String, Object?>() : const {};\n"
+    b"    } on FormatException {\n"
+    b"      return const {};\n"
+    b"    }\n"
+)
+CORPS_SANS_GARDE = (
+    b"    final decode = jsonDecode(utf8.decode(reponse.bodyBytes));\n"
+    b"    return decode is Map ? decode.cast<String, Object?>() : const {};\n"
+)
 
 # 4. Les deux familles de colonnes qui n'entrent pas dans le contenu.
 HORS_CONTENU_SERVEUR = b"        ...?colonnesServeurSeules[tableDistante],\n"
@@ -141,8 +165,11 @@ SESSION_REFUSEE = b"        throw const SessionRefuseeFailure();\n"
 SESSION_CONFONDUE = b"        throw const MissingCredentialFailure();\n"
 LIMITE_DEBIT = b"        throw const RateLimitFailure();\n"
 LIMITE_CONFONDUE = b"        throw const InvalidResponseFailure();\n"
-REESSAYABLE_SELON_STATUT = b"          isRetryable: reponse.statusCode >= 500,\n"
-REESSAYABLE_TOUJOURS = b"          isRetryable: true,\n"
+# L'indentation de ces deux-la a ete remesuree : le `throw ProviderFailure` a
+# quitte le `default:` du `switch` le jour ou la reconnaissance d'une table
+# absente s'est glissee avant lui, et il a donc perdu un niveau.
+REESSAYABLE_SELON_STATUT = b"      isRetryable: reponse.statusCode >= 500,\n"
+REESSAYABLE_TOUJOURS = b"      isRetryable: true,\n"
 COUPURE_TRADUITE = (
     b"    } on http.ClientException {\n      throw const NetworkFailure();\n"
 )
@@ -185,6 +212,19 @@ T_429 = "un 429 est une limite de debit"
 T_RETRY = "un 500 est reessayable"
 T_RESEAU = "une coupure reseau et un delai depasse sont traduits"
 T_CLIENT = "client injecte n"
+# Le marqueur doit etre un fragment du nom **rapporte**, qui est le nom decode.
+# Une apostrophe s'ecrit donc telle quelle — c'est un caractere ordinaire du
+# rapport — et jamais avec l'echappement Dart `\'` du source, qui ne se
+# retrouverait pas dans la sortie.
+#
+# Ce point a coute une mesure : un marqueur ecrit « un corps illisible ne
+# remplace pas la panne » ne trouvait rien, le test s'appelant « un corps
+# **d'erreur** illisible ... ». Le banc annoncait « NON DETECTE » alors que la
+# mutation faisait bien tomber le test. `BancFlutter.cas` refuse desormais de
+# mesurer avec un marqueur qui ne designe aucun test.
+T_TABLE_ABSENTE = "une table absente est nommee"
+T_404_NU = "un 404 sans code reste une panne ordinaire"
+T_CORPS_ILLISIBLE = "corps d'erreur illisible ne remplace pas la panne"
 
 
 def principal() -> int:
@@ -287,6 +327,22 @@ def principal() -> int:
         SESSION_CONFONDUE,
     )
     cas("un 429 n'est plus une limite de debit", T_429, LIMITE_DEBIT, LIMITE_CONFONDUE)
+    # La reconnaissance d'une table absente. Le premier cas est celui qui a
+    # motive ces trois-la : ecrit « le statut vaut 404 », le transport renommait
+    # « table absente » tout `404`, y compris ceux qui n'en sont pas.
+    cas(
+        "tout 404 devient une table absente",
+        T_404_NU,
+        DETECTION_PAR_CODE,
+        DETECTION_PAR_STATUT,
+    )
+    cas("la table n'est plus nommee", T_TABLE_ABSENTE, TABLE_NOMMEE, TABLE_SANS_NOM)
+    cas(
+        "le corps illisible n'est plus rattrape",
+        T_CORPS_ILLISIBLE,
+        GARDE_DU_CORPS,
+        CORPS_SANS_GARDE,
+    )
     cas(
         "tout echec devient reessayable",
         T_RETRY,
@@ -332,7 +388,7 @@ def principal() -> int:
         return code
 
     print(
-        "vert — le transport tombe sur chacune de ses vingt et une fautes, et "
+        "vert — le transport tombe sur chacune de ses vingt-quatre fautes, et "
         "pas sur une reformulation."
     )
     return 0

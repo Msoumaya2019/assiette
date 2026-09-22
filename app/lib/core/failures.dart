@@ -109,6 +109,37 @@ class SessionRefuseeFailure extends AppFailure {
       );
 }
 
+/// Une table du projet n'existe pas sur le serveur.
+///
+/// Distincte de [ProviderFailure], et la distinction est tout l'interet : un
+/// `404` de PostgREST se lisait comme une panne ordinaire, avec le conseil
+/// « reessayez dans un instant ». Ce conseil est **faux** — aucune tentative ne
+/// creera une table — et il envoyait relancer une operation qui ne pouvait pas
+/// aboutir, en laissant croire a un incident passager la ou il manque une etape
+/// d'installation.
+///
+/// Ce message existait deja avant, mais **personne ne pouvait le lire** : le
+/// transport n'etait instancie que par ses propres tests, qui simulent un
+/// serveur. Le jour ou la synchronisation a ete branchee, il est devenu le
+/// premier message qu'un projet neuf affiche — d'ou sa reecriture au meme
+/// moment.
+class TablesAbsentesFailure extends AppFailure {
+  const TablesAbsentesFailure(this.table)
+    : super(
+        'Les tables du projet n\'existent pas encore',
+        hint:
+            'Le script SQL du projet doit etre applique sur le projet Supabase '
+            'avant la premiere synchronisation.',
+      );
+
+  /// La table que le serveur n'a pas trouvee, dans son vocabulaire a lui.
+  ///
+  /// Le rapport nomme deja les tables en echec, donc ce champ n'est pas la
+  /// source de verite : il sert au message d'une table **seule**, quand
+  /// l'ecriture ou la lecture d'une table fille echoue avant tout rapport.
+  final String table;
+}
+
 /// L'adresse ou le mot de passe saisi ne correspondent a aucun compte.
 ///
 /// Distincte de [SessionRefuseeFailure], et la distinction est le point : les

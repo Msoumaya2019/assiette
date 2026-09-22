@@ -79,8 +79,28 @@ RELECTURE = b"  Future<Session?> build() => ref.watch(secureStoreProvider).lireS
 RELECTURE_INERTE = b"  Future<Session?> build() async => null;\n"
 
 # 6. La garde du client, quand la compilation ne porte pas de projet.
-GARDE_PROJET = b"  if (!ref.watch(projetConfigureProvider)) {\n"
-GARDE_ABSENTE = b"  if (false) {\n"
+#
+# L'ancre porte le **bloc entier**, message compris. Mesure : la seule premiere
+# ligne a correspondance double depuis qu'une seconde garde du meme genre existe
+# dans `transportSynchronisationProvider` — et le banc aurait alors retire les
+# deux a la fois, en mesurant « une garde quelque part » au lieu de celle du
+# client. Le message rend l'ancre unique.
+GARDE_PROJET = (
+    b"  if (!ref.watch(projetConfigureProvider)) {\n"
+    b"    throw StateError(\n"
+    b"      'Aucun projet n\\'est configure dans cette compilation : recompiler avec '\n"
+    b"      'SUPABASE_URL et SUPABASE_ANON_KEY.',\n"
+    b"    );\n"
+    b"  }\n"
+)
+GARDE_ABSENTE = (
+    b"  if (false) {\n"
+    b"    throw StateError(\n"
+    b"      'Aucun projet n\\'est configure dans cette compilation : recompiler avec '\n"
+    b"      'SUPABASE_URL et SUPABASE_ANON_KEY.',\n"
+    b"    );\n"
+    b"  }\n"
+)
 
 # --- temoin negatif : une reformulation legitime ---
 

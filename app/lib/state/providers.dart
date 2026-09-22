@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../core/config.dart';
+import '../core/failures.dart';
 import '../data/ciqual_repository.dart';
 import '../data/local/app_database.dart';
 import '../data/openfoodfacts_repository.dart';
@@ -25,6 +26,8 @@ import '../services/meal_analysis_service.dart';
 import '../services/notification_service.dart';
 import '../services/nutrition_calculator.dart';
 import '../services/secure_store.dart';
+import '../services/synchronisation_service.dart';
+import '../services/transport_supabase.dart';
 
 // ---------------------------------------------------------------------------
 // Dependances chargees au demarrage
@@ -350,9 +353,25 @@ class CompteNotifier extends AsyncNotifier<Session?> {
     required String email,
     required String motDePasse,
   }) async {
-    final session = await ref
-        .read(clientAuthentificationProvider)
-        .connecter(email: email, motDePasse: motDePasse);
+    await remplacer(
+      await ref
+          .read(clientAuthentificationProvider)
+          .connecter(email: email, motDePasse: motDePasse),
+    );
+  }
+
+  /// Range une session deja obtenue, et publie l'etat.
+  ///
+  /// **Le trousseau d'abord, l'etat ensuite.** Cet ordre est le seul qui ne
+  /// mente pas : publier une session que le trousseau ne porte pas encore la
+  /// ferait disparaitre au redemarrage suivant, sans que rien n'explique
+  /// l'ecart — l'utilisateur se retrouverait deconnecte sans avoir rien fait.
+  ///
+  /// Ecrit **une seule fois**, et lu par deux chemins : la connexion, et le
+  /// renouvellement d'un jeton perime. Deux copies de cet ordre finiraient par
+  /// diverger, et la divergence ne se verrait qu'au redemarrage — c'est-a-dire
+  /// trop tard pour la comprendre.
+  Future<void> remplacer(Session session) async {
     await ref.read(secureStoreProvider).ecrireSession(session);
     state = AsyncData(session);
   }
@@ -373,6 +392,131 @@ class CompteNotifier extends AsyncNotifier<Session?> {
 final compteProvider = AsyncNotifierProvider<CompteNotifier, Session?>(
   CompteNotifier.new,
 );
+
+// ---------------------------------------------------------------------------
+// Synchronisation
+// ---------------------------------------------------------------------------
+//
+// C'est ici que les deux pieces eprouvees mais **inatteignables** deviennent
+// vivantes : `ServiceSynchronisation` et `TransportSupabase` existaient, etaient
+// entierement falsifies, et n'etaient instancies que par leurs propres tests.
+// Une regle qu'aucune mesure ne separe est un passif ; une regle qu'aucun
+// appelant n'atteint en est un aussi, et celui-la ne se voyait qu'en cherchant
+// qui appelait — c'est-a-dire personne.
+
+/// Le transport qui parle au projet, construit sur la session courante.
+///
+/// **Leve** quand la compilation ne porte pas de projet, ou quand aucun compte
+/// n'est connecte : les deux sont des etats ou une synchronisation n'a pas de
+/// sens, et le dire ici vaut mieux que de laisser partir des requetes sans
+/// jeton, qui reviendraient refusees sans que la cause soit lisible.
+///
+/// La session est **regardee**, et pas seulement lue : quand un renouvellement
+/// publie une session neuve, ce fournisseur se reconstruit avec le nouveau
+/// jeton, et le service qui s'en sert aussi. C'est ce qui rend l'ordre du
+/// renouvellement mesurable — voir `SynchronisationNotifier._sessionUtilisable`.
+final transportSynchronisationProvider = Provider<TransportSynchronisation>((
+  ref,
+) {
+  if (!ref.watch(projetConfigureProvider)) {
+    throw StateError(
+      'Aucun projet n\'est configure dans cette compilation : la '
+      'synchronisation ne peut pas s\'ouvrir.',
+    );
+  }
+
+  final session = ref.watch(compteProvider).value;
+  if (session == null) {
+    throw StateError(
+      'Aucun compte connecte : la synchronisation demande une session.',
+    );
+  }
+
+  return TransportSupabase(
+    url: AppConfig.supabaseUrl,
+    clePublique: AppConfig.supabaseAnonKey,
+    utilisateur: session.utilisateur,
+    jeton: session.jetonAcces,
+  );
+});
+
+/// Le service qui fait converger la base locale et le projet.
+///
+/// Rien n'est decide ici : le service porte la regle d'arbitrage, le transport
+/// porte les conversions. Ce fournisseur ne fait que les assembler, et c'est
+/// exactement ce qui manquait.
+final serviceSynchronisationProvider = Provider<ServiceSynchronisation>((ref) {
+  return ServiceSynchronisation(
+    db: ref.watch(appDatabaseProvider).db,
+    transport: ref.watch(transportSynchronisationProvider),
+  );
+});
+
+/// Le dernier passage, ou `null` tant qu'aucun n'a tourne.
+///
+/// `null` et « rien n'a bouge » ne veulent pas dire la meme chose, et l'ecran
+/// doit pouvoir les distinguer : afficher « tout est a jour » avant toute
+/// tentative ferait passer une absence de mesure pour un resultat.
+class SynchronisationNotifier extends AsyncNotifier<RapportSynchronisation?> {
+  @override
+  Future<RapportSynchronisation?> build() async => null;
+
+  /// Un passage complet, table par table.
+  ///
+  /// **Ne leve pas** : l'echec est publie dans l'etat, ou l'ecran le lit. Le
+  /// service, lui, ne leve deja pas pour une table en echec — il la rapporte, et
+  /// laisse les autres converger. Ce qui peut echouer avant le passage, en
+  /// revanche, est une session absente ou un renouvellement refuse, et cela
+  /// merite d'etre dit a l'utilisateur plutot que compte comme zero ligne.
+  Future<void> synchroniser() async {
+    state = const AsyncLoading();
+    try {
+      await _sessionUtilisable();
+      state = AsyncData(
+        await ref.read(serviceSynchronisationProvider).synchroniser(),
+      );
+    } on Object catch (erreur, pile) {
+      state = AsyncError(erreur, pile);
+    }
+  }
+
+  /// La session a utiliser, renouvelee si elle est perimee.
+  ///
+  /// **Le renouvellement precede la lecture du service**, et c'est toute la
+  /// raison d'etre de cette fonction : le transport est construit a partir de la
+  /// session rangee, donc un service lu avant le renouvellement porterait le
+  /// jeton perime — et **chaque table** serait refusee, avec un message de
+  /// session qui n'expliquerait pas pourquoi. Une relecture ne verrait pas cette
+  /// faute : les deux ecritures sont justes, c'est leur ordre qui compte.
+  ///
+  /// Sans compte, le refus est celui d'une session : c'est le meme geste pour
+  /// l'utilisateur, et `SessionRefuseeFailure` porte deja le bon conseil.
+  ///
+  /// Un renouvellement **refuse** n'efface pas la session rangee. La
+  /// deconnexion est un geste de l'utilisateur, pas un effet de bord d'un
+  /// passage rate : l'effacer ici lui retirerait un compte qu'il n'a pas demande
+  /// a quitter, et le refus, lui, est deja affiche.
+  Future<Session> _sessionUtilisable() async {
+    final session = await ref.read(compteProvider.future);
+    if (session == null) throw const SessionRefuseeFailure();
+
+    if (!session.estExpireeA(DateTime.now().millisecondsSinceEpoch)) {
+      return session;
+    }
+
+    final neuve = await ref
+        .read(clientAuthentificationProvider)
+        .rafraichir(session.jetonRafraichissement);
+    // Rangee avant d'etre publiee : meme ordre que la connexion, meme raison.
+    await ref.read(compteProvider.notifier).remplacer(neuve);
+    return neuve;
+  }
+}
+
+final synchronisationProvider =
+    AsyncNotifierProvider<SynchronisationNotifier, RapportSynchronisation?>(
+      SynchronisationNotifier.new,
+    );
 
 // ---------------------------------------------------------------------------
 // Moteur d'analyse

@@ -11,10 +11,10 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Élément | État |
 | --- | --- |
 | Code source complet, analysé sans avertissement | prêt |
-| 554 tests de l'application, tous verts | prêt |
+| 567 tests de l'application, tous verts | prêt |
 | 18 tests du serveur, tous verts | prêt |
 | Dépôt public | https://github.com/Msoumaya2019/assiette |
-| Flux `ci.yml` — analyse, 554 tests, 9 contrôles | **vert** |
+| Flux `ci.yml` — analyse, 567 tests, 9 contrôles | **vert** |
 | Flux `ci.yml` — migrations Supabase exécutées sur un vrai PostgreSQL | **vert** (35 épreuves) |
 | Flux Android — APK et AAB | **vert**, artefacts signés et vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
@@ -918,12 +918,20 @@ par l'en-tête `Range` ; le **découpage en lots** ; et l'authentification par j
 politiques RLS qui filtrent déjà par utilisateur. Les trois familles de conversion y sont
 appliquées dans les deux sens.
 
-Ce transport n'est pas encore **branché**. Le projet Supabase, lui, existe désormais — mais ses
-tables pas encore : aucun canal privilégié n'existe sur cette machine, et la clé publique ne
-peut pas exécuter de DDL. C'est l'action qui reste. Ce que les tests établissent, c'est qu'on
-envoie ce qu'on croit envoyer — pas que PostgREST en fait ce qu'on croit. Un banc séparé, de
-vingt-deux cas, tient ces règles : il fait tomber chacune des vingt et une fautes qu'il
-fabrique, et pas la reformulation d'un commentaire.
+Ce transport est désormais **branché** : `providers.dart` l'instancie à partir de la session du
+compte, et les réglages ouvrent un passage. Le projet Supabase, lui, existe — mais ses tables pas
+encore : aucun canal privilégié n'existe sur cette machine, et la clé publique ne peut pas
+exécuter de DDL. C'est l'action qui reste. Ce que les tests établissent, c'est qu'on envoie ce
+qu'on croit envoyer — pas que PostgREST en fait ce qu'on croit. Un banc séparé, de vingt-cinq cas,
+tient ces règles : il fait tomber chacune des vingt-quatre fautes qu'il fabrique, et pas la
+reformulation d'un commentaire.
+
+Un `404` de PostgREST était traduit en « la synchronisation a échoué, réessayez dans un instant ».
+C'était **faux**, et ce message n'était jamais atteint : le transport n'était instancié que par ses
+propres tests, qui simulent un serveur. Le jour où le branchement l'a rendu atteignable, il est
+devenu le **premier** message qu'un projet neuf affiche. Le code du corps (`PGRST205`, `42P01`) est
+désormais lu, et distingue « il manque une étape d'installation » de « la requête a échoué » — un
+`404` sans code restant une panne ordinaire, ce qu'un témoin négatif du banc vérifie.
 
 Deux défauts réels ont été trouvés en écrivant ces tests, tous les deux silencieux, et tous les
 deux invisibles à un faux serveur écrit trop gentiment : l'en-tête `Date` était cherché en
@@ -1073,6 +1081,60 @@ comme le faux : cela demande un appareil. Et l'**effacement total** (`Réglages 
 recharge la section : l'appeler en test demanderait de traverser le service d'images, donc une
 ressource absente du harnais.
 
+### La synchronisation, branchée
+
+`ServiceSynchronisation` et `TransportSupabase` existaient, étaient entièrement falsifiés — sept cas
+chacun — et n'étaient **instanciés que par leurs propres tests**. Aucun appelant ne les atteignait :
+une règle qu'aucune mesure ne sépare est un passif, et une règle qu'aucun appelant n'atteint en est
+un aussi. Le branchement comble ce trou, et c'est son seul objet.
+
+Trois fournisseurs, et une règle d'ordre. `transportSynchronisationProvider` construit le transport à
+partir de la **session du compte** ; il refuse de se construire sans projet compilé, ou sans compte
+connecté, et il le dit — deux refus distincts, et deux messages distincts, parce que les confondre
+ferait chercher une adresse de projet là où il faut se connecter. `serviceSynchronisationProvider`
+l'assemble avec la base locale. `SynchronisationNotifier` déclenche un passage et **retient son
+rapport** : `null` (« aucun passage n'a encore eu lieu ») et « rien n'a bougé » ne veulent pas dire
+la même chose, et l'écran doit pouvoir les distinguer.
+
+La règle que le banc mesure, et qu'aucune relecture ne voit : **le renouvellement d'un jeton périmé
+précède la construction du service**. Le transport est bâti à partir de la session rangée ; un
+service lu trop tôt porte le jeton périmé, et **chaque table** est refusée — avec un message de
+session qui n'explique pas pourquoi. Les deux écritures sont justes ; c'est leur **ordre** qui
+compte. Le test regarde donc l'en-tête `Authorization` réellement émis, et le banc fabrique les deux
+fautes : l'ordre inversé, et le renouvellement réussi mais **non publié** — variante plus discrète,
+où le jeton neuf est rangé et jamais envoyé.
+
+Un renouvellement **refusé** n'efface pas la session rangée. La déconnexion est un geste de
+l'utilisateur, pas un effet de bord d'un passage raté : l'effacer ici lui retirerait un compte qu'il
+n'a pas demandé à quitter, et le refus est déjà affiché.
+
+Le passage est **manuel**, et l'écran le dit. Le déclencher à chaque enregistrement de repas
+multiplierait les requêtes pour un résultat aujourd'hui nul — les tables du projet n'existent pas
+encore — et ferait échouer chaque enregistrement en silence. C'est un choix, pas un oubli.
+
+Le banc fait tomber **5 fautes** et laisse passer une reformulation de commentaire. Ce qu'il ne peut
+pas établir : que le projet accepte ces requêtes. Le faux projet répond ce qu'on lui dit de répondre
+— ce fichier établit qu'on envoie le bon jeton au bon endroit, pas que PostgREST en fait ce qu'on
+croit.
+
+Deux mesures ont été nécessaires en chemin, et elles sont écrites ici parce qu'elles se reproduiront.
+**Un `404` de PostgREST était traduit en « réessayez dans un instant »** : faux, et jamais atteint
+tant que le transport n'était instancié que par ses tests — le branchement l'a rendu visible, et il
+est devenu le premier message d'un projet neuf. Le code du corps (`PGRST205`, `42P01`) distingue
+maintenant « il manque une étape d'installation » de « la requête a échoué », un `404` sans code
+restant une panne ordinaire — ce qu'un témoin négatif vérifie. Et le test d'interface de la section
+a montré qu'**après dix tours de `pump`, l'écran affichait encore « Passage en cours… »** : un
+passage fait de vrais échanges — la base SQLite répond depuis un isolat — que le temps simulé de
+`pump` n'avance pas. L'attente rend donc la main au vrai temps, et s'arrête **dès que** le passage a
+rendu la main, plutôt qu'après un délai deviné.
+
+Le harnais des bancs a gagné un garde-fou à cette occasion, et il vient d'une mesure : un **marqueur
+qui ne désigne aucun test** ne peut jamais apparaître dans le rapport. Le banc concluait alors « NON
+DÉTECTÉ » sur une faute pourtant attrapée — reproduite à la main, elle faisait bien tomber le test —
+et invitait à corriger la mutation, c'est-à-dire à **retirer une faute réelle**. `BancFlutter.cas`
+refuse désormais de mesurer avec un tel marqueur, comme `Fichier.muter()` refuse une ancre qui ne
+correspond à rien.
+
 Dans une **liste** de résultats, les aliments qui portent une portion connue sont
 désormais chiffrés par portion, les autres pour 100 g : deux bases dans la même
 liste. C'est la conséquence assumée de la demande initiale (« pas toujours
@@ -1145,10 +1207,11 @@ python3 tools/bancs/falsifier_synchronisation_service_dart.py  # 7 cas — conve
 python3 tools/bancs/falsifier_correspondance_types_dart.py     # 10 cas — types déclarés contre les migrations (Flutter)
 python3 tools/bancs/falsifier_dates_distantes_dart.py          # 7 cas — conversion des horodatages (Flutter)
 python3 tools/bancs/falsifier_colonnes_locales_dart.py         # 7 cas — colonnes propres à l'appareil (Flutter)
-python3 tools/bancs/falsifier_transport_supabase_dart.py       # 22 cas — le transport réel, vers Supabase (Flutter)
+python3 tools/bancs/falsifier_transport_supabase_dart.py       # 25 cas — le transport réel, vers Supabase (Flutter)
 python3 tools/bancs/falsifier_client_authentification_dart.py  # 24 cas — le client d'authentification (Flutter)
 python3 tools/bancs/falsifier_secure_store_dart.py             # 11 cas — la session dans le trousseau (Flutter)
 python3 tools/bancs/falsifier_compte_dart.py                   # 7 cas — le compte : ce qui reste, et dans quel ordre (Flutter)
+python3 tools/bancs/falsifier_synchronisation_etat_dart.py     # 6 cas — le passage : quel jeton part, et ce qui reste (Flutter)
 python3 tools/bancs/falsifier_version_build.py         # 7 cas — version publiée
 python3 tools/bancs/falsifier_check_workflows.py       # 19 cas — validation des flux
 python3 tools/bancs/falsifier_migration_serveur.py     # 18 cas — accord des deux schémas
@@ -1165,18 +1228,19 @@ conclure — et il rapporte désormais **le message du compilateur**, sans quoi 
 la mutation à la main pour savoir ce qui était reproché.
 
 Un mot sur le nombre de tests annoncé dans ce document : c'est celui que l'exécuteur **imprime**
-(`554 tests`), et non le nombre de déclarations `test(` présentes dans les fichiers. Mesure faite
-à six commits : 456 déclarations pour 462 annoncés, puis 492 pour 498, puis 518 pour 524, puis
-532 pour 538, puis 534 pour 540, puis 548 pour 554 — l'écart est petit et constant.
+(`567 tests`), et non le nombre de déclarations `test(` présentes dans les fichiers. Mesure faite
+à sept commits : 456 déclarations pour 462 annoncés, puis 492 pour 498, puis 518 pour 524, puis
+532 pour 538, puis 534 pour 540, puis 548 pour 554, puis 561 pour 567 — l'écart est petit et
+constant.
 
 Ce paragraphe attribuait cet écart aux `setUpAll`/`tearDownAll`, « que l'exécuteur compte comme des
 tests ». **La mesure le contredit**, et c'est écrit ici plutôt que corrigé en silence : il y a
-**10** `setUpAll(` et **0** `tearDownAll(` dans `app/test/`, alors que l'écart vaut 6. La cause
+**12** `setUpAll(` et **0** `tearDownAll(` dans `app/test/`, alors que l'écart vaut 6. La cause
 n'est donc pas établie. Compter les déclarations n'est d'ailleurs pas une base solide : le total
-change selon qu'on inclut `testWidgets(` — 489 `test(` seuls, 548 avec `testWidgets(` — et un
+change selon qu'on inclut `testWidgets(` — 498 `test(` seuls, 561 avec `testWidgets(` — et un
 `test(` apparaît dans un commentaire. Il y en a exactement **un** — `poids_screen_test.dart`, à la
 ligne du commentaire qui explique que les tests de widgets n'ont pas cette contrainte — donc un
-compte brut rend 490 là où un compte en début de ligne rend 489. Ce qui compte reste inchangé : le nombre cité est
+compte brut rend 499 là où un compte en début de ligne rend 498. Ce qui compte reste inchangé : le nombre cité est
 celui que l'exécuteur **imprime**, parce que c'est le seul qu'un lecteur et la CI puissent vérifier
 de la même façon.
 

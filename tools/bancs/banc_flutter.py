@@ -20,6 +20,14 @@ Trois pieges de lecture, tous trois fermes ici
    detectee — en invitant a corriger la mutation, c'est-a-dire a retirer la faute
    que le controle venait d'attraper. `error` compte donc comme un echec.
 
+4. Un **marqueur qui ne correspond a aucun nom de test** ne peut jamais
+   apparaitre dans le rapport. Le banc concluait « NON DETECTE » sur une faute
+   pourtant attrapee, et invitait a corriger la mutation — soit a retirer une
+   faute bien reelle. Mesure : un marqueur ecrit « un corps illisible ne remplace
+   pas la panne » ne trouvait rien, le test s'appelant « un corps **d'erreur**
+   illisible ... ». Reproduite a la main, la mutation faisait bien tomber le
+   test. `BancFlutter.cas` refuse desormais de mesurer avec un tel marqueur.
+
 Partage par les bancs qui falsifient des tests Flutter, pour que tous mesurent
 dans les memes conditions.
 """
@@ -38,8 +46,8 @@ from banc import RACINE, Banc, MesureImpossible  # noqa: E402
 from environnement_flutter import environnement_mesure  # noqa: E402
 
 
-def lire_rapport(sortie: str) -> tuple[int, list[str], list[str]]:
-    """Nombre de tests reellement executes, noms de ceux en echec, erreurs.
+def lire_rapport(sortie: str) -> tuple[int, list[str], list[str], list[str]]:
+    """Tests executes, noms de ceux en echec, erreurs, et **tous** les noms.
 
     Le test `loading` et les groupes sont marques `hidden` : les compter
     gonflerait le total et masquerait un chargement rate.
@@ -51,11 +59,17 @@ def lire_rapport(sortie: str) -> tuple[int, list[str], list[str]]:
     annoncant « Compilation cassee par la mutation, ou total a mettre a jour »
     sans jamais dire ce que le compilateur reprochait. Il fallait reproduire la
     mutation a la main pour l'apprendre.
+
+    Le quatrieme retour existe pour une autre raison, et il a fallu une mesure
+    pour le voir : un **marqueur qui ne correspond a aucun nom de test** ne peut
+    jamais apparaitre dans le rapport. Le banc concluait alors « NON DETECTE » sur
+    une faute pourtant attrapee. Voir `BancFlutter.cas`.
     """
     noms: dict[int, str] = {}
     executes = 0
     echecs: list[str] = []
     erreurs: list[str] = []
+    tous: list[str] = []
 
     for ligne in sortie.splitlines():
         ligne = ligne.strip()
@@ -93,10 +107,12 @@ def lire_rapport(sortie: str) -> tuple[int, list[str], list[str]]:
             if resultat not in ("success", "failure", "error"):
                 continue
             executes += 1
+            nom = noms.get(evenement.get("testID"), "<test inconnu>")
+            tous.append(nom)
             if resultat != "success":
-                echecs.append(noms.get(evenement.get("testID"), "<test inconnu>"))
+                echecs.append(nom)
 
-    return executes, echecs, erreurs
+    return executes, echecs, erreurs, tous
 
 
 class ResultatFlutter:
@@ -104,7 +120,7 @@ class ResultatFlutter:
         self.code = code
         self.sortie = sortie
         self.erreur = erreur
-        self.executes, self.echecs, self.erreurs = lire_rapport(sortie)
+        self.executes, self.echecs, self.erreurs, self.noms = lire_rapport(sortie)
 
     @property
     def texte(self) -> str:
@@ -138,6 +154,9 @@ class BancFlutter(Banc):
         self.flutter = flutter
         self.cible = cible
         self.tests_attendus = tests_attendus
+        # Les noms des tests du dernier passage **reussi**. Ils servent a refuser
+        # un marqueur qui ne designe aucun test — voir [cas].
+        self.noms: list[str] = []
 
     def executer(self) -> ResultatFlutter:  # type: ignore[override]
         resultat = subprocess.run(
@@ -163,4 +182,43 @@ class BancFlutter(Banc):
                 "code de sortie non nul sans aucun test en echec identifie."
             )
 
+        # Les noms ne sont retenus que sur un passage **conforme**. Un passage
+        # casse par une mutation rapporterait une liste tronquee, et les cas
+        # suivants seraient alors refuses a tort.
+        self.noms = mesure.noms
         return mesure
+
+    def cas(self, libelle: str, marqueur: str, appliquer, attendu: bool = True) -> None:
+        """Mesure un cas, apres avoir verifie que le marqueur designe un test.
+
+        Un marqueur qui ne correspond a aucun nom de test ne peut **jamais**
+        apparaitre dans le rapport. Deux consequences, toutes deux fausses :
+
+          - `attendu=True` conclut « NON DETECTE » sur une faute que le controle
+            attrape pourtant, et invite a corriger la mutation — c'est-a-dire a
+            **retirer une faute reelle** ;
+          - `attendu=False` valide un temoin negatif qui ne prouve rien, puisque
+            son absence etait acquise d'avance.
+
+        C'est la meme discipline que `Fichier.muter()`, qui leve quand son ancre
+        ne correspond a rien : une mesure qui n'a pas eu lieu est une erreur du
+        banc, pas un resultat.
+
+        Le cas est **refuse** plutot que signale : un banc dont un cas ne mesure
+        rien ne doit pas se declarer vert.
+        """
+        if self.noms and not any(marqueur in nom for nom in self.noms):
+            print(f"\nBANC INVALIDE — cas « {libelle} »", file=sys.stderr)
+            print(
+                f"  le marqueur {marqueur!r} ne correspond a aucun des "
+                f"{len(self.noms)} tests de {self.cible}.",
+                file=sys.stderr,
+            )
+            print(
+                "  Une mutation ne peut donc pas etre vue, dans un sens comme "
+                "dans l'autre : corriger le marqueur, pas la mutation.",
+                file=sys.stderr,
+            )
+            raise SystemExit(2)
+
+        super().cas(libelle, marqueur, appliquer, attendu)

@@ -32,7 +32,13 @@
 ///     demande donc deux passages : ecrire le repas, **relire son `uuid`**,
 ///     puis rattacher les aliments ;
 ///   - **RLS filtre par `auth.uid()`** : chaque ligne ecrite doit porter son
-///     `user_id`, sinon la politique la refuse.
+///     `user_id`, sinon la politique la refuse ;
+///   - **une table absente se signale par un code, pas par un statut.** PostgREST
+///     repond `404` avec `PGRST205` (« Could not find the table ... in the
+///     schema cache »), et PostgreSQL repond `42P01` quand la requete l'atteint
+///     directement. Ce code est le seul discriminant entre « il manque une
+///     etape d'installation » et « la requete a echoue » ; les confondre fait
+///     chercher une panne passagere la ou il faut appliquer un script.
 ///
 /// Ce que ce transport ne fait pas
 /// -------------------------------
@@ -231,7 +237,7 @@ class TransportSupabase implements TransportSynchronisation {
       // `206` est la reponse normale d'une lecture bornee par `Range`. Ne
       // l'accepter pas ferait echouer toute lecture des qu'une page est
       // demandee, c'est-a-dire toujours.
-      _verifier(reponse, acceptes: const {200, 206});
+      _verifier(reponse, acceptes: const {200, 206}, table: table);
 
       final pageLue = _lignesDe(reponse);
       lignes.addAll(pageLue);
@@ -386,7 +392,7 @@ class TransportSupabase implements TransportSynchronisation {
         body: jsonEncode(corps),
       ),
     );
-    _verifier(reponse, acceptes: const {200, 201, 204});
+    _verifier(reponse, acceptes: const {200, 201, 204}, table: serveur);
 
     final enfant = table.enfant;
     if (enfant == null) return;
@@ -430,7 +436,7 @@ class TransportSupabase implements TransportSynchronisation {
           headers: _entetes(),
         ),
       );
-      _verifier(reponse, acceptes: const {200, 204});
+      _verifier(reponse, acceptes: const {200, 204}, table: serveurEnfant);
     }
 
     final rattaches = <Map<String, Object?>>[];
@@ -460,7 +466,7 @@ class TransportSupabase implements TransportSynchronisation {
           body: jsonEncode(lot),
         ),
       );
-      _verifier(reponse, acceptes: const {200, 201, 204});
+      _verifier(reponse, acceptes: const {200, 201, 204}, table: serveurEnfant);
     }
   }
 
@@ -481,7 +487,7 @@ class TransportSupabase implements TransportSynchronisation {
           headers: _entetes(),
         ),
       );
-      _verifier(reponse);
+      _verifier(reponse, table: 'meals');
       for (final ligne in _lignesDe(reponse)) {
         final uuid = ligne['id'];
         final cle = ligne['client_id'];
@@ -650,7 +656,15 @@ class TransportSupabase implements TransportSynchronisation {
   /// Un `401` ou un `403` n'est pas une panne de reseau : c'est une session
   /// refusee, et l'interface doit le dire autrement — sans quoi l'utilisateur
   /// chercherait un probleme de connexion la ou il faut se reconnecter.
-  void _verifier(http.Response reponse, {Set<int> acceptes = const {200}}) {
+  ///
+  /// [table] est le nom **du serveur**, pas celui du local : c'est lui que le
+  /// message d'une table absente doit nommer, sans quoi l'utilisateur irait
+  /// chercher dans son projet une table qui ne porte pas ce nom.
+  void _verifier(
+    http.Response reponse, {
+    Set<int> acceptes = const {200},
+    String? table,
+  }) {
     if (acceptes.contains(reponse.statusCode)) return;
     switch (reponse.statusCode) {
       case 401:
@@ -658,13 +672,42 @@ class TransportSupabase implements TransportSynchronisation {
         throw const SessionRefuseeFailure();
       case 429:
         throw const RateLimitFailure();
-      default:
-        throw ProviderFailure(
-          'La synchronisation a echoue',
-          hint: 'Reessayez dans un instant.',
-          isRetryable: reponse.statusCode >= 500,
-          statusCode: reponse.statusCode,
-        );
+    }
+
+    // Une table absente se reconnait au **code** que le serveur renvoie, jamais
+    // au statut seul. PostgREST rend `404` avec `PGRST205` — « Could not find
+    // the table ... in the schema cache » — et PostgreSQL rend `42P01` quand la
+    // requete l'atteint directement. Un `404` sans code reste ce qu'il etait :
+    // une panne ordinaire, qu'on ne renomme pas.
+    //
+    // Lire le corps ici ne coute rien et ne peut pas lever : un corps illisible
+    // rend une table vide, donc retombe sur la panne ordinaire.
+    final code = _corpsDe(reponse)['code'];
+    if (code == 'PGRST205' || code == '42P01') {
+      throw TablesAbsentesFailure(table ?? 'inconnue');
+    }
+
+    throw ProviderFailure(
+      'La synchronisation a echoue',
+      hint: 'Reessayez dans un instant.',
+      isRetryable: reponse.statusCode >= 500,
+      statusCode: reponse.statusCode,
+    );
+  }
+
+  /// Le corps decode, s'il est du JSON lisible. Une table vide sinon.
+  ///
+  /// **Ne leve jamais.** C'est ce qui permet de lire le corps d'une reponse
+  /// d'erreur sans risquer d'echanger une panne contre une autre : un corps
+  /// tronque ou non-JSON rend une table vide, et la decision retombe sur le
+  /// statut, qui est toujours la.
+  Map<String, Object?> _corpsDe(http.Response reponse) {
+    if (reponse.bodyBytes.isEmpty) return const {};
+    try {
+      final decode = jsonDecode(utf8.decode(reponse.bodyBytes));
+      return decode is Map ? decode.cast<String, Object?>() : const {};
+    } on FormatException {
+      return const {};
     }
   }
 

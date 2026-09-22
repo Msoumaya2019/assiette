@@ -17,6 +17,15 @@
 /// Ce que ces tests ne peuvent pas mesurer
 /// ---------------------------------------
 /// Que le vrai trousseau se comporte comme le faux. Cela demande un appareil.
+///
+/// La synchronisation, vue depuis l'ecran
+/// --------------------------------------
+/// Le passage lui-meme est eprouve dans `state/synchronisation_test.dart`. Ce
+/// qui est regarde ici est le **chemin de l'utilisateur** : le bouton n'apparait
+/// qu'avec un compte, un passage abouti dit ce qu'il a fait, et un projet sans
+/// tables le dit **en nommant les tables** — c'est le premier message qu'un
+/// projet neuf affiche, et il doit designer l'etape qui manque plutot que
+/// proposer de reessayer.
 library;
 
 import 'dart:convert';
@@ -28,6 +37,7 @@ import 'package:assiette/models/app_settings.dart';
 import 'package:assiette/models/session.dart';
 import 'package:assiette/services/client_authentification.dart';
 import 'package:assiette/services/secure_store.dart';
+import 'package:assiette/services/transport_supabase.dart';
 import 'package:assiette/state/providers.dart';
 import 'package:assiette/ui/screens/settings_screen.dart';
 import 'package:assiette/ui/widgets/common.dart';
@@ -78,6 +88,62 @@ http.Client _serveur(Object? corps, {int statut = 200}) => MockClient(
   ),
 );
 
+/// Une session dont l'expiration est **dans une heure**.
+///
+/// `_sessionRangee` porte une date passee : elle sert a eprouver l'affichage du
+/// compte, et c'est ce qu'il faut pour cela. Un passage qui partirait d'elle
+/// tenterait d'abord un renouvellement — ce qui n'est pas ce que ces tests-ci
+/// regardent.
+Session _sessionValide() => Session(
+  jetonAcces: 'jeton-acces',
+  jetonRafraichissement: 'jeton-rafraichissement',
+  expireLe: DateTime.now().millisecondsSinceEpoch + 3600000,
+  utilisateur: _utilisateur,
+  adresse: _adresse,
+);
+
+/// Un faux projet, pour les passages declenches depuis l'ecran.
+///
+/// Il repond aux deux familles de requetes : l'authentification, et PostgREST.
+/// `tablesAbsentes` reproduit l'etat d'un projet neuf — celui ou les tables du
+/// script n'ont pas encore ete creees.
+class _Projet {
+  _Projet({this.tablesAbsentes = false});
+
+  final bool tablesAbsentes;
+
+  /// Les jetons vus sur les requetes de donnees.
+  final List<String> jetonsVus = [];
+
+  http.Client get client => MockClient((requete) async {
+    if (requete.url.path.contains('/auth/v1/token')) {
+      return http.Response(
+        jsonEncode(_corpsSession()),
+        200,
+        headers: const {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    }
+    if (requete.method == 'HEAD') return http.Response('', 200);
+
+    jetonsVus.add(requete.headers['Authorization'] ?? '<aucun>');
+    if (tablesAbsentes) {
+      return http.Response(
+        jsonEncode({
+          'code': 'PGRST205',
+          'message': 'Could not find the table in the schema cache',
+        }),
+        404,
+        headers: const {'Content-Type': 'application/json; charset=utf-8'},
+      );
+    }
+    return http.Response(
+      '[]',
+      200,
+      headers: const {'Content-Type': 'application/json; charset=utf-8'},
+    );
+  });
+}
+
 void main() {
   late AppDatabase base;
   late CiqualRepository ciqual;
@@ -112,6 +178,7 @@ void main() {
     SecureStore? store,
     http.Client? serveur,
     bool projet = false,
+    _Projet? synchronisation,
   }) async {
     final magasin = store ?? SecureStore(storage: FauxTrousseau());
     // Un ecran assez haut pour que la liste des reglages tienne en entier.
@@ -143,6 +210,24 @@ void main() {
               client: serveur,
             ),
           ),
+        // Le transport de donnees, avec une adresse et un client de
+        // remplacement. Sans cette surcharge, le vrai transport partirait vers
+        // l'adresse vide de cette compilation-ci, et le test mesurerait un echec
+        // de configuration au lieu du passage.
+        if (synchronisation != null)
+          transportSynchronisationProvider.overrideWith((ref) {
+            final session = ref.watch(compteProvider).value;
+            if (session == null) {
+              throw StateError('Aucun compte connecte.');
+            }
+            return TransportSupabase(
+              url: 'https://projet.supabase.co',
+              clePublique: _clePublique,
+              utilisateur: session.utilisateur,
+              jeton: session.jetonAcces,
+              client: synchronisation.client,
+            );
+          }),
       ],
     );
     addTearDown(container.dispose);
@@ -201,6 +286,32 @@ void main() {
     ),
     matching: find.byType(TextField),
   );
+
+  /// Declenche un passage, et attend qu'il ait rendu la main.
+  ///
+  /// `pump` seul ne suffit pas, et c'est une **mesure**, pas une precaution :
+  /// apres dix tours, l'ecran affichait encore « Passage en cours... ». Un
+  /// passage fait de vrais echanges — la base SQLite repond depuis un isolat, et
+  /// le faux projet depuis la boucle d'evenements — que le temps simule de
+  /// `pump` n'avance pas. `runAsync` rend la main au vrai temps pour la duree
+  /// demandee.
+  ///
+  /// L'attente est **bornee et conditionnelle** : elle s'arrete des que le
+  /// passage a rendu la main. Si elle ne s'arretait jamais, les assertions qui
+  /// suivent tomberaient sur « Passage en cours... », ce qui est le bon
+  /// diagnostic — un test qui attend sans borne, lui, ne dirait rien.
+  Future<void> lancerLePassage(WidgetTester tester) async {
+    await tester.tap(find.text('Synchroniser maintenant'));
+    await tester.pump();
+
+    for (var tour = 0; tour < 50; tour++) {
+      if (find.text('Passage en cours...').evaluate().isEmpty) return;
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 20)),
+      );
+      await tester.pump();
+    }
+  }
 
   testWidgets(
     'sans projet, l\'ecran explique au lieu de proposer un formulaire',
@@ -313,5 +424,79 @@ void main() {
     expect(await magasin.lireSession(), isNotNull);
     await defiler(tester, find.text('Se deconnecter'));
     expect(find.text('Connecte : $_adresse'), findsOneWidget);
+  });
+
+  // --- la synchronisation, vue depuis l'ecran -------------------------------
+
+  testWidgets('sans compte, aucune synchronisation n\'est proposee', (
+    tester,
+  ) async {
+    await monte(tester, projet: true);
+
+    await defiler(tester, find.text('Se connecter'));
+
+    // Le bouton n'existe qu'avec une session : le proposer sans compte ferait
+    // partir un passage qui n'aurait aucun jeton a presenter, et l'utilisateur
+    // lirait un refus la ou il n'a rien a faire de plus que se connecter.
+    expect(find.text('Synchroniser maintenant'), findsNothing);
+  });
+
+  testWidgets('un compte connecte propose de synchroniser', (tester) async {
+    final magasin = SecureStore(storage: FauxTrousseau());
+    await magasin.ecrireSession(_sessionValide());
+
+    await monte(tester, store: magasin, projet: true);
+
+    await defiler(tester, find.text('Synchroniser maintenant'));
+
+    expect(find.text('Synchroniser maintenant'), findsOneWidget);
+    // L'ecran dit ce qu'il n'a pas encore fait, au lieu de laisser croire a un
+    // passage qui aurait eu lieu.
+    expect(
+      find.textContaining('Aucun passage n\'a encore eu lieu'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('un passage abouti dit ce qu\'il a fait', (tester) async {
+    final magasin = SecureStore(storage: FauxTrousseau());
+    await magasin.ecrireSession(_sessionValide());
+    final projet = _Projet();
+
+    await monte(tester, store: magasin, projet: true, synchronisation: projet);
+
+    await defiler(tester, find.text('Synchroniser maintenant'));
+    await lancerLePassage(tester);
+
+    // Le jeton de la session est bien celui qui part : sans cela, le passage
+    // aurait ete refuse table par table, et le message l'aurait dit.
+    expect(projet.jetonsVus, isNotEmpty);
+    expect(projet.jetonsVus.toSet(), {'Bearer jeton-acces'});
+    expect(find.textContaining('Tout est deja a jour'), findsOneWidget);
+  });
+
+  testWidgets('un projet sans tables le dit, en nommant les tables', (
+    tester,
+  ) async {
+    final magasin = SecureStore(storage: FauxTrousseau());
+    await magasin.ecrireSession(_sessionValide());
+    final projet = _Projet(tablesAbsentes: true);
+
+    await monte(tester, store: magasin, projet: true, synchronisation: projet);
+
+    await defiler(tester, find.text('Synchroniser maintenant'));
+    await lancerLePassage(tester);
+
+    // Le message **d'installation**, et non un conseil de reessayer : aucune
+    // tentative ne creera une table. C'est le premier message qu'un projet neuf
+    // affiche, donc celui qui doit designer l'etape manquante.
+    expect(
+      find.textContaining('Les tables du projet n\'existent pas encore'),
+      findsNWidgets(6),
+      reason: 'chaque table en echec est nommee, aucune n\'est tue',
+    );
+    // Les tables sont nommees en clair, pas en vocabulaire de base de donnees.
+    expect(find.textContaining('Repas : '), findsOneWidget);
+    expect(find.textContaining('Pesees : '), findsOneWidget);
   });
 }
