@@ -88,6 +88,58 @@ aucun jeton de session n'accompagne alors la requête. **À retirer dès que
 l'authentification est active** — la limitation de débit actuelle ne repose que
 sur l'adresse IP, ce qui ne suffit pas à protéger un service public.
 
+### Quand aucun canal privilégié n'existe
+
+`supabase db push` suppose un projet **lié**, donc un mot de passe de base. Les
+deux autres voies — le jeton de gestion (`sbp_…`, pour
+`POST /v1/projects/{ref}/database/query`) et la connexion directe — supposent le
+même genre de privilège.
+
+Le dépôt, lui, n'en porte **aucun**, et c'est délibéré : la seule clé qui y
+circule est la clé publique `anon`, qui ne peut pas exécuter de DDL. Sur une
+machine où aucun de ces canaux n'a été ouvert, ces trois voies sont donc
+fermées — pas par manque d'essai, mais par construction. Un `npx supabase login`
+y répondrait en refusant le flux automatique hors terminal interactif
+(`Cannot use automatic login flow inside non-TTY environments`).
+
+La voie qui reste est l'**éditeur SQL du tableau de bord**, qui demande de
+coller le SQL. Trois fichiers, c'est trois occasions d'en oublier un :
+
+```bash
+python3 tools/assembler_migrations.py
+```
+
+produit `backend/supabase/a-appliquer-a-la-main.sql` — les trois migrations dans
+l'ordre, précédées d'un en-tête qui dit d'où vient le fichier. Il est **dérivé**
+et à ce titre ignoré par git : le commiter ferait deux sources de vérité pour le
+même schéma. Il vit hors de `migrations/` pour que l'épreuve des migrations et
+un futur `db push` ne le prennent pas pour une migration de plus.
+
+Le script **vérifie** son propre assemblage : il refuse d'écrire si l'une des
+sources n'est pas retrouvée verbatim dans le résultat. Compter les octets ne
+suffirait pas — deux fichiers de même taille s'échangeraient sans être vus.
+
+Ensuite : tableau de bord → **SQL Editor** → *New query* → coller → *Run*.
+
+L'épreuve des migrations a déjà exécuté ce SQL sur un vrai PostgreSQL, y compris
+sa reprise des données de `0003` : le risque n'est pas que le SQL échoue, c'est
+qu'il n'arrive pas entier.
+
+**Vérifier que c'est appliqué** ne demande aucun privilège — seulement la clé
+publique, en lecture :
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" \
+  "https://<ref>.supabase.co/rest/v1/meals?select=id&limit=1" \
+  -H "apikey: <cle-anon>"
+```
+
+`404` avec `PGRST205 — Could not find the table 'public.meals' in the schema
+cache` veut dire « pas encore appliqué ». `200` avec `[]` veut dire « la table
+existe, et la politique RLS ne montre rien à un visiteur sans session » — c'est
+le résultat attendu. Le corps de la réponse distingue donc les deux états, là où
+un simple code ne le ferait pas.
+
 ## Branchement de l'application
 
 `ANALYSIS_ENDPOINT` attend l'URL **de base** des fonctions, pas celle d'une

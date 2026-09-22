@@ -84,3 +84,10 @@ htmlcov/
 # Ils font plusieurs dizaines de Mo et ne doivent jamais entrer dans le depot :
 # un binaire committe est un binaire que personne ne remplace.
 artefacts-a-publier/
+
+# Migrations assemblees en un seul fichier par `tools/assembler_migrations.py`,
+# pour les coller dans l'editeur SQL du tableau de bord quand aucun canal
+# privilegie n'existe. C'est un **derive** des fichiers de `migrations/` : le
+# commiter ferait deux sources de verite pour le meme schema, qui divergeraient
+# au premier changement.
+backend/supabase/a-appliquer-a-la-main.sql

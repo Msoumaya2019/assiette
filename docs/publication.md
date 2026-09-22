@@ -918,11 +918,12 @@ par l'en-tête `Range` ; le **découpage en lots** ; et l'authentification par j
 politiques RLS qui filtrent déjà par utilisateur. Les trois familles de conversion y sont
 appliquées dans les deux sens.
 
-Ce transport n'est pas encore **branché**, et le projet Supabase n'est pas encore créé : c'est
-l'action qui reste. Ce que les tests établissent, c'est qu'on envoie ce qu'on croit envoyer —
-pas que PostgREST en fait ce qu'on croit. Un banc séparé, de vingt-deux cas, tient ces règles :
-il fait tomber chacune des vingt et une fautes qu'il fabrique, et pas la reformulation d'un
-commentaire.
+Ce transport n'est pas encore **branché**. Le projet Supabase, lui, existe désormais — mais ses
+tables pas encore : aucun canal privilégié n'existe sur cette machine, et la clé publique ne
+peut pas exécuter de DDL. C'est l'action qui reste. Ce que les tests établissent, c'est qu'on
+envoie ce qu'on croit envoyer — pas que PostgREST en fait ce qu'on croit. Un banc séparé, de
+vingt-deux cas, tient ces règles : il fait tomber chacune des vingt et une fautes qu'il
+fabrique, et pas la reformulation d'un commentaire.
 
 Deux défauts réels ont été trouvés en écrivant ces tests, tous les deux silencieux, et tous les
 deux invisibles à un faux serveur écrit trop gentiment : l'en-tête `Date` était cherché en
@@ -931,6 +932,29 @@ disparaissait donc **sans un mot**, puisque le service avale cet échec ; et `me
 retenue sur l'appareil, **revenait** du serveur — une clé de plus dans le contenu d'un côté et
 pas de l'autre, donc deux empreintes qui diffèrent à jamais, un arbitrage qui désigne un
 gagnant à chaque passage, et la même ligne réécrite sans fin.
+
+Le premier de ces deux défauts reposait sur une supposition — « l'en-tête est là même sur une
+erreur ». Elle méritait d'être mesurée contre le vrai projet, avec la clé publique seule :
+
+```text
+GET  /rest/v1/        -> 401  {"message":"Invalid API key","hint":"Only the `service_role`
+                               API key can be used for this endpoint."}
+GET  /rest/v1/meals   -> 404  {"code":"PGRST205","message":"Could not find the table
+                               'public.meals' in the schema cache"}
+POST /auth/v1/token   -> 400  {"code":400,"error_code":"invalid_credentials",
+                               "msg":"Invalid login credentials"}
+```
+
+La route racine de PostgREST **refuse la clé publique** : elle exige le rôle `service_role`. La
+sonde d'horloge ne peut donc pas espérer un `200` — et pourtant elle fonctionne, parce qu'elle
+lit l'en-tête `Date` sans exiger un code de succès. Ce qui avait été écrit comme une précaution
+s'est révélé être la condition même du bon fonctionnement : un `_verifier` ajouté là aurait
+transformé chaque synchronisation en « session refusée ». C'est le seul endroit du transport où
+un code d'erreur est accepté, et le test qui le couvre envoie délibérément un `401`.
+
+La troisième ligne est la mesure qui décide de la forme du client d'authentification : le
+serveur répond **`400`**, pas `401`, sur des identifiants invalides — et le discriminant utile
+est `error_code`, pas le code HTTP.
 
 Dans une **liste** de résultats, les aliments qui portent une portion connue sont
 désormais chiffrés par portion, les autres pour 100 g : deux bases dans la même
