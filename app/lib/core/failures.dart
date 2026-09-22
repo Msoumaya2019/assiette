@@ -109,6 +109,34 @@ class SessionRefuseeFailure extends AppFailure {
       );
 }
 
+/// L'adresse ou le mot de passe saisi ne correspondent a aucun compte.
+///
+/// Distincte de [SessionRefuseeFailure], et la distinction est le point : les
+/// deux se ressemblent — un refus d'authentification — mais elles n'appellent
+/// pas le meme geste. Dire « reconnectez-vous » a quelqu'un qui **est** en train
+/// d'essayer de se connecter ne lui apprend rien et le renvoie vers un ecran ou
+/// il est deja.
+class IdentifiantsRefusesFailure extends AppFailure {
+  const IdentifiantsRefusesFailure()
+    : super(
+        'Adresse ou mot de passe incorrect',
+        hint: 'Verifiez la saisie, puis reessayez.',
+      );
+}
+
+/// Le compte existe, mais son adresse n'a pas encore ete confirmee.
+///
+/// Le serveur d'authentification distingue ce cas de celui des identifiants
+/// invalides. Les confondre ferait chercher une faute de frappe dans une saisie
+/// qui etait juste, et l'utilisateur n'aurait aucun moyen de s'en apercevoir.
+class AdresseNonConfirmeeFailure extends AppFailure {
+  const AdresseNonConfirmeeFailure()
+    : super(
+        'Adresse electronique non confirmee',
+        hint: 'Ouvrez le lien recu par courriel, puis reconnectez-vous.',
+      );
+}
+
 /// Le fournisseur a refuse la requete pour une raison de fond.
 class ProviderFailure extends AppFailure {
   /// [isRetryable] distingue une panne passagere (5xx, a relancer) d'un refus

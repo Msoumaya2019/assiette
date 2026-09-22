@@ -11,10 +11,10 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Élément | État |
 | --- | --- |
 | Code source complet, analysé sans avertissement | prêt |
-| 498 tests de l'application, tous verts | prêt |
+| 524 tests de l'application, tous verts | prêt |
 | 18 tests du serveur, tous verts | prêt |
 | Dépôt public | https://github.com/Msoumaya2019/assiette |
-| Flux `ci.yml` — analyse, 498 tests, 9 contrôles | **vert** |
+| Flux `ci.yml` — analyse, 524 tests, 9 contrôles | **vert** |
 | Flux `ci.yml` — migrations Supabase exécutées sur un vrai PostgreSQL | **vert** (35 épreuves) |
 | Flux Android — APK et AAB | **vert**, artefacts signés et vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
@@ -956,6 +956,41 @@ La troisième ligne est la mesure qui décide de la forme du client d'authentifi
 serveur répond **`400`**, pas `401`, sur des identifiants invalides — et le discriminant utile
 est `error_code`, pas le code HTTP.
 
+### Le client d'authentification
+
+C'est la pièce que le transport annonçait sans la contenir : le transport **reçoit** un jeton, il
+ne sait pas en obtenir un. `client_authentification.dart` fait cela — deux requêtes,
+`grant_type=password` et `grant_type=refresh_token` — et rien d'autre.
+
+Trois avertissements de la spécification officielle ont changé la conception, et le troisième a
+été écrit puis **retiré** :
+
+- **les erreurs sont incohérentes.** Le document le dit lui-même : « Error responses are somewhat
+  inconsistent. Avoid using the `msg` and HTTP status code to identify errors. HTTP 400 and 422 are
+  used interchangeably in many apps. » Le discriminant retenu est donc `error_code`, et le statut
+  ne sert que de repli ;
+- **`apikey` est exigé sur chaque point d'entrée**, pas seulement sur celui des jetons ;
+- **un `5xx` peut servir du non-JSON**, et la spécification demande de regarder le `Content-Type`
+  avant de décoder. Un contrôle explicite du type a donc été écrit — puis **retiré**. La lecture du
+  corps ne lève jamais, donc le résultat était *identique* avec et sans lui : aucun test ne pouvait
+  les distinguer, et une règle qu'aucune mesure ne sépare est un passif, parce qu'elle coûte une
+  branche à relire et fait croire à une protection. L'avertissement est satisfait autrement, et plus
+  sûrement : on ne décode que ce qui se décode, une panne qui n'annonce rien reste une panne
+  réessayable, et le banc le mesure.
+
+Deux refus qui se ressemblent ne mènent pas au même geste, et le code a deux types distincts pour
+le dire : `invalid_credentials` devient « Adresse ou mot de passe incorrect », tandis qu'un jeton de
+rafraîchissement mort devient « Session refusée — reconnectez-vous ». Les confondre enverrait
+quelqu'un qui **est** en train de se connecter vers un écran où il est déjà.
+
+Le même `401` est d'ailleurs lu différemment selon l'opération : sur un rafraîchissement il dit
+exactement quoi faire, sur une connexion il ne dit rien de tel. C'est un cas du banc, et il tombe.
+
+Le banc fait tomber **21 fautes** et laisse passer une reformulation de commentaire. Un cas y a été
+ajouté après coup : la rupture de connexion (`ClientException`) n'était couverte par aucun test,
+donc la branche qui la traduit pouvait disparaître sans que rien ne tombe — c'est exactement ce que
+le banc vérifie maintenant.
+
 Dans une **liste** de résultats, les aliments qui portent une portion connue sont
 désormais chiffrés par portion, les autres pour 100 g : deux bases dans la même
 liste. C'est la conséquence assumée de la demande initiale (« pas toujours
@@ -1029,6 +1064,7 @@ python3 tools/bancs/falsifier_correspondance_types_dart.py     # 10 cas — type
 python3 tools/bancs/falsifier_dates_distantes_dart.py          # 7 cas — conversion des horodatages (Flutter)
 python3 tools/bancs/falsifier_colonnes_locales_dart.py         # 7 cas — colonnes propres à l'appareil (Flutter)
 python3 tools/bancs/falsifier_transport_supabase_dart.py       # 22 cas — le transport réel, vers Supabase (Flutter)
+python3 tools/bancs/falsifier_client_authentification_dart.py  # 22 cas — le client d'authentification (Flutter)
 python3 tools/bancs/falsifier_version_build.py         # 7 cas — version publiée
 python3 tools/bancs/falsifier_check_workflows.py       # 19 cas — validation des flux
 python3 tools/bancs/falsifier_migration_serveur.py     # 18 cas — accord des deux schémas
@@ -1045,9 +1081,18 @@ conclure — et il rapporte désormais **le message du compilateur**, sans quoi 
 la mutation à la main pour savoir ce qui était reproché.
 
 Un mot sur le nombre de tests annoncé dans ce document : c'est celui que l'exécuteur **imprime**
-(`498 tests`), et non le nombre de déclarations `test(` présentes dans les fichiers. Mesure faite
-aux deux derniers commits : 456 déclarations pour 462 annoncés, puis 492 pour 498 — l'écart est
-constant, et il vient des `setUpAll`/`tearDownAll`, que l'exécuteur compte comme des tests.
+(`524 tests`), et non le nombre de déclarations `test(` présentes dans les fichiers. Mesure faite
+à trois commits : 456 déclarations pour 462 annoncés, puis 492 pour 498, puis 518 pour 524 —
+l'écart est petit et constant.
+
+Ce paragraphe attribuait cet écart aux `setUpAll`/`tearDownAll`, « que l'exécuteur compte comme des
+tests ». **La mesure le contredit**, et c'est écrit ici plutôt que corrigé en silence : il y a
+**10** `setUpAll(` et **0** `tearDownAll(` dans `app/test/`, alors que l'écart vaut 5 ou 6. La cause
+n'est donc pas établie. Compter les déclarations n'est d'ailleurs pas une base solide : le total
+change selon qu'on inclut `testWidgets(` — 466 `test(` seuls, 519 avec `testWidgets(` — et un
+`test(` peut apparaître dans un commentaire. Ce qui compte reste inchangé : le nombre cité est
+celui que l'exécuteur **imprime**, parce que c'est le seul qu'un lecteur et la CI puissent vérifier
+de la même façon.
 
 `falsifier_migration_serveur.py` couvre les deux côtés et les deux sens. Il
 mutationne le schéma local (colonne ou table ajoutée sans destination), le schéma

@@ -67,6 +67,7 @@ ORDRE = [
     "falsifier_correspondance_types_dart.py",
     "falsifier_dates_distantes_dart.py",
     "falsifier_transport_supabase_dart.py",
+    "falsifier_client_authentification_dart.py",
     "falsifier_version_build.py",
     "falsifier_check_workflows.py",
     "falsifier_client_deepseek.py",
