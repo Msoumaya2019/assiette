@@ -427,7 +427,7 @@ CI, sur cette machine :
 ```bash
 python tools/verifier_version_build.py    # 11 cas sur tools/version_build.sh
 python tools/check_migration_serveur.py   # accord des schémas local et serveur
-python tools/lancer_bancs.py              # les dix-neuf bancs de falsification
+python tools/lancer_bancs.py              # les vingt bancs de falsification
 ```
 
 L'épreuve des migrations, elle, demande Node et le paquet `@electric-sql/pglite`,
@@ -625,8 +625,8 @@ macOS et Linux, `flutter` fonctionne normalement.
 | Base locale en schéma v3 (migrations v1 → v3 et v2 → v3 éprouvées) | Écrit, testé |
 | Notifications (rappels de repas, résumé du soir) | Écrit, testé |
 | Compte et synchronisation | Socle éprouvé (arbitrage, plan, empreinte, lecture/écriture locales, service de convergence à deux appareils, correspondance des noms et des types, conversion des horodatages, colonnes
-retenues sur l'appareil, **transport vers Supabase**, **client d'authentification**). Rien n'est
-encore **branché** dans l'interface : le service et le transport ne sont instanciés nulle part. Les
-tables du projet Supabase restent à créer |
+retenues sur l'appareil, **transport vers Supabase**, **client d'authentification**, **session
+rangée dans le trousseau**). Rien n'est encore **branché** dans l'interface : le service et le
+transport ne sont instanciés nulle part. Les tables du projet Supabase restent à créer |
 | APK et AAB signés, IPA non signée | Produits et vérifiés — release `v0.1.5` (les `v0.1.3` et `v0.1.4` portent un affichage fautif des glucides par portion, ne pas les installer) |
 | Envoi sur l'App Store / le Play Store | Non entamé — demande un compte Google Play et un compte Apple Developer |

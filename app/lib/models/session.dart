@@ -53,4 +53,45 @@ class Session {
     if (expireLe == 0) return false;
     return maintenant + marge.inMilliseconds >= expireLe;
   }
+
+  /// La forme rangee dans le trousseau.
+  ///
+  /// Une seule valeur, ecrite en une fois. Un enregistrement en plusieurs
+  /// morceaux pourrait laisser une session a moitie ecrite — et une session a
+  /// moitie ecrite ne se distingue pas d'une session valide tant qu'on n'a pas
+  /// essaye de s'en servir.
+  Map<String, Object?> versJson() => {
+    'acces': jetonAcces,
+    'rafraichissement': jetonRafraichissement,
+    'expire_le': expireLe,
+    'utilisateur': utilisateur,
+  };
+
+  /// Relit une session rangee, ou rend `null` si la forme ne s'y prete pas.
+  ///
+  /// **Ne leve jamais.** Ce qui est range dans un trousseau peut avoir ete
+  /// ecrit par une version precedente, ou avoir ete tronque : une session
+  /// illisible doit se lire comme « pas de session » — donc « se reconnecter »
+  /// — plutot que faire tomber l'application au demarrage. C'est le seul
+  /// endroit du projet ou une donnee corrompue est une raison de continuer.
+  static Session? depuisJson(Object? json) {
+    if (json is! Map) return null;
+
+    final acces = json['acces'];
+    final rafraichissement = json['rafraichissement'];
+    final expireLe = json['expire_le'];
+    final utilisateur = json['utilisateur'];
+
+    if (acces is! String || acces.isEmpty) return null;
+    if (rafraichissement is! String || rafraichissement.isEmpty) return null;
+    if (expireLe is! int) return null;
+    if (utilisateur is! String || utilisateur.isEmpty) return null;
+
+    return Session(
+      jetonAcces: acces,
+      jetonRafraichissement: rafraichissement,
+      expireLe: expireLe,
+      utilisateur: utilisateur,
+    );
+  }
 }

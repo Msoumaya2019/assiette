@@ -11,10 +11,10 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Élément | État |
 | --- | --- |
 | Code source complet, analysé sans avertissement | prêt |
-| 524 tests de l'application, tous verts | prêt |
+| 538 tests de l'application, tous verts | prêt |
 | 18 tests du serveur, tous verts | prêt |
 | Dépôt public | https://github.com/Msoumaya2019/assiette |
-| Flux `ci.yml` — analyse, 524 tests, 9 contrôles | **vert** |
+| Flux `ci.yml` — analyse, 538 tests, 9 contrôles | **vert** |
 | Flux `ci.yml` — migrations Supabase exécutées sur un vrai PostgreSQL | **vert** (35 épreuves) |
 | Flux Android — APK et AAB | **vert**, artefacts signés et vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
@@ -991,6 +991,41 @@ ajouté après coup : la rupture de connexion (`ClientException`) n'était couve
 donc la branche qui la traduit pouvait disparaître sans que rien ne tombe — c'est exactement ce que
 le banc vérifie maintenant.
 
+### La session dans le trousseau
+
+Le jeton de rafraîchissement est ce qui permet de rouvrir une session **sans mot de passe** au
+lancement suivant : c'est lui, et lui seul, qui doit survivre à la fermeture de l'application. Il va
+donc dans le trousseau du système — Keychain sur iOS, Keystore sur Android — à côté de la clé
+d'analyse du fournisseur, dans le seul fichier du projet qui y touche.
+
+La session y est rangée en **une seule écriture**, sous une seule clé, encodée en JSON. Un
+enregistrement en plusieurs morceaux pourrait laisser une session à moitié écrite — et une session à
+moitié écrite ne se distingue pas d'une session valide tant qu'on n'a pas essayé de s'en servir. Un
+cas du banc le mesure : la mutation qui écrit deux fois fait tomber le test qui compte les écritures.
+
+Un contenu illisible se lit comme une **absence**, jamais comme une erreur. Le trousseau peut
+contenir ce qu'une version précédente y a laissé, ou ce qui a été tronqué ; faire tomber
+l'application au démarrage serait le pire moment pour découvrir une incompatibilité de format. La
+session illisible devient donc « pas de session », donc « se reconnecter » — et le banc fabrique les
+quatre formes de contenu douteux : pas du JSON, pas un objet, un champ absent, un champ de mauvais
+type.
+
+L'adresse du projet et la clé publique, elles, **ne sont pas** dans le trousseau : elles viennent de
+la configuration de compilation, et la clé publique est publique par conception. Les y ranger leur
+donnerait l'apparence d'un secret et ferait croire que leur fuite serait grave — alors que la
+protection repose sur les politiques RLS, pas sur leur confidentialité.
+
+**Deux règles écrites puis retirées, pour la même raison.** Le contrôle du type de contenu dans le
+client d'authentification, et le contrôle d'écriture vide avant décodage ici. Dans les deux cas, le
+résultat était *identique* avec et sans la règle, donc aucun test ne pouvait les distinguer.
+`jsonDecode` refuse déjà le vide et les espaces ; le `catch` couvre tout ce qui n'est pas lisible,
+d'un seul geste. Ce n'est pas une coquetterie : une branche qu'aucune mesure ne sépare est une
+branche qu'on relira sans pouvoir savoir si elle sert encore, et qui fait croire à une protection.
+
+Le banc du trousseau fait tomber **8 fautes** et laisse passer une reformulation de commentaire. Ce
+qu'il **ne peut pas** établir : que le vrai trousseau — Keychain, Keystore — se comporte comme le
+faux stockage en mémoire des tests. Cela demande un appareil, et cela reste à faire.
+
 Dans une **liste** de résultats, les aliments qui portent une portion connue sont
 désormais chiffrés par portion, les autres pour 100 g : deux bases dans la même
 liste. C'est la conséquence assumée de la demande initiale (« pas toujours
@@ -1065,6 +1100,7 @@ python3 tools/bancs/falsifier_dates_distantes_dart.py          # 7 cas — conve
 python3 tools/bancs/falsifier_colonnes_locales_dart.py         # 7 cas — colonnes propres à l'appareil (Flutter)
 python3 tools/bancs/falsifier_transport_supabase_dart.py       # 22 cas — le transport réel, vers Supabase (Flutter)
 python3 tools/bancs/falsifier_client_authentification_dart.py  # 22 cas — le client d'authentification (Flutter)
+python3 tools/bancs/falsifier_secure_store_dart.py             # 9 cas — la session dans le trousseau (Flutter)
 python3 tools/bancs/falsifier_version_build.py         # 7 cas — version publiée
 python3 tools/bancs/falsifier_check_workflows.py       # 19 cas — validation des flux
 python3 tools/bancs/falsifier_migration_serveur.py     # 18 cas — accord des deux schémas
@@ -1082,8 +1118,8 @@ la mutation à la main pour savoir ce qui était reproché.
 
 Un mot sur le nombre de tests annoncé dans ce document : c'est celui que l'exécuteur **imprime**
 (`524 tests`), et non le nombre de déclarations `test(` présentes dans les fichiers. Mesure faite
-à trois commits : 456 déclarations pour 462 annoncés, puis 492 pour 498, puis 518 pour 524 —
-l'écart est petit et constant.
+à quatre commits : 456 déclarations pour 462 annoncés, puis 492 pour 498, puis 518 pour 524, puis
+532 pour 538 — l'écart est petit et constant.
 
 Ce paragraphe attribuait cet écart aux `setUpAll`/`tearDownAll`, « que l'exécuteur compte comme des
 tests ». **La mesure le contredit**, et c'est écrit ici plutôt que corrigé en silence : il y a
