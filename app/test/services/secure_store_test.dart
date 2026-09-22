@@ -19,8 +19,9 @@ import 'dart:convert';
 
 import 'package:assiette/models/session.dart';
 import 'package:assiette/services/secure_store.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'faux_trousseau.dart';
 
 // --- fixtures ---------------------------------------------------------------
 
@@ -38,78 +39,12 @@ Session _session({
   adresse: adresse,
 );
 
-/// Un stockage en memoire, a la place du trousseau du systeme.
-///
-/// Il herite de la facade au lieu de l'implementer : c'est la facade que
-/// `SecureStore` appelle, et c'est donc ses signatures qu'il faut respecter.
-class _FauxTrousseau extends FlutterSecureStorage {
-  final Map<String, String> valeurs = {};
-
-  /// Le nombre d'ecritures. Sert a verifier qu'une session part en **une** fois.
-  int ecritures = 0;
-
-  @override
-  Future<void> write({
-    required String key,
-    required String? value,
-    IOSOptions? iOptions,
-    AndroidOptions? aOptions,
-    LinuxOptions? lOptions,
-    WebOptions? webOptions,
-    MacOsOptions? mOptions,
-    WindowsOptions? wOptions,
-  }) async {
-    ecritures++;
-    if (value == null) {
-      valeurs.remove(key);
-    } else {
-      valeurs[key] = value;
-    }
-  }
-
-  @override
-  Future<String?> read({
-    required String key,
-    IOSOptions? iOptions,
-    AndroidOptions? aOptions,
-    LinuxOptions? lOptions,
-    WebOptions? webOptions,
-    MacOsOptions? mOptions,
-    WindowsOptions? wOptions,
-  }) async => valeurs[key];
-
-  @override
-  Future<void> delete({
-    required String key,
-    IOSOptions? iOptions,
-    AndroidOptions? aOptions,
-    LinuxOptions? lOptions,
-    WebOptions? webOptions,
-    MacOsOptions? mOptions,
-    WindowsOptions? wOptions,
-  }) async {
-    valeurs.remove(key);
-  }
-
-  @override
-  Future<void> deleteAll({
-    IOSOptions? iOptions,
-    AndroidOptions? aOptions,
-    LinuxOptions? lOptions,
-    WebOptions? webOptions,
-    MacOsOptions? mOptions,
-    WindowsOptions? wOptions,
-  }) async {
-    valeurs.clear();
-  }
-}
-
 void main() {
-  late _FauxTrousseau trousseau;
+  late FauxTrousseau trousseau;
   late SecureStore store;
 
   setUp(() {
-    trousseau = _FauxTrousseau();
+    trousseau = FauxTrousseau();
     store = SecureStore(storage: trousseau);
   });
 

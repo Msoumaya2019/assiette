@@ -66,6 +66,17 @@ class AppConfig {
     'SUPABASE_ANON_KEY',
   );
 
+  /// Vrai si cette compilation porte un projet Supabase.
+  ///
+  /// La condition est ecrite **une seule fois**, ici, parce qu'elle a deux
+  /// lecteurs : la section Compte, qui decide d'afficher un formulaire ou une
+  /// explication, et la fabrique du client, qui refuse de construire un client
+  /// sans adresse. Deux copies de cette condition finiraient par diverger, et la
+  /// divergence se lirait comme une panne chez l'utilisateur — un formulaire qui
+  /// ne mene nulle part.
+  static bool get supabaseConfigured =>
+      supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
+
   /// Mode d'analyse par defaut a la premiere ouverture.
   ///
   /// Si un point d'entree serveur est compile, on l'utilise ; sinon l'application

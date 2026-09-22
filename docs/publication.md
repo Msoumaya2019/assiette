@@ -11,10 +11,10 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Élément | État |
 | --- | --- |
 | Code source complet, analysé sans avertissement | prêt |
-| 540 tests de l'application, tous verts | prêt |
+| 554 tests de l'application, tous verts | prêt |
 | 18 tests du serveur, tous verts | prêt |
 | Dépôt public | https://github.com/Msoumaya2019/assiette |
-| Flux `ci.yml` — analyse, 540 tests, 9 contrôles | **vert** |
+| Flux `ci.yml` — analyse, 554 tests, 9 contrôles | **vert** |
 | Flux `ci.yml` — migrations Supabase exécutées sur un vrai PostgreSQL | **vert** (35 épreuves) |
 | Flux Android — APK et AAB | **vert**, artefacts signés et vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
@@ -1043,6 +1043,36 @@ Le banc du trousseau fait tomber **10 fautes** et laisse passer une reformulatio
 qu'il **ne peut pas** établir : que le vrai trousseau — Keychain, Keystore — se comporte comme le
 faux stockage en mémoire des tests. Cela demande un appareil, et cela reste à faire.
 
+### La section Compte
+
+`Session` portait déjà les jetons ; il manquait de quoi les ouvrir. La section **Compte** des
+réglages fait cela : elle demande une adresse et un mot de passe, ouvre la session, la range dans le
+trousseau, et l'application se rouvre sans rien redemander au lancement suivant. Elle dit aussi **de
+quel compte** il s'agit — c'est ce qui a fait ajouter l'adresse au modèle.
+
+Trois états, et un quatrième cas qui n'en est pas un. Sans projet compilé, la section **explique**
+et n'affiche aucun formulaire : proposer une saisie qui ne peut pas aboutir ferait porter à
+l'utilisateur la responsabilité d'une erreur de compilation. Avec un projet et sans session, elle
+propose le formulaire. Avec une session, elle nomme le compte et propose de se déconnecter.
+
+**Une couture a été ajoutée pour rendre la section éprouvable.** `AppConfig` est une constante de
+compilation : dans la compilation des tests — comme dans `ci.yml`, qui lance `flutter test` sans
+`--dart-define` — il n'y a pas de projet, donc le formulaire et l'état connecté auraient été
+**inatteignables en test**. La décision passe donc par `projetConfigureProvider`, que les tests
+surchargent. Même raisonnement que partout ailleurs ici : une interface qu'aucun test ne traverse est
+une interface qu'on ne sait pas cassée.
+
+Le banc du compte fait tomber **6 fautes** et laisse passer une reformulation de commentaire. Il
+tient trois règles : rien n'est écrit avant que le serveur ait répondu ; à la déconnexion, le
+trousseau est effacé **avant** l'état — sinon un effacement raté laisserait une application qui se
+dit déconnectée alors que le redémarrage suivant lui donne tort ; et la session est relue au
+démarrage, sans quoi l'utilisateur devrait se reconnecter à chaque lancement.
+
+Deux choses ne sont pas couvertes, et il vaut mieux l'écrire. Que le **vrai** trousseau se comporte
+comme le faux : cela demande un appareil. Et l'**effacement total** (`Réglages > Données`), qui
+recharge la section : l'appeler en test demanderait de traverser le service d'images, donc une
+ressource absente du harnais.
+
 Dans une **liste** de résultats, les aliments qui portent une portion connue sont
 désormais chiffrés par portion, les autres pour 100 g : deux bases dans la même
 liste. C'est la conséquence assumée de la demande initiale (« pas toujours
@@ -1118,6 +1148,7 @@ python3 tools/bancs/falsifier_colonnes_locales_dart.py         # 7 cas — colon
 python3 tools/bancs/falsifier_transport_supabase_dart.py       # 22 cas — le transport réel, vers Supabase (Flutter)
 python3 tools/bancs/falsifier_client_authentification_dart.py  # 24 cas — le client d'authentification (Flutter)
 python3 tools/bancs/falsifier_secure_store_dart.py             # 11 cas — la session dans le trousseau (Flutter)
+python3 tools/bancs/falsifier_compte_dart.py                   # 7 cas — le compte : ce qui reste, et dans quel ordre (Flutter)
 python3 tools/bancs/falsifier_version_build.py         # 7 cas — version publiée
 python3 tools/bancs/falsifier_check_workflows.py       # 19 cas — validation des flux
 python3 tools/bancs/falsifier_migration_serveur.py     # 18 cas — accord des deux schémas
@@ -1134,18 +1165,18 @@ conclure — et il rapporte désormais **le message du compilateur**, sans quoi 
 la mutation à la main pour savoir ce qui était reproché.
 
 Un mot sur le nombre de tests annoncé dans ce document : c'est celui que l'exécuteur **imprime**
-(`540 tests`), et non le nombre de déclarations `test(` présentes dans les fichiers. Mesure faite
-à cinq commits : 456 déclarations pour 462 annoncés, puis 492 pour 498, puis 518 pour 524, puis
-532 pour 538, puis 534 pour 540 — l'écart est petit et constant.
+(`554 tests`), et non le nombre de déclarations `test(` présentes dans les fichiers. Mesure faite
+à six commits : 456 déclarations pour 462 annoncés, puis 492 pour 498, puis 518 pour 524, puis
+532 pour 538, puis 534 pour 540, puis 548 pour 554 — l'écart est petit et constant.
 
 Ce paragraphe attribuait cet écart aux `setUpAll`/`tearDownAll`, « que l'exécuteur compte comme des
 tests ». **La mesure le contredit**, et c'est écrit ici plutôt que corrigé en silence : il y a
 **10** `setUpAll(` et **0** `tearDownAll(` dans `app/test/`, alors que l'écart vaut 6. La cause
 n'est donc pas établie. Compter les déclarations n'est d'ailleurs pas une base solide : le total
-change selon qu'on inclut `testWidgets(` — 481 `test(` seuls, 534 avec `testWidgets(` — et un
+change selon qu'on inclut `testWidgets(` — 489 `test(` seuls, 548 avec `testWidgets(` — et un
 `test(` apparaît dans un commentaire. Il y en a exactement **un** — `poids_screen_test.dart`, à la
 ligne du commentaire qui explique que les tests de widgets n'ont pas cette contrainte — donc un
-compte brut rend 482 là où un compte en début de ligne rend 481. Ce qui compte reste inchangé : le nombre cité est
+compte brut rend 490 là où un compte en début de ligne rend 489. Ce qui compte reste inchangé : le nombre cité est
 celui que l'exécuteur **imprime**, parce que c'est le seul qu'un lecteur et la CI puissent vérifier
 de la même façon.
 

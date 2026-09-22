@@ -8,9 +8,11 @@ import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/config.dart';
+import '../../core/failures.dart';
 import '../../core/theme.dart';
 import '../../models/app_settings.dart';
 import '../../models/sauvegarde.dart';
+import '../../models/session.dart';
 import '../../services/backup_service.dart';
 import '../../state/providers.dart';
 import '../router.dart';
@@ -287,6 +289,14 @@ class SettingsScreen extends ConsumerWidget {
             const SizedBox(height: AppSpacing.lg),
 
             SectionCard(
+              title: 'Compte',
+              subtitle: 'Pour retrouver vos repas sur vos appareils',
+              child: const _CompteSection(),
+            ),
+
+            const SizedBox(height: AppSpacing.lg),
+
+            SectionCard(
               title: 'Donnees',
               child: Column(
                 children: [
@@ -312,7 +322,8 @@ class SettingsScreen extends ConsumerWidget {
                       style: TextStyle(color: AppColors.danger),
                     ),
                     subtitle: const Text(
-                      'Repas, favoris, repas types, objectifs et cle enregistree',
+                      'Repas, favoris, repas types, objectifs, cle enregistree '
+                      'et session de compte',
                       style: TextStyle(fontSize: 12),
                     ),
                     onTap: () => _confirmErase(context, ref),
@@ -588,9 +599,10 @@ class SettingsScreen extends ConsumerWidget {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Effacer toutes les donnees ?'),
         content: const Text(
-          'Vos repas, favoris, repas types, objectifs, les photos enregistrees et '
-          'votre cle d\'analyse seront supprimes de cet appareil. Cette action est '
-          'definitive et ne peut pas etre annulee.\n\n'
+          'Vos repas, favoris, repas types, objectifs, les photos enregistrees, '
+          'votre cle d\'analyse et votre session de compte seront supprimes de '
+          'cet appareil. Cette action est definitive et ne peut pas etre '
+          'annulee.\n\n'
           'Pour conserver votre historique, exportez d\'abord une sauvegarde '
           'depuis la section Sauvegarde ci-dessus.',
         ),
@@ -764,4 +776,244 @@ class _ApiKeyTileState extends State<_ApiKeyTile> {
       ],
     );
   }
+}
+
+/// La section Compte : se connecter, ou voir de quel compte il s'agit.
+///
+/// Trois cas, et le troisieme n'est pas un etat : un exemplaire compile **sans
+/// projet** ne peut ouvrir aucune session. Il le dit, et n'affiche aucun
+/// formulaire. Proposer une saisie qui ne peut pas aboutir serait le plus sur
+/// moyen de faire porter a l'utilisateur la responsabilite d'une erreur de
+/// compilation.
+class _CompteSection extends ConsumerStatefulWidget {
+  const _CompteSection();
+
+  @override
+  ConsumerState<_CompteSection> createState() => _CompteSectionState();
+}
+
+class _CompteSectionState extends ConsumerState<_CompteSection> {
+  final TextEditingController _adresse = TextEditingController();
+  final TextEditingController _motDePasse = TextEditingController();
+
+  /// Vrai pendant la requete. Empeche une seconde tentative de partir avant que
+  /// la premiere ait repondu : deux requetes pour un seul geste, c'est un refus
+  /// de trop par la limite de debit du serveur.
+  bool _enCours = false;
+
+  /// Le dernier refus, tel qu'il doit etre montre. Efface des qu'on retente.
+  String? _refus;
+
+  @override
+  void dispose() {
+    _adresse.dispose();
+    _motDePasse.dispose();
+    super.dispose();
+  }
+
+  Future<void> _connecter() async {
+    final adresse = _adresse.text.trim();
+    if (adresse.isEmpty || _motDePasse.text.isEmpty) {
+      setState(() {
+        _refus = 'Renseignez votre adresse et votre mot de passe.';
+      });
+      return;
+    }
+
+    setState(() {
+      _enCours = true;
+      _refus = null;
+    });
+
+    try {
+      await ref
+          .read(compteProvider.notifier)
+          .connecter(email: adresse, motDePasse: _motDePasse.text);
+      if (!mounted) return;
+      // Le mot de passe ne reste pas dans le champ : la section peut etre
+      // rouverte apres une deconnexion, et un secret n'a rien a y faire encore.
+      _motDePasse.clear();
+      setState(() => _enCours = false);
+    } on Object catch (erreur) {
+      if (!mounted) return;
+      // `AppFailure.from` rend l'echec tel quel s'il en est deja un : les
+      // messages ecrits dans `failures.dart` arrivent donc intacts.
+      final echec = AppFailure.from(erreur);
+      final hint = echec.hint;
+      setState(() {
+        _enCours = false;
+        _refus = hint == null ? echec.message : '${echec.message}. $hint';
+      });
+    }
+  }
+
+  Future<void> _deconnecter() async {
+    setState(() {
+      _enCours = true;
+      _refus = null;
+    });
+
+    try {
+      await ref.read(compteProvider.notifier).deconnecter();
+    } on Object catch (erreur) {
+      if (!mounted) return;
+      setState(() {
+        _enCours = false;
+        _refus = AppFailure.from(erreur).message;
+      });
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() => _enCours = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!ref.watch(projetConfigureProvider)) {
+      return _note(
+        'Cet exemplaire a ete compile sans projet : le compte et la '
+        'synchronisation ne sont pas disponibles. Recompiler avec SUPABASE_URL '
+        'et SUPABASE_ANON_KEY pour les activer.',
+      );
+    }
+
+    return ref
+        .watch(compteProvider)
+        .when(
+          // La lecture du trousseau est asynchrone : le premier affichage n'a
+          // pas encore de reponse. Une barre discrete le dit, plutot qu'un
+          // formulaire qui apparaitrait puis disparaitrait.
+          loading: () => const Padding(
+            padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
+            child: LinearProgressIndicator(minHeight: 2),
+          ),
+          // Le trousseau lui-meme peut refuser de repondre. On ne fait pas
+          // tomber l'ecran pour autant : on invite a se reconnecter, ce qui est
+          // le remede dans tous les cas ou la lecture echoue.
+          error: (erreur, pile) => _note(
+            'La session enregistree n\'a pas pu etre relue. Reconnectez-vous '
+            'pour la remplacer.',
+          ),
+          data: (session) =>
+              session == null ? _formulaire() : _connecte(session),
+        );
+  }
+
+  Widget _formulaire() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _adresse,
+          keyboardType: TextInputType.emailAddress,
+          autocorrect: false,
+          enableSuggestions: false,
+          textInputAction: TextInputAction.next,
+          decoration: const InputDecoration(labelText: 'Adresse electronique'),
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        TextField(
+          controller: _motDePasse,
+          obscureText: true,
+          autocorrect: false,
+          enableSuggestions: false,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) {
+            if (!_enCours) _connecter();
+          },
+          decoration: const InputDecoration(labelText: 'Mot de passe'),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        FilledButton.icon(
+          onPressed: _enCours ? null : _connecter,
+          icon: _enCours
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.login_rounded, size: 18),
+          label: const Text('Se connecter'),
+        ),
+        if (_refus != null) ...[
+          const SizedBox(height: AppSpacing.sm),
+          _ligneDeRefus(),
+        ],
+        const SizedBox(height: AppSpacing.md),
+        _note(
+          'Votre mot de passe n\'est jamais conserve : seule la session est '
+          'rangee dans le trousseau du telephone. Vos repas restent sur cet '
+          'appareil tant que la synchronisation n\'est pas branchee.',
+        ),
+      ],
+    );
+  }
+
+  Widget _connecte(Session session) {
+    final adresse = session.adresse;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(
+              Icons.check_circle_rounded,
+              size: 18,
+              color: AppColors.success,
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text(
+                // Un compte ouvert par telephone n'a pas d'adresse : le serveur
+                // ne classe pas `email` parmi les champs obligatoires. On le dit
+                // sans le montrer comme un manque.
+                adresse == null ? 'Compte connecte' : 'Connecte : $adresse',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sm),
+        _note(
+          'La session est rangee dans le trousseau du telephone : '
+          'l\'application se rouvre sans redemander le mot de passe.',
+        ),
+        const SizedBox(height: AppSpacing.md),
+        OutlinedButton.icon(
+          onPressed: _enCours ? null : _deconnecter,
+          icon: const Icon(Icons.logout_rounded, size: 18),
+          label: const Text('Se deconnecter'),
+        ),
+        if (_refus != null) ...[
+          const SizedBox(height: AppSpacing.sm),
+          _ligneDeRefus(),
+        ],
+      ],
+    );
+  }
+
+  Widget _ligneDeRefus() => Text(
+    _refus!,
+    style: const TextStyle(
+      fontSize: 12,
+      color: AppColors.danger,
+      fontWeight: FontWeight.w600,
+    ),
+  );
+
+  Widget _note(String texte) => Text(
+    texte,
+    style: TextStyle(
+      fontSize: 12,
+      height: 1.4,
+      color: context.palette.mutedText,
+    ),
+  );
 }

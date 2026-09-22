@@ -16,8 +16,10 @@ import '../models/goals.dart';
 import '../models/meal.dart';
 import '../models/nutrition_values.dart';
 import '../models/portion.dart';
+import '../models/session.dart';
 import '../models/suivi_poids.dart';
 import '../services/backup_service.dart';
+import '../services/client_authentification.dart';
 import '../services/image_service.dart';
 import '../services/meal_analysis_service.dart';
 import '../services/notification_service.dart';
@@ -250,6 +252,10 @@ class SettingsNotifier extends Notifier<AppSettings> {
     // sur le telephone apres une demande d'effacement.
     await ref.read(imageServiceProvider).deleteAll();
     state = const AppSettings();
+    // La session de compte vient de partir avec le reste : `wipe` efface **tout**
+    // le trousseau. L'etat doit suivre, sans quoi l'ecran continuerait
+    // d'afficher un compte connecte dont il ne reste plus rien sur l'appareil.
+    ref.invalidate(compteProvider);
     ref.invalidate(mealsProvider);
     ref.invalidate(favoritesProvider);
     ref.invalidate(templatesProvider);
@@ -279,6 +285,93 @@ class SettingsNotifier extends Notifier<AppSettings> {
 
 final settingsProvider = NotifierProvider<SettingsNotifier, AppSettings>(
   SettingsNotifier.new,
+);
+
+// ---------------------------------------------------------------------------
+// Compte
+// ---------------------------------------------------------------------------
+
+/// Vrai si cette compilation porte un projet Supabase.
+///
+/// La decision passe par un provider au lieu d'etre lue directement depuis
+/// `AppConfig` par l'ecran, et c'est ce qui rend la section Compte eprouvable :
+/// `AppConfig` est une constante de compilation, donc sans cette couture le
+/// formulaire et l'etat connecte seraient **inatteignables en test**. Une
+/// interface qu'aucun test ne traverse est une interface qu'on ne sait pas
+/// cassee — et les tests d'interface de ce projet ont deja trouve deux defauts
+/// qu'aucun test de modele ne pouvait voir.
+final projetConfigureProvider = Provider<bool>(
+  (ref) => AppConfig.supabaseConfigured,
+);
+
+/// Le client du serveur d'authentification.
+///
+/// L'adresse du projet et la cle publique viennent de la **compilation**
+/// (`--dart-define`), pas de la base locale : ce ne sont pas des reglages que
+/// l'utilisateur peut changer, et les y ranger laisserait croire le contraire.
+///
+/// **Leve** quand la compilation ne porte pas de projet. Un exemplaire sans
+/// projet ne peut ouvrir aucune session : le dire ici vaut mieux que de laisser
+/// partir une requete vers une adresse vide, qui echouerait plus loin avec un
+/// message qui ne dirait rien de la cause. C'est le meme choix que le moteur
+/// d'analyse, qui refuse de se construire sans point d'entree.
+final clientAuthentificationProvider = Provider<ClientAuthentification>((ref) {
+  if (!ref.watch(projetConfigureProvider)) {
+    throw StateError(
+      'Aucun projet n\'est configure dans cette compilation : recompiler avec '
+      'SUPABASE_URL et SUPABASE_ANON_KEY.',
+    );
+  }
+  return ClientAuthentification(
+    url: AppConfig.supabaseUrl,
+    clePublique: AppConfig.supabaseAnonKey,
+  );
+});
+
+/// La session du compte, lue dans le trousseau.
+///
+/// `null` veut dire « aucun compte connecte », et rien d'autre. Un echec de
+/// connexion ne se range pas ici : c'est l'ecran qui le montre, le temps d'une
+/// tentative. Le ranger dans l'etat ferait dire « deconnecte » a une
+/// application qui n'a jamais ete connectee — ce qui est vrai, mais effacerait
+/// la raison du refus, qui est la seule chose utile a ce moment-la.
+class CompteNotifier extends AsyncNotifier<Session?> {
+  @override
+  Future<Session?> build() => ref.watch(secureStoreProvider).lireSession();
+
+  /// Ouvre une session, puis la range dans le trousseau.
+  ///
+  /// **Rien n'est ecrit avant que le serveur ait repondu.** Une session de
+  /// secours serait pire qu'aucune session : elle ferait croire a une connexion
+  /// qui n'existe pas, et l'erreur ne se verrait qu'a la premiere requete de
+  /// donnees, loin d'ici. L'echec remonte tel quel — l'appelant sait quel
+  /// message montrer, et `AppFailure` porte deja le bon.
+  Future<void> connecter({
+    required String email,
+    required String motDePasse,
+  }) async {
+    final session = await ref
+        .read(clientAuthentificationProvider)
+        .connecter(email: email, motDePasse: motDePasse);
+    await ref.read(secureStoreProvider).ecrireSession(session);
+    state = AsyncData(session);
+  }
+
+  /// Ferme la session : **le trousseau d'abord, l'etat ensuite**.
+  ///
+  /// Cet ordre est le seul qui ne mente pas. Effacer l'etat d'abord laisserait,
+  /// si l'effacement echouait, une application qui se dit deconnectee alors que
+  /// le trousseau porte encore une session — et le redemarrage suivant lui
+  /// donnerait tort, sans que rien n'explique l'ecart. Ici, un effacement rate
+  /// laisse l'ecran dire la verite : le compte est toujours connecte.
+  Future<void> deconnecter() async {
+    await ref.read(secureStoreProvider).effacerSession();
+    state = const AsyncData(null);
+  }
+}
+
+final compteProvider = AsyncNotifierProvider<CompteNotifier, Session?>(
+  CompteNotifier.new,
 );
 
 // ---------------------------------------------------------------------------
