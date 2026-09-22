@@ -67,5 +67,37 @@ void main() {
       expect(apercu.valeurs.carbs, yaourt.per100g.carbs);
       expect(apercu.reference, 'pour 100 g');
     });
+
+    test('une liste recoit de quoi comparer deux produits', () {
+      // Une liste sert a comparer. Le chiffre comparable est rendu avec les
+      // autres, et il porte bien sur les 100 g : le rendre identique aux
+      // valeurs de la portion — le piege evident — ferait croire que le pot et
+      // 100 g pesent pareil.
+      final apercu = apercuDePortion(yaourt, pot);
+      expect(apercu.comparable, isNotNull);
+      expect(apercu.comparable!.carbs, closeTo(yaourt.per100g.carbs, 0.001));
+      expect(
+        apercu.comparable!.carbs,
+        isNot(closeTo(apercu.valeurs.carbs, 0.001)),
+      );
+    });
+
+    test('sans portion, il n\'y a rien a comparer', () {
+      // L'apercu **est** alors la valeur des 100 g : l'ecrire une seconde fois
+      // serait du bruit, et laisserait croire a une seconde mesure.
+      expect(apercuDePortion(yaourt, null).comparable, isNull);
+    });
+
+    test('une portion inexploitable ne laisse pas de comparable orphelin', () {
+      // Meme garde-fou que pour les valeurs : si l'apercu retombe sur les
+      // 100 g, la ligne comparable doit disparaitre avec la portion, sinon
+      // l'ecran afficherait deux fois le meme chiffre sous deux etiquettes.
+      final apercu = apercuDePortion(
+        yaourt,
+        const Portion(label: 'pot', grams: 0),
+      );
+      expect(apercu.reference, reference100g);
+      expect(apercu.comparable, isNull);
+    });
   });
 }

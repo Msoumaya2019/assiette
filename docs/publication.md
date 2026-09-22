@@ -11,10 +11,10 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Élément | État |
 | --- | --- |
 | Code source complet, analysé sans avertissement | prêt |
-| 583 tests de l'application, tous verts | prêt |
+| 590 tests de l'application, tous verts | prêt |
 | 18 tests du serveur, tous verts | prêt |
 | Dépôt public | https://github.com/Msoumaya2019/assiette |
-| Flux `ci.yml` — analyse, 583 tests, 8 contrôles | **vert** |
+| Flux `ci.yml` — analyse, 590 tests, 8 contrôles | **vert** |
 | Flux `ci.yml` — migrations Supabase exécutées sur un vrai PostgreSQL | **vert** (35 épreuves) |
 | Flux Android — APK et AAB | **vert**, artefacts signés et vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
@@ -1136,11 +1136,38 @@ refuse désormais de mesurer avec un tel marqueur, comme `Fichier.muter()` refus
 correspond à rien.
 
 Dans une **liste** de résultats, les aliments qui portent une portion connue sont
-désormais chiffrés par portion, les autres pour 100 g : deux bases dans la même
-liste. C'est la conséquence assumée de la demande initiale (« pas toujours
-100 g »), et l'étiquette dit toujours sur quoi porte le chiffre — mais comparer
-deux produits y demande de la lire. Revenir à une base unique pour les seules
-listes reste un choix ouvert.
+chiffrés par portion, les autres pour 100 g : deux bases dans la même liste. C'est
+la conséquence assumée de la demande initiale (« pas toujours 100 g »), et
+l'étiquette dit toujours sur quoi porte le chiffre — mais comparer deux produits y
+demandait de la lire.
+
+Le choix est tranché, et il ne l'a pas été **contre** la demande initiale.
+`apercuDePortion` rend désormais, avec les valeurs et leur étiquette, le **chiffre
+comparable** : les mêmes valeurs ramenées à 100 g, et `null` quand l'aperçu *est*
+déjà la valeur des 100 g. La portion reste mise en avant — c'est ce que
+l'utilisateur mange, et ce qu'il a demandé — et le chiffre comparable vient **à
+côté**, jamais à la place. Les résultats de recherche et les favoris l'affichent
+sous la valeur de la portion.
+
+La ligne est construite en un seul endroit (`ligneComparable`,
+`ui/widgets/common.dart`), et c'est là que le défaut est né : un écran annonçait
+« 12 g de glucides pour 1 pot (125 g) », où 12 est la valeur des 100 g. Une ligne
+qui prendrait son nombre ici et son étiquette là reproduit exactement cette faute ;
+c'est ce que le banc fabrique, avant de laisser passer la fonction. Deux bancs
+tiennent l'ensemble : `falsifier_apercu_aliment_dart.py` pour ce que l'aperçu rend,
+`falsifier_ligne_comparable_dart.py` pour ce que la liste en écrit.
+
+Ce que ces deux bancs **ne** couvrent pas, et il faut le dire : les deux tuiles
+elles-mêmes n'ont pas de test d'interface. Ce qui est tenu, c'est que la ligne soit
+construite en un seul endroit et que cet endroit soit juste — non que les écrans
+l'appellent. Une tuile qui se remettrait à composer son texte seule échapperait donc
+aux deux bancs.
+
+Ce que cela ne résout pas non plus : deux produits dont un seul a une portion
+demandent encore de lire la petite ligne pour être comparés. Une base unique pour
+les seules listes ferait disparaître cette lecture — au prix de la valeur par
+portion, qui est ce que l'utilisateur a demandé. Le choix inverse reste donc
+ouvert, mais il coûterait quelque chose de nommé.
 
 ### L'horloge, corrigée par celle du serveur
 
@@ -1263,6 +1290,8 @@ python3 tools/bancs/falsifier_proxy_dart.py            # 6 cas — mode proxy (F
 python3 tools/bancs/falsifier_arbitrage_dart.py        # 5 cas — règle d'arbitrage (Flutter)
 python3 tools/bancs/falsifier_horloge_dart.py          # 7 cas — l'horloge corrigée par le serveur (Flutter)
 python3 tools/bancs/falsifier_pierres_tombales_dart.py # 3 cas — les deux dates d'une suppression (Flutter)
+python3 tools/bancs/falsifier_apercu_aliment_dart.py   # 4 cas — la portion, et le chiffre comparable (Flutter)
+python3 tools/bancs/falsifier_ligne_comparable_dart.py # 4 cas — la ligne comparable des listes (Flutter)
 python3 tools/bancs/falsifier_synchronisation_dart.py  # 7 cas — plan de synchronisation (Flutter)
 python3 tools/bancs/falsifier_synchronisation_locale_dart.py  # 7 cas — lecture/écriture locales (Flutter)
 python3 tools/bancs/falsifier_synchronisation_service_dart.py  # 9 cas — convergence de deux appareils (Flutter)
@@ -1290,17 +1319,17 @@ conclure — et il rapporte désormais **le message du compilateur**, sans quoi 
 la mutation à la main pour savoir ce qui était reproché.
 
 Un mot sur le nombre de tests annoncé dans ce document : c'est celui que l'exécuteur **imprime**
-(`583 tests`), et non le nombre de déclarations `test(` présentes dans les fichiers. Mesure faite
-à neuf commits : 456 déclarations pour 462 annoncés, puis 492 pour 498, puis 518 pour 524, puis
-532 pour 538, puis 534 pour 540, puis 548 pour 554, puis 561 pour 567, puis 577 pour 583 — l'écart
-est petit et constant.
+(`590 tests`), et non le nombre de déclarations `test(` présentes dans les fichiers. Mesure faite
+neuf fois : 456 déclarations pour 462 annoncés, puis 492 pour 498, puis 518 pour 524, puis
+532 pour 538, puis 534 pour 540, puis 548 pour 554, puis 561 pour 567, puis 577 pour 583, puis
+584 pour 590 — l'écart est petit et constant.
 
 Ce paragraphe attribuait cet écart aux `setUpAll`/`tearDownAll`, « que l'exécuteur compte comme des
 tests ». **La mesure le contredit** : il y a **12** `setUpAll(` et **0** `tearDownAll(` dans
 `app/test/`. La cause est maintenant établie, et elle est plus simple — et plus intéressante.
 
-Le rapport **JSON** de `flutter test` sépare les entrées : **642** `testDone`, dont **59 masquées**
-(les crochets de groupe) et **583 visibles**. Aucune entrée visible ne commence par `(` : l'exécuteur
+Le rapport **JSON** de `flutter test` sépare les entrées : **650** `testDone`, dont **60 masquées**
+(les crochets de groupe) et **590 visibles**. Aucune entrée visible ne commence par `(` : l'exécuteur
 ne compte donc **pas** les crochets comme des tests. Et aucun nom n'apparaît deux fois, donc aucune
 boucle ne fabrique de tests. La comparaison fichier par fichier, littéral contre exécuté, ne désigne
 qu'un seul écart : `backup_service_test.dart` porte **37** déclarations `test(` et le coureur en
@@ -1310,14 +1339,14 @@ une déclaration. Ce n'est donc pas une anomalie du coureur, c'est un motif — 
 test, et le nommer coûte une ligne.
 
 Compter les déclarations n'est d'ailleurs pas une base solide : le total change selon qu'on inclut
-`testWidgets(` — 514 `test(` seuls, 577 avec `testWidgets(` — et un `test(` apparaît dans un
+`testWidgets(` — 521 `test(` seuls, 584 avec `testWidgets(` — et un `test(` apparaît dans un
 commentaire. Il y en a exactement **un** — `poids_screen_test.dart`, à la ligne du commentaire qui
-explique que les tests de widgets n'ont pas cette contrainte — donc un compte brut rend 515 là où un
-compte en début de ligne rend 514. Un second piège du même genre : les **63** `testWidgets` sont tous
-rattachés par le rapport à `widget_tester.dart` et non à leur propre fichier, si bien que six fichiers
-de widgets paraissent n'avoir aucun test. Ce qui compte reste inchangé : le nombre cité est celui que
-l'exécuteur **imprime**, parce que c'est le seul qu'un lecteur et la CI puissent vérifier de la même
-façon.
+explique que les tests de widgets n'ont pas cette contrainte — donc un compte brut rend 522 là où un
+compte réel rend 521. Un second piège du même genre : les **63** `testWidgets` sont tous rattachés
+par le rapport à `widget_tester.dart` et non à leur propre fichier, si bien que six fichiers de
+widgets paraissent n'avoir aucun test — 36 suites, dont 30 portent des tests. Ce qui compte reste
+inchangé : le nombre cité est celui que l'exécuteur **imprime**, parce que c'est le seul qu'un lecteur
+et la CI puissent vérifier de la même façon.
 
 `falsifier_migration_serveur.py` couvre les deux côtés et les deux sens. Il
 mutationne le schéma local (colonne ou table ajoutée sans destination), le schéma

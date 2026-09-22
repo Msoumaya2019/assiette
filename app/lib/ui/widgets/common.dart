@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/formatters.dart';
 import '../../core/theme.dart';
+import '../../models/apercu_aliment.dart';
 import '../../models/nutrition_values.dart';
 
 /// Carte de section, avec titre optionnel et contenu.
@@ -518,4 +519,27 @@ class ConfidenceChip extends StatelessWidget {
       ),
     );
   }
+}
+
+/// La ligne comparable d'un apercu, ou `null` quand il n'y a rien a comparer.
+///
+/// Une **liste** sert a comparer, et deux produits dont l'un est chiffre pour
+/// un pot et l'autre pour 100 g ne se comparent pas sans un calcul mental. Cette
+/// ligne rend le chiffre comparable lisible, sans retirer la portion mise en
+/// avant : elle vient **a cote**, jamais a la place.
+///
+/// Le nombre et son etiquette sont produits **ici, ensemble**, et c'est tout
+/// l'objet de cette fonction : un ecran qui ecrirait `apercu.reference` a cote
+/// du chiffre des 100 g reproduirait exactement le defaut que
+/// [apercuDePortion] existe pour empecher — « 12 g de glucides pour 1 pot
+/// (125 g) », ou 12 est la valeur des 100 g.
+///
+/// Un seul endroit, donc : les deux listes de l'application l'appellent, et
+/// aucune ne peut se tromper d'etiquette toute seule.
+String? ligneComparable(Apercu apercu) {
+  final comparable = apercu.comparable;
+  if (comparable == null) {
+    return null;
+  }
+  return 'soit ${Format.number(comparable.carbs)} g de glucides $reference100g';
 }

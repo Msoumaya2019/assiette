@@ -489,6 +489,19 @@ class _FoodTile extends ConsumerWidget {
                       apercu.reference,
                       style: TextStyle(fontSize: 11, color: palette.mutedText),
                     ),
+                    // Le chiffre comparable, et seulement quand les deux bases
+                    // different : sans lui, deux produits de la meme liste ne
+                    // se comparent qu'en lisant l'etiquette de chacun et en
+                    // faisant le calcul soi-meme. La ligne est construite
+                    // ailleurs, une seule fois pour les deux listes.
+                    if (ligneComparable(apercu) case final ligne?)
+                      Text(
+                        ligne,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: palette.mutedText,
+                        ),
+                      ),
                   ],
                 ),
               ),

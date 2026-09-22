@@ -225,6 +225,19 @@ class _FavoriteTile extends ConsumerWidget {
         : ref.read(portionsProvider.notifier).pour(food);
     final apercu = food == null ? null : apercuDePortion(food, portion);
 
+    // Le chiffre comparable n'apparait que si les deux bases different — sans
+    // lui, deux favoris chiffres sur deux bases ne se comparent qu'en faisant
+    // le calcul soi-meme. La ligne est construite ailleurs, une seule fois
+    // pour les deux listes.
+    final sousTitre = apercu == null
+        ? null
+        : [
+            '${Format.carbs(apercu.valeurs.carbs)} g glucides '
+                '${apercu.reference}',
+            if (ligneComparable(apercu) case final ligne?) ligne,
+            food!.source.displayLabel,
+          ].join(' · ');
+
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: Container(
@@ -249,11 +262,10 @@ class _FavoriteTile extends ConsumerWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
       ),
-      subtitle: food == null || apercu == null
+      subtitle: sousTitre == null
           ? null
           : Text(
-              '${Format.carbs(apercu.valeurs.carbs)} g glucides '
-              '${apercu.reference} · ${food.source.displayLabel}',
+              sousTitre,
               style: TextStyle(fontSize: 12, color: palette.mutedText),
             ),
       trailing: Row(

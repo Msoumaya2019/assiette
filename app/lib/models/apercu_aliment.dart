@@ -2,6 +2,21 @@ import 'food.dart';
 import 'nutrition_values.dart';
 import 'portion.dart';
 
+/// L'unite de reference de toutes les tables, nommee une seule fois.
+///
+/// Deux copies de cette chaine finiraient par diverger, et c'est precisement ce
+/// que ce fichier existe pour empecher.
+const String reference100g = 'pour 100 g';
+
+/// Ce qu'un ecran recoit pour chiffrer un aliment : les valeurs, l'unite sur
+/// laquelle elles portent, et — quand les deux bases different — les memes
+/// valeurs ramenees a 100 g.
+typedef Apercu = ({
+  NutritionValues valeurs,
+  String reference,
+  NutritionValues? comparable,
+});
+
 /// Un apercu de valeurs, **et** l'unite sur laquelle il porte.
 ///
 /// Les deux sont produits ensemble, par la meme fonction, parce qu'ils se sont
@@ -19,15 +34,27 @@ import 'portion.dart';
 /// chiffre affiche vaut pour une portion qui n'existe pas. Une portion de poids
 /// nul ou negatif est traitee comme absente : [NutritionValues.forGrams] rend
 /// alors zero, et l'ecran afficherait « 0 g de glucides pour 0 g ».
-({NutritionValues valeurs, String reference}) apercuDePortion(
-  Food food,
-  Portion? portion,
-) {
+///
+/// [comparable] porte les memes valeurs ramenees a 100 g, et vaut `null` quand
+/// l'apercu **est** deja la valeur des 100 g — l'ecrire deux fois serait du
+/// bruit.
+///
+/// Il existe pour une raison precise : une **liste** sert a comparer, et deux
+/// produits dont l'un est chiffre pour un pot et l'autre pour 100 g ne se
+/// comparent pas sans un calcul mental. Le chiffre comparable est donc rendu
+/// avec les autres ; l'ecran n'a plus qu'a l'ecrire, et ne peut pas le
+/// recalculer de travers puisqu'il ne le calcule pas.
+///
+/// La portion reste la valeur mise en avant, et c'est un choix assume : c'est
+/// ce que l'utilisateur mange, et ce qu'il a demande (« pas toujours 100 g »).
+/// Le chiffre comparable vient **a cote**, jamais a la place.
+Apercu apercuDePortion(Food food, Portion? portion) {
   if (portion == null || !portion.estValide) {
-    return (valeurs: food.per100g, reference: 'pour 100 g');
+    return (valeurs: food.per100g, reference: reference100g, comparable: null);
   }
   return (
     valeurs: food.per100g.forGrams(portion.grams),
     reference: 'pour ${portion.etiquetteUnite}',
+    comparable: food.per100g,
   );
 }

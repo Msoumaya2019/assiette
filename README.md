@@ -91,6 +91,23 @@ contient 15. Les deux viennent maintenant du **même appel**
 peut plus désigner une autre unité que celle des valeurs. Les binaires publiés
 `v0.1.3` et `v0.1.4` portent l'ancien affichage.
 
+Une **liste** sert à comparer, et deux produits dont l'un est chiffré pour un pot
+et l'autre pour 100 g ne se comparent pas sans un calcul mental. Les résultats de
+recherche et les favoris affichent donc, sous la valeur de la portion, le chiffre
+comparable :
+
+```
+pour 1 pot (125 g)
+soit 12 g de glucides pour 100 g
+```
+
+La portion reste mise en avant — c'est ce que l'utilisateur mange — et le chiffre
+comparable vient **à côté**, jamais à la place. Quand l'aliment n'a pas de portion,
+l'aperçu *est* déjà la valeur des 100 g : la ligne disparaît, plutôt que de répéter
+le même chiffre sous deux formes. Elle est construite en un seul endroit
+(`ligneComparable()`), pour la raison même du paragraphe précédent : un écran qui
+l'écrirait lui-même pourrait remettre le chiffre des 100 g sous l'unité du pot.
+
 ### Suivi du poids
 
 Un écran dédié, ouvert depuis l'accueil, tient une **courbe de poids**, un
@@ -427,7 +444,7 @@ CI, sur cette machine :
 ```bash
 python tools/verifier_version_build.py    # 11 cas sur tools/version_build.sh
 python tools/check_migration_serveur.py   # accord des schémas local et serveur
-python tools/lancer_bancs.py              # les vingt-quatre bancs de falsification
+python tools/lancer_bancs.py              # les vingt-six bancs de falsification
 ```
 
 L'épreuve des migrations, elle, demande Node et le paquet `@electric-sql/pglite`,
