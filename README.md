@@ -270,7 +270,7 @@ Trois flux, déclenchables manuellement depuis l'onglet *Actions* :
 
 | Flux | Produit | Exécuteur |
 |---|---|---|
-| `ci.yml` | Analyse, tests, neuf contrôles — dont les migrations exécutées sur un vrai PostgreSQL | ubuntu |
+| `ci.yml` | Analyse, tests, huit contrôles — dont les migrations exécutées sur un vrai PostgreSQL | ubuntu |
 | `android.yml` | `app-release.apk`, `app-release.aab` | ubuntu |
 | `ios.yml` | IPA non signé (installable via eSign / Sideloadly) ou IPA signé | macOS |
 

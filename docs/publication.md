@@ -1296,15 +1296,28 @@ Un mot sur le nombre de tests annoncé dans ce document : c'est celui que l'exé
 est petit et constant.
 
 Ce paragraphe attribuait cet écart aux `setUpAll`/`tearDownAll`, « que l'exécuteur compte comme des
-tests ». **La mesure le contredit**, et c'est écrit ici plutôt que corrigé en silence : il y a
-**12** `setUpAll(` et **0** `tearDownAll(` dans `app/test/`, alors que l'écart vaut 6. La cause
-n'est donc pas établie. Compter les déclarations n'est d'ailleurs pas une base solide : le total
-change selon qu'on inclut `testWidgets(` — 514 `test(` seuls, 577 avec `testWidgets(` — et un
-`test(` apparaît dans un commentaire. Il y en a exactement **un** — `poids_screen_test.dart`, à la
-ligne du commentaire qui explique que les tests de widgets n'ont pas cette contrainte — donc un
-compte brut rend 515 là où un compte en début de ligne rend 514. Ce qui compte reste inchangé : le nombre cité est
-celui que l'exécuteur **imprime**, parce que c'est le seul qu'un lecteur et la CI puissent vérifier
-de la même façon.
+tests ». **La mesure le contredit** : il y a **12** `setUpAll(` et **0** `tearDownAll(` dans
+`app/test/`. La cause est maintenant établie, et elle est plus simple — et plus intéressante.
+
+Le rapport **JSON** de `flutter test` sépare les entrées : **642** `testDone`, dont **59 masquées**
+(les crochets de groupe) et **583 visibles**. Aucune entrée visible ne commence par `(` : l'exécuteur
+ne compte donc **pas** les crochets comme des tests. Et aucun nom n'apparaît deux fois, donc aucune
+boucle ne fabrique de tests. La comparaison fichier par fichier, littéral contre exécuté, ne désigne
+qu'un seul écart : `backup_service_test.dart` porte **37** déclarations `test(` et le coureur en
+exécute **43**. Les six manquants viennent d'un helper local, `refuse(libelle, texte, attendu)`, qui
+contient **une** déclaration `test(` et que le groupe appelle **sept** fois : sept refus, sept tests,
+une déclaration. Ce n'est donc pas une anomalie du coureur, c'est un motif — chaque refus est un
+test, et le nommer coûte une ligne.
+
+Compter les déclarations n'est d'ailleurs pas une base solide : le total change selon qu'on inclut
+`testWidgets(` — 514 `test(` seuls, 577 avec `testWidgets(` — et un `test(` apparaît dans un
+commentaire. Il y en a exactement **un** — `poids_screen_test.dart`, à la ligne du commentaire qui
+explique que les tests de widgets n'ont pas cette contrainte — donc un compte brut rend 515 là où un
+compte en début de ligne rend 514. Un second piège du même genre : les **63** `testWidgets` sont tous
+rattachés par le rapport à `widget_tester.dart` et non à leur propre fichier, si bien que six fichiers
+de widgets paraissent n'avoir aucun test. Ce qui compte reste inchangé : le nombre cité est celui que
+l'exécuteur **imprime**, parce que c'est le seul qu'un lecteur et la CI puissent vérifier de la même
+façon.
 
 `falsifier_migration_serveur.py` couvre les deux côtés et les deux sens. Il
 mutationne le schéma local (colonne ou table ajoutée sans destination), le schéma
