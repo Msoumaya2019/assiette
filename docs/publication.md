@@ -1011,6 +1011,20 @@ python3 tools/bancs/falsifier_migration_serveur.py     # 18 cas — accord des d
 python3 tools/bancs/falsifier_epreuve_migrations.py    # 6 cas — épreuve PostgreSQL
 ```
 
+Chaque banc passe par `tools/bancs/banc_flutter.py`, qui lit le rapport **JSON** de `flutter test` et
+ne retient que les tests qui n'ont pas réussi. Deux pièges y sont fermés, et tous les deux ont
+mordu : les noms des tests **réussis** figurent aussi dans la sortie, donc chercher un nom dans le
+texte brut conclurait « détecté » sans qu'aucun test ne tombe ; et une mutation qui casse la
+compilation rend un code de sortie non nul **sans aucun test en échec**, ce qui se lirait « non
+détecté » sur une mutation jamais mesurée. Quand le total ne correspond pas, le banc refuse de
+conclure — et il rapporte désormais **le message du compilateur**, sans quoi il fallait reproduire
+la mutation à la main pour savoir ce qui était reproché.
+
+Un mot sur le nombre de tests annoncé dans ce document : c'est celui que l'exécuteur **imprime**
+(`498 tests`), et non le nombre de déclarations `test(` présentes dans les fichiers. Mesure faite
+aux deux derniers commits : 456 déclarations pour 462 annoncés, puis 492 pour 498 — l'écart est
+constant, et il vient des `setUpAll`/`tearDownAll`, que l'exécuteur compte comme des tests.
+
 `falsifier_migration_serveur.py` couvre les deux côtés et les deux sens. Il
 mutationne le schéma local (colonne ou table ajoutée sans destination), le schéma
 serveur (colonne retirée, table renommée, colonne non déclarée), les politiques
