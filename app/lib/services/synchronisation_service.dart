@@ -18,9 +18,18 @@
 /// Il ne **redate** rien. Une ligne transporte sa date ; le service ne la
 /// remplace ni par l'heure locale, ni par l'heure du serveur. Redater ferait de
 /// chaque passage une modification : chaque appareil trouverait l'autre plus
-/// recent, et les deux se renverraient la meme ligne sans fin. L'ecart
-/// d'horloge entre l'appareil et le serveur est **mesure et signale**, jamais
-/// applique aux dates.
+/// recent, et les deux se renverraient la meme ligne sans fin.
+///
+/// Ce qu'il fait de l'ecart d'horloge
+/// ----------------------------------
+/// Il le mesure, le signale dans le rapport, **et le retient** — mais seulement
+/// pour les modifications **a venir**. C'est [Horloge] qui l'applique, au moment
+/// ou une ligne est ecrite en local ; aucune ligne existante n'est touchee. Sans
+/// cela, un appareil dont l'horloge avance de trois jours gagne tous les
+/// arbitrages pendant trois jours, et la perte est muette.
+///
+/// La mesure se fait **avant** les tables : une correction qui echoue interrompt
+/// le passage sans avoir rien echange, donc sans laisser d'etat a moitie fait.
 ///
 /// Une table en echec n'arrete pas les autres
 /// ------------------------------------------
@@ -32,6 +41,7 @@ library;
 import 'package:sqflite/sqflite.dart';
 
 import '../core/failures.dart';
+import '../core/horloge.dart';
 import '../data/local/synchronisation_locale.dart';
 import '../models/synchronisation.dart';
 
@@ -132,15 +142,23 @@ class ServiceSynchronisation {
   ServiceSynchronisation({
     required this.db,
     required this.transport,
-    DateTime Function()? horloge,
-  }) : _horloge = horloge ?? DateTime.now;
+    Horloge? horloge,
+  }) : horloge = horloge ?? Horloge();
 
   final Database db;
   final TransportSynchronisation transport;
 
-  /// L'heure de l'appareil. Injectable, pour eprouver l'ecart d'horloge sans
-  /// dependre de l'horloge de la machine qui lance les tests.
-  final DateTime Function() _horloge;
+  /// L'horloge de l'appareil, et l'ecart retenu.
+  ///
+  /// **La meme instance que celle de la base**, et c'est le point : c'est elle
+  /// qui estampille les modifications. En corriger une copie ne corrigerait
+  /// rien, et rien ne le signalerait.
+  ///
+  /// Injectable pour deux raisons distinctes : eprouver l'ecart d'horloge sans
+  /// dependre de l'horloge de la machine qui lance les tests, et poser deux
+  /// dates dans la meme milliseconde — ce qu'exige la propriete des pierres
+  /// tombales.
+  final Horloge horloge;
 
   /// Un passage complet.
   ///
@@ -188,20 +206,38 @@ class ServiceSynchronisation {
     }
   }
 
-  /// L'ecart entre l'horloge de l'appareil et celle du serveur.
+  /// L'ecart entre l'horloge de l'appareil et celle du serveur, mesure puis
+  /// retenu.
+  ///
+  /// Un echec de mesure rend `null` et n'interrompt rien : l'ecart est un
+  /// **diagnostic**, pas une condition. Un serveur qui ne sait pas donner
+  /// l'heure ne doit pas empecher la synchronisation. [Horloge.corriger]
+  /// conserve alors la mesure precedente, pour qu'une coupure reseau ne ramene
+  /// pas l'appareil a son horloge fausse.
+  Future<int?> _decalage() async {
+    final mesure = await _mesurerEcart();
+    // Avant les tables, et volontairement : une correction qui echoue — elle
+    // ecrit dans `settings` — interrompt le passage avant tout echange, donc
+    // sans laisser d'etat a moitie fait ni de rapport a demi vrai.
+    await horloge.corriger(mesure);
+    return mesure;
+  }
+
+  /// L'ecart mesure, ou `null` si le serveur n'a pas su donner l'heure.
   ///
   /// Mesure au **milieu** de l'aller-retour, comme le fait un protocole de
   /// synchronisation d'horloge : sans cela, le temps de la requete serait
   /// compte comme une avance de l'appareil.
   ///
-  /// Un echec rend `null` et n'interrompt rien : l'ecart est un **diagnostic**,
-  /// pas une condition. Un serveur qui ne sait pas donner l'heure ne doit pas
-  /// empecher la synchronisation.
-  Future<int?> _decalage() async {
+  /// Elle se fait sur [Horloge.brutMs], l'horloge **non corrigee**. La faire sur
+  /// l'horloge corrigee rendrait un ecart nul a chaque fois, et une horloge
+  /// franchement fausse se declarerait juste : le defaut serait muet, et la
+  /// correction s'annulerait elle-meme au deuxieme passage.
+  Future<int?> _mesurerEcart() async {
     try {
-      final avant = _horloge().millisecondsSinceEpoch;
+      final avant = horloge.brutMs();
       final serveur = await transport.heureServeur();
-      final apres = _horloge().millisecondsSinceEpoch;
+      final apres = horloge.brutMs();
       final milieu = avant + (apres - avant) ~/ 2;
       return serveur - milieu;
     } on Object {

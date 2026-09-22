@@ -60,6 +60,8 @@ ORDRE = [
     "falsifier_client_deepseek_dart.py",
     "falsifier_proxy_dart.py",
     "falsifier_arbitrage_dart.py",
+    "falsifier_horloge_dart.py",
+    "falsifier_pierres_tombales_dart.py",
     "falsifier_synchronisation_dart.py",
     "falsifier_synchronisation_locale_dart.py",
     "falsifier_colonnes_locales_dart.py",

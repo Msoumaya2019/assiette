@@ -459,6 +459,64 @@ void main() {
     });
   });
 
+  group('Etat de l\'appareil', () {
+    // L'ecart d'horloge n'est pas un secret, et pourtant il ne doit pas voyager.
+    // C'est un **etat de l'appareil** : il corrige l'horloge de celui-ci, et ne
+    // vaut que pour lui. Restaure sur un autre telephone, il y appliquerait la
+    // correction d'un autre — et un appareil juste se mettrait a estampiller
+    // faux, ce qui est exactement le defaut que cette correction existe pour
+    // eviter.
+
+    test('l\'ecart d\'horloge ne sort pas dans une sauvegarde', () async {
+      await source.writeSetting('theme_mode', 'dark');
+      await source.writeSetting(AppDatabase.cleDecalageHorloge, '10800000');
+
+      final json = jsonDecode(await service.exporter()) as Map<String, dynamic>;
+
+      expect(
+        json['settings'],
+        isNot(contains(AppDatabase.cleDecalageHorloge)),
+        reason:
+            'un ecart est un etat de l\'appareil, pas une donnee '
+            'd\'utilisateur',
+      );
+      expect(
+        (json['reglagesExclus'] as List).cast<String>(),
+        contains(AppDatabase.cleDecalageHorloge),
+        reason:
+            'une cle ecartee est nommee dans le fichier, pour qu\'un oubli '
+            'se voie au lieu de se deviner',
+      );
+      expect((json['settings'] as Map)['theme_mode'], 'dark');
+    });
+
+    test('l\'ecart d\'horloge ne rentre pas non plus', () async {
+      // Le temoin negatif, et il compte autant que le precedent : filtrer
+      // seulement a l'export laisserait la porte ouverte du cote qui compte. Un
+      // fichier retouche a la main ne doit pas pouvoir poser sur cet appareil
+      // l'ecart d'un autre.
+      await source.writeSetting('theme_mode', 'dark');
+      final json = jsonDecode(await service.exporter()) as Map<String, dynamic>;
+      (json['settings'] as Map)[AppDatabase.cleDecalageHorloge] = '10800000';
+
+      await service.restaurer(
+        SauvegardeLue.depuisTexte(jsonEncode(json)),
+        mode: ModeRestauration.remplacement,
+      );
+
+      expect(
+        await source.readSetting(AppDatabase.cleDecalageHorloge),
+        isNull,
+        reason:
+            'ce qui ne sort pas ne rentre pas : sans ce filtre, un fichier '
+            'retouche aurait pose l\'ecart d\'un autre appareil',
+      );
+      // Le reste du fichier, lui, est bien applique : le filtre n'ecarte que la
+      // cle nommee.
+      expect(await source.readSetting('theme_mode'), 'dark');
+    });
+  });
+
   group('Photos', () {
     test('une photo disparue est retiree et annoncee', () async {
       final original = repas(DateTime(2026, 9, 18), [

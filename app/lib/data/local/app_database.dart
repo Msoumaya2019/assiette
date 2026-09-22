@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart';
 
+import '../../core/horloge.dart';
 import '../../models/food.dart';
 import '../../models/goals.dart';
 import '../../models/meal.dart';
@@ -38,12 +39,35 @@ class AppDatabase {
     this.fileName = 'assiette.db',
     DatabaseFactory? factory,
     String? customPath,
+    Horloge? horloge,
   }) : _factory = factory ?? databaseFactory,
-       _customPath = customPath;
+       _customPath = customPath {
+    _horloge = horloge ?? Horloge();
+    // La retenue est cablee des la construction, et non a l'ouverture : elle
+    // ecrit dans `settings`, donc elle a besoin d'une base ouverte, et l'horloge
+    // existe avant elle.
+    _horloge.retenirAvec(_ecrireDecalageHorloge);
+  }
 
   final String fileName;
   final DatabaseFactory _factory;
   final String? _customPath;
+
+  /// L'horloge qui estampille les modifications.
+  ///
+  /// **Injectable**, et ce n'est pas un confort : un test qui doit poser deux
+  /// dates dans la meme milliseconde — une suppression, puis une modification
+  /// distante juste avant elle — ne peut pas dependre de l'horloge de la machine
+  /// qui le lance. Sans cela, la propriete la plus importante des pierres
+  /// tombales ne serait pas eprouvable.
+  late final Horloge _horloge;
+
+  /// L'horloge qui estampille, pour qui doit la corriger.
+  ///
+  /// C'est la **meme instance** que celle du service de synchronisation : deux
+  /// copies corrigeraient les ecritures d'un cote et pas de l'autre, et le
+  /// defaut serait muet.
+  Horloge get horloge => _horloge;
 
   Database? _db;
 
@@ -171,6 +195,11 @@ class AppDatabase {
         onUpgrade: _onUpgrade,
       ),
     );
+
+    // L'ecart d'horloge range reprend **avant la premiere ecriture** : sans cela,
+    // un appareil dont l'horloge est fausse estampillerait ses premieres
+    // modifications au moment meme ou l'on ouvre la base pour les ecrire.
+    _horloge.reprendre(await _lireDecalageHorloge());
   }
 
   Future<void> close() async {
@@ -297,7 +326,7 @@ class AppDatabase {
   // -------------------------------------------------------------------------
 
   Future<void> saveMeal(Meal meal) async {
-    final now = DateTime.now().millisecondsSinceEpoch;
+    final now = _horloge.maintenantMs();
 
     await db.transaction((txn) async {
       await txn.insert('meals', {
@@ -396,12 +425,32 @@ class AppDatabase {
     return Future.wait(rows.map(_buildMeal));
   }
 
+  /// Les deux dates d'une pierre tombale, **egales**.
+  ///
+  /// `deleted_at` seule ne suffit pas, et c'est un defaut qui a vecu : cinq des
+  /// six suppressions laissaient `updated_at` a sa valeur d'avant. Or `arbitrer`
+  /// (`models/arbitrage.dart`) compare `updatedAt` **d'abord**, et ne regarde la
+  /// suppression qu'a **date egale**. Une suppression dont la date de
+  /// modification reste ancienne perd donc contre n'importe quelle version
+  /// distante plus recente : la ligne **ressuscite** sur l'appareil qui vient de
+  /// la supprimer, ce qui est exactement le defaut que la pierre tombale existe
+  /// pour eviter. Une suppression est une modification comme une autre, et elle
+  /// doit rafraichir la date de modification.
+  ///
+  /// Une fabrique unique, parce que six copies d'une meme regle finissent par
+  /// diverger — c'est ce qui etait arrive : `deleteFavorite`, la plus recente,
+  /// etait la seule a ecrire les deux dates.
+  Map<String, Object?> _pierreTombale() {
+    final maintenant = _horloge.maintenantMs();
+    return {'deleted_at': maintenant, 'updated_at': maintenant};
+  }
+
   /// Suppression logique : la ligne reste, ce qui permet de propager la
   /// suppression lors d'une future synchronisation au lieu de la perdre.
   Future<void> deleteMeal(String id) async {
     await db.update(
       'meals',
-      {'deleted_at': DateTime.now().millisecondsSinceEpoch},
+      _pierreTombale(),
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -475,7 +524,7 @@ class AppDatabase {
     String name,
     List<MealItem> items,
   ) async {
-    final now = DateTime.now().millisecondsSinceEpoch;
+    final now = _horloge.maintenantMs();
     await db.insert('templates', {
       'id': id,
       'name': name,
@@ -515,7 +564,7 @@ class AppDatabase {
   Future<void> deleteTemplate(String id) async {
     await db.update(
       'templates',
-      {'deleted_at': DateTime.now().millisecondsSinceEpoch},
+      _pierreTombale(),
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -531,7 +580,7 @@ class AppDatabase {
     String label,
     Map<String, dynamic> payload,
   ) async {
-    final now = DateTime.now().millisecondsSinceEpoch;
+    final now = _horloge.maintenantMs();
     await db.insert('favorites', {
       'id': id,
       'kind': kind,
@@ -565,10 +614,9 @@ class AppDatabase {
 
   /// Suppression logique, comme pour les modeles et les repas.
   Future<void> deleteFavorite(String id) async {
-    final now = DateTime.now().millisecondsSinceEpoch;
     await db.update(
       'favorites',
-      {'deleted_at': now, 'updated_at': now},
+      _pierreTombale(),
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -647,7 +695,7 @@ class AppDatabase {
       'cle': cle,
       'label': portion.label,
       'grams': portion.grams,
-      'updated_at': DateTime.now().millisecondsSinceEpoch,
+      'updated_at': _horloge.maintenantMs(),
       'deleted_at': null,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
@@ -656,7 +704,7 @@ class AppDatabase {
   Future<void> deletePortion(String cle) async {
     await db.update(
       'portions',
-      {'deleted_at': DateTime.now().millisecondsSinceEpoch},
+      _pierreTombale(),
       where: 'cle = ?',
       whereArgs: [cle],
     );
@@ -760,6 +808,34 @@ class AppDatabase {
     }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
+  /// La cle ou l'ecart d'horloge est range.
+  ///
+  /// Publique parce que `BackupService` doit l'**ecarter des sauvegardes** : un
+  /// ecart est un etat de l'appareil, pas une donnee d'utilisateur. Restaure sur
+  /// un autre telephone, il y appliquerait la correction d'un autre — et un
+  /// appareil juste se mettrait a estampiller faux, ce qui est exactement le
+  /// defaut que cette correction existe pour eviter.
+  static const String cleDecalageHorloge = 'horloge.decalage_ms';
+
+  /// L'ecart d'horloge range, ou `null` s'il n'y en a pas.
+  ///
+  /// Une valeur illisible vaut « pas d'ecart » : un reglage abime ne doit pas
+  /// empecher l'application de demarrer. Meme arbitrage que [readGoals], et pour
+  /// la meme raison.
+  Future<int?> _lireDecalageHorloge() async {
+    final brut = await readSetting(cleDecalageHorloge);
+    if (brut == null || brut.isEmpty) return null;
+    return int.tryParse(brut);
+  }
+
+  /// Range l'ecart d'horloge.
+  ///
+  /// Appelee par [Horloge.corriger] a chaque mesure, et **pas** par les chemins
+  /// de lecture : la reprise a l'ouverture passe par [Horloge.reprendre], qui
+  /// n'ecrit rien.
+  Future<void> _ecrireDecalageHorloge(int decalageMs) =>
+      writeSetting(cleDecalageHorloge, '$decalageMs');
+
   Future<DailyGoals> readGoals() async {
     final raw = await readSetting('daily_goals');
     if (raw == null || raw.isEmpty) return DailyGoals.none;
@@ -817,7 +893,7 @@ class AppDatabase {
   }
 
   Future<void> savePesee(Pesee pesee) async {
-    final now = DateTime.now().millisecondsSinceEpoch;
+    final now = _horloge.maintenantMs();
     await db.insert('pesees', {
       'id': pesee.id,
       'mesure_le': pesee.le.millisecondsSinceEpoch,
@@ -833,7 +909,7 @@ class AppDatabase {
   Future<void> deletePesee(String id) async {
     await db.update(
       'pesees',
-      {'deleted_at': DateTime.now().millisecondsSinceEpoch},
+      _pierreTombale(),
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -856,7 +932,7 @@ class AppDatabase {
   }
 
   Future<void> saveMesure(Mesure mesure) async {
-    final now = DateTime.now().millisecondsSinceEpoch;
+    final now = _horloge.maintenantMs();
     await db.insert('mesures', {
       'id': mesure.id,
       'mesure_le': mesure.le.millisecondsSinceEpoch,
@@ -871,7 +947,7 @@ class AppDatabase {
   Future<void> deleteMesure(String id) async {
     await db.update(
       'mesures',
-      {'deleted_at': DateTime.now().millisecondsSinceEpoch},
+      _pierreTombale(),
       where: 'id = ?',
       whereArgs: [id],
     );

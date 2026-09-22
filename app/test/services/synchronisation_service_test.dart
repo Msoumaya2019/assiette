@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:assiette/core/horloge.dart';
 import 'package:assiette/data/local/app_database.dart';
 import 'package:assiette/data/local/synchronisation_locale.dart';
 import 'package:assiette/models/synchronisation.dart';
@@ -17,10 +18,11 @@ import 'faux_serveur_synchronisation.dart';
 /// Le projet l'a deja mesure une fois — voir `backup_service_test.dart`.
 late Directory repertoireDesBases;
 
-Future<AppDatabase> _baseNeuve(String nom) async {
+Future<AppDatabase> _baseNeuve(String nom, {Horloge? horloge}) async {
   final base = AppDatabase(
     factory: databaseFactoryFfi,
     customPath: p.join(repertoireDesBases.path, '$nom.db'),
+    horloge: horloge,
   );
   await base.open();
   return base;
@@ -131,20 +133,35 @@ void main() {
   late FauxServeur serveur;
 
   /// Un appareil dont l'horloge est celle du serveur, sauf indication.
-  Appareil appareil(AppDatabase base) => Appareil(
-    base,
-    ServiceSynchronisation(
-      db: base.db,
-      transport: serveur,
-      horloge: () => DateTime.fromMillisecondsSinceEpoch(serveur.heure),
-    ),
-  );
+  ///
+  /// L'horloge est posee sur la **base**, puis reprise par le service : une seule
+  /// instance des deux cotes, exactement comme en production. Deux instances
+  /// corrigeraient les estampilles d'un cote et pas de l'autre, et le defaut
+  /// serait muet — le meme piege que la correction elle-meme cherche a eviter.
+  Future<Appareil> appareil(String nom, {Horloge? horloge}) async {
+    final base = await _baseNeuve(
+      nom,
+      horloge:
+          horloge ??
+          Horloge(
+            source: () => DateTime.fromMillisecondsSinceEpoch(serveur.heure),
+          ),
+    );
+    return Appareil(
+      base,
+      ServiceSynchronisation(
+        db: base.db,
+        transport: serveur,
+        horloge: base.horloge,
+      ),
+    );
+  }
 
   setUp(() async {
     repertoireDesBases = Directory.systemTemp.createTempSync('assiette-sync');
     serveur = FauxServeur();
-    a = appareil(await _baseNeuve('a'));
-    b = appareil(await _baseNeuve('b'));
+    a = await appareil('a');
+    b = await appareil('b');
   });
 
   tearDown(() async {
@@ -242,7 +259,12 @@ void main() {
       expect(
         await a.db.query('settings'),
         hasLength(1),
-        reason: 'la synchronisation ne touche pas aux reglages',
+        reason:
+            'la synchronisation ne touche pas aux reglages. La seule cle '
+            'qu\'elle puisse ecrire est l\'ecart d\'horloge, et elle ne l\'ecrit '
+            'que s\'il change : ici l\'appareil a l\'heure du serveur, donc rien '
+            'n\'est ecrit. Un ecart qui changerait, lui, s\'ecrirait — c\'est ce '
+            'que `horloge_test.dart` mesure.',
       );
     });
   });
@@ -431,7 +453,7 @@ void main() {
     });
   });
 
-  group('L\'ecart d\'horloge est signale, jamais applique', () {
+  group('L\'ecart d\'horloge est mesure, signale, et retenu', () {
     test('les dates traversees ne sont pas reecrites', () async {
       await a.poser('meals', _repas('m1', nom: 'Repas', updatedAt: 1234));
       await a.synchroniser();
@@ -452,8 +474,13 @@ void main() {
         ServiceSynchronisation(
           db: a.db,
           transport: serveur,
-          horloge: () => DateTime.fromMillisecondsSinceEpoch(
-            serveur.heure + 3 * 3600 * 1000,
+          // Horloge **de l'appareil seul** : ce test porte sur ce que le rapport
+          // mesure, pas sur ce que la base estampille. Une instance distincte est
+          // donc volontaire ici — ailleurs, c'est la meme des deux cotes.
+          horloge: Horloge(
+            source: () => DateTime.fromMillisecondsSinceEpoch(
+              serveur.heure + 3 * 3600 * 1000,
+            ),
           ),
         ),
       );
@@ -486,8 +513,10 @@ void main() {
           // le milieu vaut donc +500, et l'ecart -500. Mesurer avant ou apres
           // l'appel donnerait 0 ou -1000, et compterait le temps de la requete
           // comme une avance de l'appareil.
-          horloge: () => DateTime.fromMillisecondsSinceEpoch(
-            serveur.heure + 1000 * appels++,
+          horloge: Horloge(
+            source: () => DateTime.fromMillisecondsSinceEpoch(
+              serveur.heure + 1000 * appels++,
+            ),
           ),
         ),
       );
@@ -527,8 +556,10 @@ void main() {
         ServiceSynchronisation(
           db: a.db,
           transport: serveur,
-          horloge: () => DateTime.fromMillisecondsSinceEpoch(
-            serveur.heure + 3 * 24 * 3600 * 1000,
+          horloge: Horloge(
+            source: () => DateTime.fromMillisecondsSinceEpoch(
+              serveur.heure + 3 * 24 * 3600 * 1000,
+            ),
           ),
         ),
       );
@@ -550,6 +581,76 @@ void main() {
       final retour = await enAvance.synchroniser();
       expect(retour.estVide, isTrue, reason: 'rien ne doit repartir');
       expect((await b.synchroniser()).estVide, isTrue);
+    });
+
+    test('un ecart mesure survit a la fermeture de la base', () async {
+      // Un appareil dont l'horloge **retarde** de trois heures.
+      serveur.heure = 1700000000000;
+      final retard = await appareil(
+        'retard',
+        horloge: Horloge(
+          source: () => DateTime.fromMillisecondsSinceEpoch(
+            serveur.heure - 3 * 3600 * 1000,
+          ),
+        ),
+      );
+
+      await retard.synchroniser();
+      expect(retard.base.horloge.decalageMs, 3 * 3600 * 1000);
+      await retard.base.close();
+
+      // La meme base, rouverte avec une horloge **ordinaire** : l'ecart doit
+      // revenir avant la premiere ecriture. Sans cela, un appareil dont
+      // l'horloge est fausse estampillerait ses premieres modifications au
+      // moment meme ou l'on ouvre la base pour les ecrire — et le remede ne
+      // vaudrait que pour la session qui a mesure.
+      final rouverte = await _baseNeuve('retard');
+      expect(
+        rouverte.horloge.decalageMs,
+        3 * 3600 * 1000,
+        reason:
+            'l\'ecart est un etat de l\'appareil : il se relit au demarrage',
+      );
+      expect(
+        (rouverte.horloge.maintenantMs() - rouverte.horloge.brutMs())
+            .toDouble(),
+        closeTo(3 * 3600 * 1000, 5),
+        reason: 'l\'ecart relu est bien celui qui est applique',
+      );
+      await rouverte.close();
+    });
+
+    test('un deuxieme passage ne remet pas l\'ecart a zero', () async {
+      // Le piege muet de tout ce mecanisme : mesurer l'ecart sur l'horloge
+      // **corrigee** rendrait zero des que la correction est appliquee.
+      // L'appareil se declarerait juste au deuxieme passage, et la correction
+      // s'annulerait elle-meme — sans qu'aucun test du premier passage ne le
+      // voie.
+      serveur.heure = 1700000000000;
+      final retard = await appareil(
+        'retard-deux',
+        horloge: Horloge(
+          source: () => DateTime.fromMillisecondsSinceEpoch(
+            serveur.heure - 3 * 3600 * 1000,
+          ),
+        ),
+      );
+
+      await retard.synchroniser();
+      expect(retard.base.horloge.decalageMs, 3 * 3600 * 1000);
+
+      final deuxieme = await retard.synchroniser();
+
+      expect(
+        deuxieme.decalageMs,
+        3 * 3600 * 1000,
+        reason:
+            'la mesure se fait sur l\'horloge brute : la faire sur '
+            'l\'horloge corrigee rendrait un ecart nul, et une horloge '
+            'franchement fausse se declarerait juste',
+      );
+      expect(retard.base.horloge.decalageMs, 3 * 3600 * 1000);
+      await retard.base.close();
     });
   });
 }

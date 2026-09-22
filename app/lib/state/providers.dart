@@ -445,10 +445,17 @@ final transportSynchronisationProvider = Provider<TransportSynchronisation>((
 /// Rien n'est decide ici : le service porte la regle d'arbitrage, le transport
 /// porte les conversions. Ce fournisseur ne fait que les assembler, et c'est
 /// exactement ce qui manquait.
+///
+/// **L'horloge vient de la base, et pas d'une neuve.** C'est elle qui estampille
+/// les modifications : le service doit corriger celle-la meme. Une instance
+/// distincte mesurerait l'ecart d'un cote et continuerait d'estampiller faux de
+/// l'autre, sans que rien ne le signale.
 final serviceSynchronisationProvider = Provider<ServiceSynchronisation>((ref) {
+  final base = ref.watch(appDatabaseProvider);
   return ServiceSynchronisation(
-    db: ref.watch(appDatabaseProvider).db,
+    db: base.db,
     transport: ref.watch(transportSynchronisationProvider),
+    horloge: base.horloge,
   );
 });
 

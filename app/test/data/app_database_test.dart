@@ -1,4 +1,7 @@
+import 'package:assiette/core/horloge.dart';
 import 'package:assiette/data/local/app_database.dart';
+import 'package:assiette/data/local/synchronisation_locale.dart';
+import 'package:assiette/models/arbitrage.dart';
 import 'package:assiette/models/food.dart';
 import 'package:assiette/models/goals.dart';
 import 'package:assiette/models/meal.dart';
@@ -99,6 +102,30 @@ void attendreLesMemesValeurs(NutritionValues attendu, NutritionValues obtenu) {
   expect(obtenu.salt, attendu.salt, reason: 'sel');
 }
 
+/// Une horloge d'appareil que le test avance lui-meme.
+///
+/// Sans elle, deux ecritures tomberaient dans la **meme milliseconde** — une
+/// machine va vite — et la propriete la plus importante des pierres tombales ne
+/// serait pas eprouvable : on ne peut pas montrer qu'une suppression **bat** une
+/// modification anterieure si les deux portent la meme date, parce que c'est
+/// alors la regle « a date egale, la suppression gagne » qui decide, et pas
+/// celle qu'on veut prouver. Un test qui passerait par accident ne prouve rien.
+class _HorlogeReglable {
+  /// L'instant que l'horloge rendra, en millisecondes depuis l'epoque.
+  ///
+  /// Un champ, et non un parametre de constructeur : aucun test ne passe
+  /// d'autre valeur, et un parametre jamais fourni est un avertissement — que la
+  /// CI refuse, a juste titre.
+  int maintenant = 1700000000000;
+
+  Horloge get horloge =>
+      Horloge(source: () => DateTime.fromMillisecondsSinceEpoch(maintenant));
+}
+
+/// La table synchronisable portant ce nom.
+TableSynchronisable _table(String nom) =>
+    tablesSynchronisables.firstWhere((table) => table.nom == nom);
+
 void main() {
   // La base reelle passe par le greffon natif de la plateforme, indisponible
   // dans un test : on la fait tourner sur SQLite natif via FFI, en memoire pour
@@ -106,11 +133,14 @@ void main() {
   setUpAll(sqfliteFfiInit);
 
   late AppDatabase base;
+  late _HorlogeReglable horloge;
 
   setUp(() async {
+    horloge = _HorlogeReglable();
     base = AppDatabase(
       factory: databaseFactoryFfi,
       customPath: inMemoryDatabasePath,
+      horloge: horloge.horloge,
     );
     await base.open();
   });
@@ -652,6 +682,157 @@ void main() {
     test('un objectif illisible ne fait pas echouer le demarrage', () async {
       await base.writeSetting('objectif_poids', 'ceci n\'est pas du JSON');
       expect((await base.readObjectifPoids()).estDefini, isFalse);
+    });
+  });
+
+  group('Une suppression est une modification', () {
+    // Pourquoi ce groupe existe. L'arbitrage (`models/arbitrage.dart`) compare
+    // `updatedAt` **d'abord**, et ne regarde la suppression qu'a date egale. Une
+    // suppression qui laisse `updated_at` a sa valeur d'avant perd donc contre
+    // une version distante plus recente : la ligne **ressuscite** sur l'appareil
+    // qui vient de la supprimer — exactement le defaut que la pierre tombale
+    // existe pour eviter. Cinq des six tables faisaient cela ; seule
+    // `deleteFavorite`, la plus recente, ecrivait les deux dates.
+
+    /// La version telle qu'un arbitrage la verrait.
+    ///
+    /// Lue par le **chemin reel** (`lireLignes`), et non fabriquee a la main
+    /// depuis la ligne brute : une colonne renommee casserait ce test, alors
+    /// qu'une version fabriquee a la main continuerait de passer en silence.
+    Future<VersionArbitrable> version(String table) async =>
+        (await lireLignes(base.db, _table(table))).single.version;
+
+    test('les deux dates sont egales, sur les six tables', () async {
+      // L'horloge **avance** entre l'enregistrement et la suppression, et c'est
+      // indispensable : figee, elle rendrait les deux dates egales meme si la
+      // suppression n'ecrivait que `deleted_at`, et ce test passerait sans rien
+      // prouver. Le banc l'a montre — la premiere version de ce test ne tombait
+      // pas sur la faute qu'il vise.
+      final instants = <String, int>{};
+
+      Future<void> supprimer(
+        String table,
+        Future<void> Function() enregistrer,
+        Future<void> Function() effacer,
+      ) async {
+        await enregistrer();
+        horloge.maintenant += 1000;
+        await effacer();
+        instants[table] = horloge.maintenant;
+      }
+
+      final enregistre = repas(DateTime(2026, 9, 18), [item(riz, 150)]);
+      await supprimer(
+        'meals',
+        () => base.saveMeal(enregistre),
+        () => base.deleteMeal(enregistre.id),
+      );
+      await supprimer(
+        'templates',
+        () => base.saveTemplate('t1', 'Dejeuner', [item(riz, 150)]),
+        () => base.deleteTemplate('t1'),
+      );
+      await supprimer(
+        'favorites',
+        () => base.addFavorite('f1', 'food', 'Riz', {'name': 'Riz'}),
+        () => base.deleteFavorite('f1'),
+      );
+      await supprimer(
+        'portions',
+        () => base.writePortion(
+          'nom:riz',
+          const Portion(label: 'part', grams: 80),
+        ),
+        () => base.deletePortion('nom:riz'),
+      );
+      await supprimer(
+        'pesees',
+        () => base.savePesee(
+          Pesee(id: 'p1', le: DateTime(2026, 9, 12), poidsKg: 70),
+        ),
+        () => base.deletePesee('p1'),
+      );
+      await supprimer(
+        'mesures',
+        () => base.saveMesure(
+          Mesure(
+            id: 'm1',
+            le: DateTime(2026, 9, 12),
+            type: TypeMesure.taille,
+            valeurCm: 82,
+          ),
+        ),
+        () => base.deleteMesure('m1'),
+      );
+
+      for (final entree in instants.entries) {
+        final ligne = (await base.db.query(entree.key)).single;
+        expect(
+          ligne['deleted_at'],
+          entree.value,
+          reason: '${entree.key} : la ligne reste, datee de sa suppression',
+        );
+        expect(
+          ligne['updated_at'],
+          entree.value,
+          reason:
+              '${entree.key} : la date de modification doit etre celle de la '
+              'suppression, pas celle de l\'enregistrement — sinon la '
+              'suppression perd contre une version distante plus recente, et la '
+              'ligne ressuscite',
+        );
+      }
+    });
+
+    test('la suppression bat une modification anterieure', () async {
+      final enregistre = repas(DateTime(2026, 9, 18), [item(riz, 150)]);
+      await base.saveMeal(enregistre);
+
+      // L'autre appareil a modifie le repas **avant** que celui-ci le supprime.
+      final avant = await version('meals');
+      final distante = VersionArbitrable(
+        updatedAt: avant.updatedAt + 1000,
+        deletedAt: null,
+        empreinte: avant.empreinte,
+      );
+
+      horloge.maintenant = avant.updatedAt + 5000;
+      await base.deleteMeal(enregistre.id);
+      final locale = await version('meals');
+
+      expect(locale.estSupprimee, isTrue);
+      expect(
+        arbitrer(locale: locale, distante: distante),
+        VerdictArbitrage.garderLocale,
+        reason:
+            'la suppression est posterieure a la modification : elle doit '
+            'gagner, sinon la ligne ressuscite',
+      );
+    });
+
+    test('une modification posterieure a la suppression gagne', () async {
+      // Le temoin negatif, et il compte autant que le test precedent : la
+      // suppression n'est **pas** une victoire automatique. Une modification
+      // plus recente doit l'emporter, sans quoi un appareil effacerait le
+      // travail de l'autre sans recours.
+      final enregistre = repas(DateTime(2026, 9, 18), [item(riz, 150)]);
+      await base.saveMeal(enregistre);
+      await base.deleteMeal(enregistre.id);
+
+      final locale = await version('meals');
+      final distante = VersionArbitrable(
+        updatedAt: locale.updatedAt + 1000,
+        deletedAt: null,
+        empreinte: 'peu importe',
+      );
+
+      expect(
+        arbitrer(locale: locale, distante: distante),
+        VerdictArbitrage.prendreDistante,
+        reason:
+            'une modification posterieure doit gagner, meme contre une '
+            'suppression',
+      );
     });
   });
 }

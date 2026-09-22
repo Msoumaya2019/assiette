@@ -21,9 +21,19 @@ que rien ne le signale**, et ce sont les trois premieres de ce banc :
 3. **Laisser une table en panne emporter les autres.** Une table refusee par le
    serveur ne doit pas empecher les cinq autres de converger.
 
-Deux cas visent l'ecart d'horloge, qui est un **diagnostic** et non une
-condition : mesure au milieu de l'aller-retour, et inconnu quand le serveur ne
-sait pas donner l'heure — jamais tenu pour nul.
+L'ecart d'horloge est mesure, signale **et retenu**. Deux cas visent la mesure —
+au milieu de l'aller-retour, et inconnu quand le serveur ne sait pas donner
+l'heure, jamais tenu pour nul — et deux autres visent la correction elle-meme :
+
+4. **Ne jamais retenir la correction.** Le diagnostic reste juste et **rien ne
+   change** : le rapport annonce l'ecart, l'interface l'affiche, et les
+   modifications continuent d'etre estampillees avec l'horloge fausse. C'est la
+   faute la plus discrete du fichier, parce que tout ce qui se voit reste vrai.
+
+5. **Mesurer l'ecart sur l'horloge corrigee.** L'ecart rend alors zero des que la
+   correction est appliquee : l'appareil se declare juste au deuxieme passage, et
+   la correction s'annule elle-meme. Le premier passage, lui, est parfaitement
+   juste — d'ou un test qui synchronise **deux fois**.
 
 Le dernier cas est le temoin negatif : une reformulation de commentaire ne doit
 rien faire tomber.
@@ -47,7 +57,7 @@ TESTS = "test/services/synchronisation_service_test.dart"
 
 # A mettre a jour en meme temps que le fichier de tests, jamais pour faire
 # passer le banc.
-TESTS_ATTENDUS = 20
+TESTS_ATTENDUS = 22
 
 # --- ancres : au niveau octet, telles que `dart format` les ecrit ---
 
@@ -72,7 +82,7 @@ LIGNE_REDATEE = (
     b"              table,\n"
     b"              LigneSynchronisable(\n"
     b"                cle: ligne.cle,\n"
-    b"                updatedAt: _horloge().millisecondsSinceEpoch,\n"
+    b"                updatedAt: horloge.maintenantMs(),\n"
     b"                deletedAt: ligne.deletedAt,\n"
     b"                contenu: ligne.contenu,\n"
     b"              ),\n"
@@ -108,6 +118,30 @@ ECART_APRES = b"      final milieu = apres;\n"
 ECART_INCONNU = b"    final decalage = await _decalage();\n"
 ECART_INCONNU_TENU_POUR_NUL = b"    final decalage = (await _decalage()) ?? 0;\n"
 
+# La correction, et les deux facons de la perdre.
+#
+# `CORRECTION_RETENUE` est l'appel qui range l'ecart mesure dans l'horloge. Sans
+# lui, le diagnostic reste juste et **rien ne change** : le rapport annonce
+# toujours l'ecart, l'interface l'affiche, et les modifications continuent d'etre
+# estampillees avec l'horloge fausse. C'est la faute la plus discrete du fichier,
+# parce que tout ce qui se voit reste vrai.
+CORRECTION_RETENUE = b"    await horloge.corriger(mesure);\n"
+CORRECTION_OMISE = b""
+
+# La mesure de l'ecart se fait sur l'horloge **brute**. La faire sur l'horloge
+# corrigee rend zero des que la correction est appliquee : l'appareil se declare
+# juste au deuxieme passage, et la correction s'annule elle-meme.
+ECART_SUR_HORLOGE_BRUTE = (
+    b"      final avant = horloge.brutMs();\n"
+    b"      final serveur = await transport.heureServeur();\n"
+    b"      final apres = horloge.brutMs();\n"
+)
+ECART_SUR_HORLOGE_CORRIGEE = (
+    b"      final avant = horloge.maintenantMs();\n"
+    b"      final serveur = await transport.heureServeur();\n"
+    b"      final apres = horloge.maintenantMs();\n"
+)
+
 BOUCLE_DES_TABLES = b"    for (final table in tablesSynchronisables) {\n"
 BOUCLE_ELARGIE = (
     b"    for (final table in [\n"
@@ -116,9 +150,11 @@ BOUCLE_ELARGIE = (
     b"    ]) {\n"
 )
 
-COMMENTAIRE = b"  /// L'ecart entre l'horloge de l'appareil et celle du serveur.\n"
+COMMENTAIRE = (
+    b"  /// L'ecart entre l'horloge de l'appareil et celle du serveur, mesure puis\n"
+)
 COMMENTAIRE_REFORMULE = (
-    b"  /// L'ecart mesure entre l'horloge de l'appareil et celle du serveur.\n"
+    b"  /// L'ecart mesure entre l'horloge de l'appareil et celle du serveur, puis\n"
 )
 
 # --- noms des tests qui doivent tomber -----------------------------------------
@@ -129,6 +165,8 @@ T_PANNE = "la table en echec est nommee, les autres passent"
 T_MILIEU = "l'ecart est mesure au milieu de l'aller-retour"
 T_INCONNU = "un serveur qui ne donne pas l'heure laisse l'ecart inconnu, sans bloquer"
 T_HORS_ENSEMBLE = "les tables hors de l'ensemble ne sont jamais visitees"
+T_PERSISTE = "un ecart mesure survit a la fermeture de la base"
+T_SANS_ANNULATION = "un deuxieme passage ne remet pas l'ecart a zero"
 
 
 def principal() -> int:
@@ -176,6 +214,14 @@ def principal() -> int:
     def table_sans_cycle_de_vie_visitee() -> None:
         banc.suivre(SERVICE).muter(BOUCLE_DES_TABLES, BOUCLE_ELARGIE)
 
+    def correction_omise() -> None:
+        banc.suivre(SERVICE).muter(CORRECTION_RETENUE, CORRECTION_OMISE)
+
+    def ecart_mesure_sur_horloge_corrigee() -> None:
+        banc.suivre(SERVICE).muter(
+            ECART_SUR_HORLOGE_BRUTE, ECART_SUR_HORLOGE_CORRIGEE
+        )
+
     def commentaire_reformule() -> None:
         banc.suivre(SERVICE).muter(COMMENTAIRE, COMMENTAIRE_REFORMULE)
 
@@ -188,6 +234,12 @@ def principal() -> int:
         "table sans cycle de vie visitee",
         T_HORS_ENSEMBLE,
         table_sans_cycle_de_vie_visitee,
+    )
+    banc.cas("correction d'horloge jamais retenue", T_PERSISTE, correction_omise)
+    banc.cas(
+        "ecart mesure sur l'horloge corrigee",
+        T_SANS_ANNULATION,
+        ecart_mesure_sur_horloge_corrigee,
     )
     banc.cas("commentaire reformule", T_REDATE, commentaire_reformule, attendu=False)
 
@@ -211,7 +263,7 @@ def principal() -> int:
         return code
 
     print(
-        "vert — le service tombe sur chacune de ses six fautes, et pas sur une "
+        "vert — le service tombe sur chacune de ses huit fautes, et pas sur une "
         "reformulation."
     )
     return 0

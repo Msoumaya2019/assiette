@@ -11,10 +11,10 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Élément | État |
 | --- | --- |
 | Code source complet, analysé sans avertissement | prêt |
-| 567 tests de l'application, tous verts | prêt |
+| 583 tests de l'application, tous verts | prêt |
 | 18 tests du serveur, tous verts | prêt |
 | Dépôt public | https://github.com/Msoumaya2019/assiette |
-| Flux `ci.yml` — analyse, 567 tests, 9 contrôles | **vert** |
+| Flux `ci.yml` — analyse, 583 tests, 8 contrôles | **vert** |
 | Flux `ci.yml` — migrations Supabase exécutées sur un vrai PostgreSQL | **vert** (35 épreuves) |
 | Flux Android — APK et AAB | **vert**, artefacts signés et vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
@@ -1142,6 +1142,66 @@ liste. C'est la conséquence assumée de la demande initiale (« pas toujours
 deux produits y demande de la lire. Revenir à une base unique pour les seules
 listes reste un choix ouvert.
 
+### L'horloge, corrigée par celle du serveur
+
+`models/arbitrage.dart` portait une note qui différait la décision : un appareil dont l'horloge avance
+de trois jours gagne **chaque** arbitrage pendant trois jours, en silence — ses modifications sont
+toujours « plus récentes ». Le remède y était déjà nommé (« un horodatage venu du serveur »), avec le
+refus de la garde facile : une règle « la date est dans le futur » ne supprimerait pas la divergence,
+elle **déplacerait** la perte sur l'appareil juste. La synchronisation existe maintenant ; la
+décision tombait donc.
+
+`core/horloge.dart` porte le remède. Deux horloges, et il ne faut jamais les confondre :
+`brutMs()` rend l'heure de l'appareil, **non corrigée** ; `maintenantMs()` rend l'heure à estampiller.
+
+**La mesure se fait sur l'horloge brute**, et c'est le piège principal du fichier, symétrique de
+l'évidence : si `brutMs()` rendait déjà l'heure corrigée, l'écart mesuré vaudrait zéro à chaque
+passage, et une horloge franchement fausse se déclarerait juste. Un test le dit, un banc le fabrique.
+
+**En deçà d'une seconde, on ne corrige pas** — et ce n'est pas de la prudence, c'est la **résolution
+de la mesure**. L'heure du serveur vient de l'en-tête HTTP `Date` (`TransportSupabase.heureServeur`),
+dont la résolution est la seconde. Un écart de 900 ms est indiscernable de zéro ; le corriger
+décalerait **chaque** estampille d'un appareil pourtant juste, d'une seconde tirée au hasard.
+Appliquer du bruit n'est pas corriger. D'où `ecartMesurableMs = 1000`, et la règle qu'une mesure en
+deçà n'est pas écrite.
+
+L'écart retenu survit à la fermeture : il est rangé dans `settings` sous `horloge.decalage_ms` et
+repris à `open()`, **avant la première écriture**. Aucune migration n'a été nécessaire — la table
+`settings` date du schéma v1. Une seule instance d'`Horloge` circule : `serviceSynchronisationProvider`
+prend celle de la base, pas une horloge neuve, sinon la correction mesurée ici n'estampillerait rien
+là-bas.
+
+Trois décisions de bord, chacune avec son motif. **L'écart n'est écrit que s'il change** : un appareil
+juste n'écrit donc rien, et la synchronisation ne touche pas aux réglages — c'est ce qu'un test déjà
+présent vérifiait, et il avait raison. **L'écart ne sort pas dans une sauvegarde, ni n'y rentre** : un
+fichier retouché à la main ne doit pas pouvoir poser sur cet appareil l'écart d'un autre, et la même
+liste décide des deux sens. **Un échec de mesure ne remet pas la correction à zéro** : il conserve
+l'écart déjà connu, plutôt que de rendre l'appareil à son horloge fausse.
+
+En chemin, une lecture des six suppressions a montré un défaut réel qui n'avait rien à voir avec
+l'heure : **cinq des six n'actualisaient pas `updated_at`**. Or `arbitrer` compare `updatedAt`
+**d'abord**, et ne regarde la suppression qu'à **date égale**. Une suppression qui laisse `updated_at`
+à sa valeur d'avant perd donc contre une version distante plus récente, et **la ligne ressuscite** sur
+l'appareil qui vient de la supprimer. Les six passent maintenant par une fabrique unique,
+`_pierreTombale()`, qui écrit les deux dates égales.
+
+```bash
+python3 tools/bancs/falsifier_horloge_dart.py                  # 6 fautes + 1 témoin
+python3 tools/bancs/falsifier_pierres_tombales_dart.py         # 2 fautes + 1 témoin
+python3 tools/bancs/falsifier_synchronisation_service_dart.py  # 8 fautes + 1 témoin
+```
+
+Le banc des pierres tombales a d'abord rendu **« NON DÉTECTÉ »**, et il avait raison : mon test
+faisait tomber l'enregistrement et la suppression dans la même milliseconde, si bien que les deux
+dates étaient égales **même avec la faute appliquée** — la règle « à date égale, la suppression
+gagne » décidait alors à la place de celle qu'on croyait éprouver. C'est le test qui était faible,
+pas la mutation. L'horloge du test avance désormais entre les deux, et chaque table voit ses deux
+dates comparées à cet instant précis.
+
+Ce que cela n'établit pas : que l'heure du serveur soit juste — seulement qu'elle est lue, mesurée,
+retenue et appliquée aux seules modifications futures. Un écart sous la seconde reste hors de portée
+de la mesure.
+
 ### La version publiée, décidée à un seul endroit
 
 Le nom d'un artefact venait du tag Git, la version inscrite dans le binaire venait
@@ -1201,9 +1261,11 @@ python3 tools/bancs/falsifier_client_deepseek.py       # 2 cas — serveur (Deno
 python3 tools/bancs/falsifier_client_deepseek_dart.py  # 6 cas — application (Flutter)
 python3 tools/bancs/falsifier_proxy_dart.py            # 6 cas — mode proxy (Flutter)
 python3 tools/bancs/falsifier_arbitrage_dart.py        # 5 cas — règle d'arbitrage (Flutter)
+python3 tools/bancs/falsifier_horloge_dart.py          # 7 cas — l'horloge corrigée par le serveur (Flutter)
+python3 tools/bancs/falsifier_pierres_tombales_dart.py # 3 cas — les deux dates d'une suppression (Flutter)
 python3 tools/bancs/falsifier_synchronisation_dart.py  # 7 cas — plan de synchronisation (Flutter)
 python3 tools/bancs/falsifier_synchronisation_locale_dart.py  # 7 cas — lecture/écriture locales (Flutter)
-python3 tools/bancs/falsifier_synchronisation_service_dart.py  # 7 cas — convergence de deux appareils (Flutter)
+python3 tools/bancs/falsifier_synchronisation_service_dart.py  # 9 cas — convergence de deux appareils (Flutter)
 python3 tools/bancs/falsifier_correspondance_types_dart.py     # 10 cas — types déclarés contre les migrations (Flutter)
 python3 tools/bancs/falsifier_dates_distantes_dart.py          # 7 cas — conversion des horodatages (Flutter)
 python3 tools/bancs/falsifier_colonnes_locales_dart.py         # 7 cas — colonnes propres à l'appareil (Flutter)
@@ -1228,19 +1290,19 @@ conclure — et il rapporte désormais **le message du compilateur**, sans quoi 
 la mutation à la main pour savoir ce qui était reproché.
 
 Un mot sur le nombre de tests annoncé dans ce document : c'est celui que l'exécuteur **imprime**
-(`567 tests`), et non le nombre de déclarations `test(` présentes dans les fichiers. Mesure faite
-à sept commits : 456 déclarations pour 462 annoncés, puis 492 pour 498, puis 518 pour 524, puis
-532 pour 538, puis 534 pour 540, puis 548 pour 554, puis 561 pour 567 — l'écart est petit et
-constant.
+(`583 tests`), et non le nombre de déclarations `test(` présentes dans les fichiers. Mesure faite
+à neuf commits : 456 déclarations pour 462 annoncés, puis 492 pour 498, puis 518 pour 524, puis
+532 pour 538, puis 534 pour 540, puis 548 pour 554, puis 561 pour 567, puis 577 pour 583 — l'écart
+est petit et constant.
 
 Ce paragraphe attribuait cet écart aux `setUpAll`/`tearDownAll`, « que l'exécuteur compte comme des
 tests ». **La mesure le contredit**, et c'est écrit ici plutôt que corrigé en silence : il y a
 **12** `setUpAll(` et **0** `tearDownAll(` dans `app/test/`, alors que l'écart vaut 6. La cause
 n'est donc pas établie. Compter les déclarations n'est d'ailleurs pas une base solide : le total
-change selon qu'on inclut `testWidgets(` — 498 `test(` seuls, 561 avec `testWidgets(` — et un
+change selon qu'on inclut `testWidgets(` — 514 `test(` seuls, 577 avec `testWidgets(` — et un
 `test(` apparaît dans un commentaire. Il y en a exactement **un** — `poids_screen_test.dart`, à la
 ligne du commentaire qui explique que les tests de widgets n'ont pas cette contrainte — donc un
-compte brut rend 499 là où un compte en début de ligne rend 498. Ce qui compte reste inchangé : le nombre cité est
+compte brut rend 515 là où un compte en début de ligne rend 514. Ce qui compte reste inchangé : le nombre cité est
 celui que l'exécuteur **imprime**, parce que c'est le seul qu'un lecteur et la CI puissent vérifier
 de la même façon.
 

@@ -160,6 +160,21 @@ class BackupService {
     caseSensitive: false,
   );
 
+  /// Cles qui ne quittent pas l'appareil **sans etre des secrets**.
+  ///
+  /// L'ecart d'horloge est un **etat de l'appareil**, pas une donnee
+  /// d'utilisateur : il corrige l'horloge de celui-ci, et ne vaut que pour lui.
+  /// Restaure sur un autre telephone, il y appliquerait la correction d'un
+  /// autre — et un appareil juste se mettrait a estampiller faux, ce qui est
+  /// exactement le defaut que cette correction existe pour eviter.
+  ///
+  /// Une liste **nommee** plutot qu'un motif, et c'est deliberе : « horloge »
+  /// n'est pas un mot qui doit exclure, et un motif assez large pour l'attraper
+  /// attraperait autre chose.
+  static const Set<String> clesJamaisSauvegardees = {
+    AppDatabase.cleDecalageHorloge,
+  };
+
   /// Construit le texte de la sauvegarde. N'ecrit rien.
   Future<String> exporter({DateTime? maintenant}) async {
     final quand = maintenant ?? DateTime.now();
@@ -175,7 +190,8 @@ class BackupService {
     final reglagesExclus = <String>[];
     final reglagesGardes = <String, String>{};
     for (final entree in settings.entries) {
-      if (motifSensible.hasMatch(entree.key)) {
+      if (motifSensible.hasMatch(entree.key) ||
+          clesJamaisSauvegardees.contains(entree.key)) {
         reglagesExclus.add(entree.key);
       } else {
         reglagesGardes[entree.key] = entree.value;
@@ -466,13 +482,23 @@ class BackupService {
 
     var reglagesEcrits = 0;
     var reglagesIgnores = 0;
+    // Ce qui ne **sort** pas ne **rentre** pas non plus, et c'est la meme liste
+    // qui decide des deux : un fichier retouche a la main, ou ecrit par une
+    // version anterieure, ne doit pas pouvoir poser sur cet appareil l'ecart
+    // d'horloge d'un autre. Filtrer seulement a l'export laisserait la porte
+    // ouverte du cote qui compte.
+    final recus = <String, String>{
+      for (final entree in sauvegarde.settings.entries)
+        if (!clesJamaisSauvegardees.contains(entree.key))
+          entree.key: entree.value,
+    };
     final aEcrire = <String, String>{};
     if (mode == ModeRestauration.remplacement) {
-      aEcrire.addAll(sauvegarde.settings);
-      reglagesEcrits = sauvegarde.settings.length;
+      aEcrire.addAll(recus);
+      reglagesEcrits = recus.length;
     } else {
       final existants = await _database.settingsPourSauvegarde();
-      for (final entree in sauvegarde.settings.entries) {
+      for (final entree in recus.entries) {
         if (existants.containsKey(entree.key)) {
           reglagesIgnores++;
         } else {

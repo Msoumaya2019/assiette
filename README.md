@@ -427,7 +427,7 @@ CI, sur cette machine :
 ```bash
 python tools/verifier_version_build.py    # 11 cas sur tools/version_build.sh
 python tools/check_migration_serveur.py   # accord des schémas local et serveur
-python tools/lancer_bancs.py              # les vingt-deux bancs de falsification
+python tools/lancer_bancs.py              # les vingt-quatre bancs de falsification
 ```
 
 L'épreuve des migrations, elle, demande Node et le paquet `@electric-sql/pglite`,
