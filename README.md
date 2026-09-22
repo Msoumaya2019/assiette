@@ -427,7 +427,7 @@ CI, sur cette machine :
 ```bash
 python tools/verifier_version_build.py    # 11 cas sur tools/version_build.sh
 python tools/check_migration_serveur.py   # accord des schémas local et serveur
-python tools/lancer_bancs.py              # les dix-sept bancs de falsification
+python tools/lancer_bancs.py              # les dix-huit bancs de falsification
 ```
 
 L'épreuve des migrations, elle, demande Node et le paquet `@electric-sql/pglite`,
@@ -523,7 +523,9 @@ Couverture actuelle :
   construction, insensible à l'ordre des clés, normalisant les nombres (`1` et
   `1.0` sont la même valeur), et **refusant** un type qu'elle ne sait pas
   représenter plutôt que de retomber sur un `toString()` instable. Ce socle est
-  éprouvé sans serveur ; le transport vers Supabase reste à écrire ;
+  éprouvé sans serveur ; le transport réel vers Supabase est **écrit** et éprouvé
+  à part, contre un faux serveur HTTP. Sans projet Supabase, il n'est pas encore
+  **branché** ;
 - **lecture et écriture locales** : la couche qui fait le pont entre ce plan et
   SQLite. Les colonnes n'y sont **pas recopiées** — elles sont lues dans le
   schéma (`PRAGMA table_info`), si bien qu'une colonne ajoutée plus tard entre
@@ -544,8 +546,9 @@ Couverture actuelle :
   battue ; et une table que le serveur refuse n'empêche pas les cinq autres de
   converger. L'écart d'horloge entre l'appareil et le serveur est **mesuré** —
   au milieu de l'aller-retour — et signalé, jamais appliqué aux dates. Le
-  transport réel vers Supabase reste à écrire : le remplacer ne changera aucun
-  de ces tests ;
+  transport réel vers Supabase est écrit et éprouvé séparément, contre un faux
+  serveur HTTP : il ne change aucun de ces tests, et c'est exactement ce que le
+  contrat garantit ;
 - **la correspondance des noms** entre schéma local et schéma serveur, déclarée
   **une seule fois** (`app/lib/data/distant/correspondance_distant.dart`) et lue
   par le contrôle qui tient l'accord des deux schémas. Les tests tiennent ce qui

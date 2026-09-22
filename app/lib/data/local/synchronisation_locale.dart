@@ -76,12 +76,23 @@ class TableSynchronisable {
 
 /// Une table fille dont le cycle de vie est celui de sa ligne parente.
 class EnfantSynchronisable {
-  const EnfantSynchronisable({required this.nom, required this.colonneLien});
+  const EnfantSynchronisable({
+    required this.nom,
+    required this.colonneLien,
+    this.colonneCle = 'id',
+  });
 
   final String nom;
 
   /// Colonne qui porte la cle du parent.
   final String colonneLien;
+
+  /// Colonne qui porte l'identifiant **stable entre appareils** de l'enfant.
+  ///
+  /// Nommee plutot que supposee : le transport en a besoin pour designer la
+  /// contrainte d'unicite du serveur a l'ecriture, et l'ecrire `'id'` en dur
+  /// ferait dependre un accord entre deux schemas d'une convention non dite.
+  final String colonneCle;
 }
 
 /// Les tables qui portent un cycle de vie complet : une date de modification et

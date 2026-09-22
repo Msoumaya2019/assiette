@@ -11,10 +11,10 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Élément | État |
 | --- | --- |
 | Code source complet, analysé sans avertissement | prêt |
-| 462 tests de l'application, tous verts | prêt |
+| 498 tests de l'application, tous verts | prêt |
 | 18 tests du serveur, tous verts | prêt |
 | Dépôt public | https://github.com/Msoumaya2019/assiette |
-| Flux `ci.yml` — analyse, 462 tests, 9 contrôles | **vert** |
+| Flux `ci.yml` — analyse, 498 tests, 9 contrôles | **vert** |
 | Flux `ci.yml` — migrations Supabase exécutées sur un vrai PostgreSQL | **vert** (35 épreuves) |
 | Flux Android — APK et AAB | **vert**, artefacts signés et vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
@@ -908,17 +908,29 @@ transporter effacerait la photo de l'autre appareil sans la moindre erreur. La l
 l'émet plus, l'écriture la relit pour la remettre, et un banc séparé éprouve les deux
 moitiés.
 
-Ce qui n'existe toujours pas, c'est le **transport** : rien ne lit ni n'écrit sur Supabase,
-et le projet Supabase n'est pas encore créé. Le contrat du transport tient en trois
-méthodes, et les tests de convergence n'en dépendent pas : les remplacer par le vrai client
-ne changera aucun d'entre eux. Ce qui reste à écrire dans ce transport est connu et
-nommé : le **deuxième passage** sur les repas, parce que `meal_items.meal_id` désigne
-l'`uuid` que le serveur génère lui-même et non le `client_id` de l'appareil — il faut donc
-insérer le repas, relire son `uuid`, puis rattacher les aliments ; l'échappement du
-plafond de **mille lignes** que PostgREST applique à une lecture, par un découpage ou une
-sélection forcée ; le **découpage en lots** pour les grosses charges ; et l'authentification
-par jeton, avec les politiques RLS qui filtrent déjà par utilisateur. La plomberie reste à
-faire, et elle est désormais la seule.
+Le **transport** est écrit, et c'est la dernière pièce qui manquait à la chaîne : `package:http`
+plutôt que le client Supabase, pour que le client soit injectable et que toute la mécanique
+s'éprouve contre un faux serveur, sans réseau. Les quatre points qui restaient à écrire le
+sont : le **deuxième passage** sur les repas (`meal_items.meal_id` désigne l'`uuid` que le
+serveur génère lui-même — il faut insérer le repas, **relire son `uuid`**, puis rattacher les
+aliments) ; l'échappement du plafond de **mille lignes** que PostgREST applique à une lecture,
+par l'en-tête `Range` ; le **découpage en lots** ; et l'authentification par jeton, avec les
+politiques RLS qui filtrent déjà par utilisateur. Les trois familles de conversion y sont
+appliquées dans les deux sens.
+
+Ce transport n'est pas encore **branché**, et le projet Supabase n'est pas encore créé : c'est
+l'action qui reste. Ce que les tests établissent, c'est qu'on envoie ce qu'on croit envoyer —
+pas que PostgREST en fait ce qu'on croit. Un banc séparé, de vingt-deux cas, tient ces règles :
+il fait tomber chacune des vingt et une fautes qu'il fabrique, et pas la reformulation d'un
+commentaire.
+
+Deux défauts réels ont été trouvés en écrivant ces tests, tous les deux silencieux, et tous les
+deux invisibles à un faux serveur écrit trop gentiment : l'en-tête `Date` était cherché en
+minuscules alors que les passerelles l'envoient avec sa majuscule — l'écart d'horloge
+disparaissait donc **sans un mot**, puisque le service avale cet échec ; et `meals.photo_path`,
+retenue sur l'appareil, **revenait** du serveur — une clé de plus dans le contenu d'un côté et
+pas de l'autre, donc deux empreintes qui diffèrent à jamais, un arbitrage qui désigne un
+gagnant à chaque passage, et la même ligne réécrite sans fin.
 
 Dans une **liste** de résultats, les aliments qui portent une portion connue sont
 désormais chiffrés par portion, les autres pour 100 g : deux bases dans la même
@@ -979,7 +991,7 @@ bancs vivent dans `tools/bancs/` — **dans le dépôt**, pas dans un dossier
 temporaire, pour qu'ils soient rejouables.
 
 ```bash
-python3 tools/bancs/falsifier_fins_de_ligne.py         # 6 cas
+python3 tools/bancs/falsifier_fins_de_ligne.py         # 5 cas
 python3 tools/bancs/falsifier_ios.py                   # 6 cas
 python3 tools/bancs/falsifier_adresses.py              # 4 cas
 python3 tools/bancs/falsifier_client_deepseek.py       # 2 cas — serveur (Deno)
@@ -989,10 +1001,11 @@ python3 tools/bancs/falsifier_arbitrage_dart.py        # 5 cas — règle d'arbi
 python3 tools/bancs/falsifier_synchronisation_dart.py  # 7 cas — plan de synchronisation (Flutter)
 python3 tools/bancs/falsifier_synchronisation_locale_dart.py  # 7 cas — lecture/écriture locales (Flutter)
 python3 tools/bancs/falsifier_synchronisation_service_dart.py  # 7 cas — convergence de deux appareils (Flutter)
-python3 tools/bancs/falsifier_correspondance_types_dart.py     # 7 cas — types déclarés contre les migrations (Flutter)
+python3 tools/bancs/falsifier_correspondance_types_dart.py     # 10 cas — types déclarés contre les migrations (Flutter)
 python3 tools/bancs/falsifier_dates_distantes_dart.py          # 7 cas — conversion des horodatages (Flutter)
 python3 tools/bancs/falsifier_colonnes_locales_dart.py         # 7 cas — colonnes propres à l'appareil (Flutter)
-python3 tools/bancs/falsifier_version_build.py         # 6 cas — version publiée
+python3 tools/bancs/falsifier_transport_supabase_dart.py       # 22 cas — le transport réel, vers Supabase (Flutter)
+python3 tools/bancs/falsifier_version_build.py         # 7 cas — version publiée
 python3 tools/bancs/falsifier_check_workflows.py       # 19 cas — validation des flux
 python3 tools/bancs/falsifier_migration_serveur.py     # 18 cas — accord des deux schémas
 python3 tools/bancs/falsifier_epreuve_migrations.py    # 6 cas — épreuve PostgreSQL

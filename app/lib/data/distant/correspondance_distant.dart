@@ -41,6 +41,14 @@
 /// Il ne **convertit** rien : les dates locales sont des entiers en
 /// millisecondes, le serveur les porte en `timestamptz`. Cette conversion est
 /// le travail du transport, pas de la declaration.
+///
+/// Il **nomme** en revanche les trois familles de colonnes qui exigent une
+/// conversion, parce qu'un transport qui les ignorerait ne le saurait pas :
+/// [colonnesDatesDistantes], [colonnesBooleennesDistantes] et
+/// [colonnesJsonDistantes]. Trois pieges, une seule consequence — `true` et `1`,
+/// `1700000000000` et `« 2023-11-14T22:13:20.000Z »`, `[1]` et `« [1] »` ne
+/// font pas la meme empreinte, donc l'arbitrage trancherait toujours dans le
+/// meme sens et chaque passage reecrirait la meme ligne.
 library;
 
 /// Table locale -> table serveur.
@@ -140,6 +148,20 @@ const Map<String, Set<String>> colonnesDatesDistantes = {
 const Map<String, Set<String>> colonnesBooleennesDistantes = {
   'meals': {'is_estimate'},
   'meal_items': {'is_estimate'},
+};
+
+/// Colonnes que le serveur porte en `jsonb` et le local en texte.
+///
+/// Le troisieme piege de type, et le plus discret des trois : `items` et
+/// `payload` sont deja « du JSON » des deux cotes, donc ils ont l'air
+/// transportables tels quels. Ils ne le sont pas — le serveur en rend une liste
+/// ou un objet, le local en attend une chaine. La conversion vit dans
+/// `json_distants.dart`.
+///
+/// Nommees **en vocabulaire local**, comme les deux familles precedentes.
+const Map<String, Set<String>> colonnesJsonDistantes = {
+  'templates': {'items_json'},
+  'favorites': {'payload_json'},
 };
 
 /// Colonnes dont la **valeur** ne quitte pas cet appareil.

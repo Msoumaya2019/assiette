@@ -5,26 +5,29 @@ Pourquoi ce banc existe
 -----------------------
 `tools/check_migration_serveur.py` tient l'accord des **noms**. Il ne dit rien
 des **types**, et c'est la que se cache une boucle silencieuse : le serveur
-porte `eaten_at` en `timestamptz` et `is_estimate` en `boolean`, le local les
-porte en entier. Sans conversion, les deux cotes ne decrivent jamais la meme
-chose — l'arbitrage tranche toujours dans le meme sens, chaque passage reecrit
-la meme ligne, et rien ne le signale.
+porte `eaten_at` en `timestamptz`, `is_estimate` en `boolean` et `items` en
+`jsonb`, le local les porte en entier et en texte. Sans conversion, les deux
+cotes ne decrivent jamais la meme chose — l'arbitrage tranche toujours dans le
+meme sens, chaque passage reecrit la meme ligne, et rien ne le signale.
 
-`app/test/data/correspondance_types_test.dart` confronte donc les deux
-declarations aux migrations, dans les deux sens. Ce banc verifie qu'il tombe
-vraiment.
+`app/test/data/correspondance_types_test.dart` confronte donc les trois
+familles de declarations aux migrations, dans les deux sens. Ce banc verifie
+qu'il tombe vraiment, famille par famille : une famille qui ne recevrait qu'un
+controle dans un sens serait a moitie couverte, et c'est la moitie qui manque
+qui laisse passer l'oubli.
 
 Le cas qui compte le plus
 -------------------------
-Le troisieme cas mute la **migration**, pas la declaration. Sans lui, on ne
-saurait pas si le test lit reellement les fichiers `.sql` : un test qui compare
-une declaration a elle-meme tomberait sur les deux premiers cas et passerait
-partout ailleurs, en ne mesurant rien.
+Le cas « le serveur change de type » mute la **migration**, pas la declaration.
+Sans lui, on ne saurait pas si le test lit reellement les fichiers `.sql` : un
+test qui compare une declaration a elle-meme tomberait sur les autres cas et
+passerait partout ailleurs, en ne mesurant rien.
 
-Le quatrieme cas mutile la lecture elle-meme — six `create table if not exists`
-redeviennent `create table`. Le lecteur ne trouve plus rien, et le garde-fou
-« les migrations ont bien ete lues » doit le dire. Sans ce cas, un lecteur
-aveugle rendrait tous les autres tests verts.
+Le cas « le lecteur des migrations devient aveugle » mutile la lecture
+elle-meme — six `create table if not exists` redeviennent `create table`. Le
+lecteur ne trouve plus rien, et le garde-fou « les migrations ont bien ete
+lues » doit le dire. Sans ce cas, un lecteur aveugle rendrait tous les autres
+tests verts.
 
 Usage : python3 tools/bancs/falsifier_correspondance_types_dart.py
 """
@@ -46,7 +49,7 @@ TESTS = "test/data/correspondance_types_test.dart"
 
 # A mettre a jour en meme temps que le fichier de tests, jamais pour faire
 # passer le banc.
-TESTS_ATTENDUS = 6
+TESTS_ATTENDUS = 9
 
 # --- ancres : au niveau octet, telles que `dart format` les ecrit ---
 #
@@ -62,6 +65,21 @@ BOOLEENS = b"  'meals': {'is_estimate'},\n  'meal_items': {'is_estimate'},\n"
 BOOLEENS_SANS_MEAL_ITEMS = b"  'meals': {'is_estimate'},\n"
 BOOLEENS_AVEC_NAME = b"  'meals': {'is_estimate', 'name'},\n"
 
+JSON = b"  'templates': {'items_json'},\n  'favorites': {'payload_json'},\n"
+JSON_SANS_TEMPLATES = b"  'favorites': {'payload_json'},\n"
+JSON_AVEC_NAME = (
+    b"  'templates': {'items_json', 'name'},\n"
+    b"  'favorites': {'payload_json'},\n"
+)
+
+DECLARATION_JSON = (
+    b"const Map<String, Set<String>> colonnesJsonDistantes = {\n"
+    b"  'templates': {'items_json'},\n"
+    b"  'favorites': {'payload_json'},\n"
+    b"};\n"
+)
+DECLARATION_JSON_VIDE = b"const Map<String, Set<String>> colonnesJsonDistantes = {};\n"
+
 TYPE_SERVEUR_EATEN_AT = b"eaten_at timestamptz"
 TYPE_SERVEUR_EATEN_AT_TEXTE = b"eaten_at text"
 
@@ -75,8 +93,11 @@ COMMENTAIRE_REFORMULE = b"-- Les repas que l'utilisateur a enregistres.\n"
 
 T_DATE_OUBLIEE = "aucune colonne datee du serveur n'est oubliee"
 T_BOOLEEN_OUBLIE = "aucune colonne booleenne du serveur n'est oubliee"
+T_JSON_OUBLIE = "aucune colonne JSON du serveur n'est oubliee"
 T_DATE_A_TORT = "chaque colonne declaree comme datee est un timestamptz"
 T_BOOLEEN_A_TORT = "chaque colonne declaree comme booleenne est un boolean"
+T_JSON_A_TORT = "chaque colonne declaree comme JSON est un jsonb"
+T_FAMILLE_VIDE = "aucune famille de conversion n'est oubliee"
 T_LECTEUR = "les migrations ont bien ete lues"
 
 
@@ -128,6 +149,22 @@ def principal() -> int:
         # Meme faute, sur l'autre declaration.
         banc.suivre(DECLARATION).muter(BOOLEENS, BOOLEENS_AVEC_NAME)
 
+    def json_oublie() -> None:
+        # Le troisieme piege de type, et le plus discret : `items` est un `jsonb`
+        # cote serveur, du texte cote local. Les deux cotes portent « du JSON »,
+        # donc la colonne a l'air transportable telle quelle.
+        banc.suivre(DECLARATION).muter(JSON, JSON_SANS_TEMPLATES)
+
+    def json_declare_a_tort() -> None:
+        # `templates.name` est un `text`, declare JSON.
+        banc.suivre(DECLARATION).muter(JSON, JSON_AVEC_NAME)
+
+    def famille_json_videe() -> None:
+        # Une famille videe. Deux tests doivent tomber : celui de l'oubli, et
+        # celui qui refuse une famille vide — une famille vide a l'air d'une
+        # protection et n'en est pas une.
+        banc.suivre(DECLARATION).muter(DECLARATION_JSON, DECLARATION_JSON_VIDE)
+
     def serveur_change_de_type() -> None:
         # La **migration** change, la declaration ne bouge pas. Ce cas est le
         # seul qui prouve que le test lit reellement les `.sql` : sans lui, un
@@ -145,8 +182,11 @@ def principal() -> int:
 
     banc.cas("date oubliee dans la declaration", T_DATE_OUBLIEE, date_oubliee)
     banc.cas("booleen oublie dans la declaration", T_BOOLEEN_OUBLIE, booleen_oublie)
+    banc.cas("json oublie dans la declaration", T_JSON_OUBLIE, json_oublie)
     banc.cas("colonne declaree datee a tort", T_DATE_A_TORT, date_declaree_a_tort)
     banc.cas("colonne declaree booleenne a tort", T_BOOLEEN_A_TORT, booleen_declare_a_tort)
+    banc.cas("colonne declaree JSON a tort", T_JSON_A_TORT, json_declare_a_tort)
+    banc.cas("famille JSON videe", T_FAMILLE_VIDE, famille_json_videe)
     banc.cas("le serveur change de type", T_DATE_A_TORT, serveur_change_de_type)
     banc.cas("le lecteur des migrations devient aveugle", T_LECTEUR, lecteur_aveugle)
     banc.cas("commentaire reformule", T_DATE_A_TORT, commentaire_reformule, attendu=False)

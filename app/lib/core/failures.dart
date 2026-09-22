@@ -95,6 +95,20 @@ class MissingCredentialFailure extends AppFailure {
   final bool rejected;
 }
 
+/// La session de synchronisation est absente, expiree ou refusee.
+///
+/// Distincte de [MissingCredentialFailure], et pour une raison de fond : celle-ci
+/// parle de la cle d'analyse du fournisseur, celle-la du jeton de session du
+/// compte. Les confondre enverrait l'utilisateur renseigner une cle d'analyse
+/// alors que le remede est de se reconnecter.
+class SessionRefuseeFailure extends AppFailure {
+  const SessionRefuseeFailure()
+    : super(
+        'Session de synchronisation refusee',
+        hint: 'Reconnectez-vous dans Reglages, section Compte.',
+      );
+}
+
 /// Le fournisseur a refuse la requete pour une raison de fond.
 class ProviderFailure extends AppFailure {
   /// [isRetryable] distingue une panne passagere (5xx, a relancer) d'un refus

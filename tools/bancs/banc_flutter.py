@@ -38,15 +38,24 @@ from banc import RACINE, Banc, MesureImpossible  # noqa: E402
 from environnement_flutter import environnement_mesure  # noqa: E402
 
 
-def lire_rapport(sortie: str) -> tuple[int, list[str]]:
-    """Nombre de tests reellement executes, et noms de ceux en echec.
+def lire_rapport(sortie: str) -> tuple[int, list[str], list[str]]:
+    """Nombre de tests reellement executes, noms de ceux en echec, erreurs.
 
     Le test `loading` et les groupes sont marques `hidden` : les compter
     gonflerait le total et masquerait un chargement rate.
+
+    Le troisieme retour porte le texte des evenements `error`. Il n'est **pas**
+    utilise pour juger — il sert a dire **pourquoi** une mesure n'a pas pu
+    tourner. Mesure faite : une compilation cassee produit exactement **un**
+    test execute, le test de chargement, et le banc refusait alors de conclure en
+    annoncant « Compilation cassee par la mutation, ou total a mettre a jour »
+    sans jamais dire ce que le compilateur reprochait. Il fallait reproduire la
+    mutation a la main pour l'apprendre.
     """
     noms: dict[int, str] = {}
     executes = 0
     echecs: list[str] = []
+    erreurs: list[str] = []
 
     for ligne in sortie.splitlines():
         ligne = ligne.strip()
@@ -63,6 +72,9 @@ def lire_rapport(sortie: str) -> tuple[int, list[str]]:
             identifiant = test.get("id")
             if isinstance(identifiant, int):
                 noms[identifiant] = str(test.get("name") or "")
+        elif genre == "error":
+            # Garde tel quel : c'est le message du compilateur ou du test.
+            erreurs.append(str(evenement.get("error") or ""))
         elif genre == "testDone":
             if evenement.get("hidden"):
                 continue
@@ -84,7 +96,7 @@ def lire_rapport(sortie: str) -> tuple[int, list[str]]:
             if resultat != "success":
                 echecs.append(noms.get(evenement.get("testID"), "<test inconnu>"))
 
-    return executes, echecs
+    return executes, echecs, erreurs
 
 
 class ResultatFlutter:
@@ -92,11 +104,24 @@ class ResultatFlutter:
         self.code = code
         self.sortie = sortie
         self.erreur = erreur
-        self.executes, self.echecs = lire_rapport(sortie)
+        self.executes, self.echecs, self.erreurs = lire_rapport(sortie)
 
     @property
     def texte(self) -> str:
         return "\n".join(self.echecs) + "\n" + self.erreur
+
+    @property
+    def cause(self) -> str:
+        """Le premier message d'erreur, pour dire pourquoi la mesure a echoue.
+
+        Volontairement **hors** de [texte] : un message de compilateur cite le
+        chemin du fichier de tests, et un marqueur qui s'y trouverait par
+        accident ferait conclure « detecte » sur une mutation qui n'a rien
+        mesure du tout.
+        """
+        if not self.erreurs:
+            return ""
+        return " ".join(self.erreurs[0].split())[:400]
 
 
 class BancFlutter(Banc):
@@ -126,10 +151,11 @@ class BancFlutter(Banc):
         mesure = ResultatFlutter(resultat.returncode, resultat.stdout, resultat.stderr)
 
         if mesure.executes != self.tests_attendus:
+            detail = f"\n  ce que la mesure a rapporte : {mesure.cause}" if mesure.cause else ""
             raise MesureImpossible(
                 f"{mesure.executes} test(s) execute(s), {self.tests_attendus} attendu(s) : "
                 "les tests n'ont pas pu tourner. Compilation cassee par la mutation, "
-                "ou total a mettre a jour si le fichier de tests a change."
+                f"ou total a mettre a jour si le fichier de tests a change.{detail}"
             )
 
         if resultat.returncode != 0 and not mesure.echecs:

@@ -1,21 +1,29 @@
-import 'dart:io';
-
-import 'package:assiette/data/distant/correspondance_distant.dart';
-import 'package:assiette/data/local/synchronisation_locale.dart';
-import 'package:flutter_test/flutter_test.dart';
-
 /// Les types declares, confrontes aux migrations
 /// ---------------------------------------------
 /// `tools/check_migration_serveur.py` tient l'accord des **noms**. Il ne dit
 /// rien des **types**, et c'est la que se cache une boucle silencieuse : le
 /// serveur porte `eaten_at` en `timestamptz` et `is_estimate` en `boolean`, le
-/// local les porte en entier. Sans conversion, les deux cotes ne decrivent
-/// jamais la meme chose : l'arbitrage tranche toujours dans le meme sens, chaque
-/// passage reecrit la meme ligne, et rien ne le signale.
+/// local les porte en entier ; `items` et `payload` sont des `jsonb`, le local
+/// les porte en texte. Sans conversion, les deux cotes ne decrivent jamais la
+/// meme chose : l'arbitrage tranche toujours dans le meme sens, chaque passage
+/// reecrit la meme ligne, et rien ne le signale.
 ///
-/// Ce fichier confronte donc les deux declarations de types aux migrations
+/// Ce fichier confronte donc les trois declarations de types aux migrations
 /// reelles, **dans les deux sens** : rien de declare qui ne soit du bon type, et
-/// aucune colonne datee ou booleenne du serveur oubliee.
+/// aucune colonne datee, booleenne ou JSON du serveur oubliee.
+///
+/// Les trois familles sont traitees par la meme paire de controles, et c'est
+/// deliberé : une famille ajoutee plus tard qui ne recevrait qu'un controle
+/// dans un sens serait a moitie couverte, et c'est exactement la moitie qui
+/// manque qui laisse passer l'oubli. La liste des familles est donc **close**
+/// et verifiee — voir le dernier test.
+library;
+
+import 'dart:io';
+
+import 'package:assiette/data/distant/correspondance_distant.dart';
+import 'package:assiette/data/local/synchronisation_locale.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 /// Le dossier des migrations, trouve en remontant depuis le dossier courant.
 ///
@@ -171,6 +179,64 @@ void main() {
 
   test('aucune colonne booleenne du serveur n\'est oubliee', () {
     _verifierAucunOubli(types, 'boolean', colonnesBooleennesDistantes);
+  });
+
+  test('chaque colonne declaree comme JSON est un jsonb', () {
+    for (final entree in colonnesJsonDistantes.entries) {
+      final colonnes = serveurDe(entree.key);
+      for (final locale in entree.value) {
+        final distante = colonneDistante(entree.key, locale);
+        expect(
+          colonnes[distante],
+          'jsonb',
+          reason:
+              '${entree.key}.$locale est declaree JSON, mais '
+              '${tablesDistantes[entree.key]}.$distante est '
+              '« ${colonnes[distante]} »',
+        );
+      }
+    }
+  });
+
+  test('aucune colonne JSON du serveur n\'est oubliee', () {
+    _verifierAucunOubli(types, 'jsonb', colonnesJsonDistantes);
+  });
+
+  test('aucune famille de conversion n\'est oubliee, et aucune n\'est vide', () {
+    // Une famille ajoutee plus tard qui ne recevrait qu'un controle dans un sens
+    // serait a moitie couverte, et c'est la moitie qui manque qui laisse passer
+    // l'oubli. La liste est donc close ici, et chaque famille doit porter
+    // quelque chose : une famille vide a l'air d'une protection et n'en est pas
+    // une.
+    //
+    // Les **nombres** n'y figurent pas, et ce n'est pas un oubli : un `numeric`
+    // serveur revient tantot entier, tantot flottant, et `empreinte.dart`
+    // normalise deja les deux en une seule forme. C'est verifie la-bas, sur
+    // l'empreinte elle-meme, plutot que duplique ici.
+    const familles = <String, Map<String, Set<String>>>{
+      'timestamptz': colonnesDatesDistantes,
+      'boolean': colonnesBooleennesDistantes,
+      'jsonb': colonnesJsonDistantes,
+    };
+    for (final entree in familles.entries) {
+      final total = entree.value.values.fold<int>(
+        0,
+        (somme, colonnes) => somme + colonnes.length,
+      );
+      expect(
+        total,
+        greaterThan(0),
+        reason: 'la famille ${entree.key} est vide',
+      );
+      for (final table in entree.value.keys) {
+        expect(
+          tablesDistantes,
+          contains(table),
+          reason:
+              '${entree.key} declare la table $table, qui n\'en est pas une',
+        );
+      }
+    }
   });
 
   test('les colonnes de service et du serveur seul sont hors du contenu', () {
