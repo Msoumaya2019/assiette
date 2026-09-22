@@ -11,16 +11,16 @@ elles ont été vérifiées le 18 septembre 2026, aux sources citées.
 | Élément | État |
 | --- | --- |
 | Code source complet, analysé sans avertissement | prêt |
-| 593 tests de l'application, tous verts | prêt |
+| 594 tests de l'application, tous verts | prêt |
 | 18 tests du serveur, tous verts | prêt |
 | Dépôt public | https://github.com/Msoumaya2019/assiette |
-| Flux `ci.yml` — analyse, 593 tests, 8 contrôles | **vert** |
+| Flux `ci.yml` — analyse, 594 tests, 8 contrôles | **vert** |
 | Flux `ci.yml` — migrations Supabase exécutées sur un vrai PostgreSQL | **vert** (35 épreuves) |
 | Flux Android — APK et AAB | **vert**, artefacts signés et vérifiés |
 | Flux iOS — IPA non signée | **vert**, artefact vérifié |
-| Déclenchement par étiquette `v*` | **vert** (`v0.1.0`, `v0.1.1`, `v0.1.2`, `v0.1.3`, `v0.1.4`, `v0.1.5`, `v0.1.6`) |
-| Dernière version publiée | **`v0.1.6`** — APK signé, AAB signé, IPA (horloge corrigée par celle du serveur, et chiffre comparable sur les listes) |
-| Version précédente | **`v0.1.5`** — unité des valeurs remise d'accord avec la portion affichée. Utilisable, mais son horloge est celle de l'appareil, et ses listes ne portent pas le chiffre des 100 g. |
+| Déclenchement par étiquette `v*` | **vert** (`v0.1.0`, `v0.1.1`, `v0.1.2`, `v0.1.3`, `v0.1.4`, `v0.1.5`, `v0.1.6`, `v0.1.7`) |
+| Dernière version publiée | **`v0.1.7`** — APK signé, AAB signé, IPA (la fiche produit du code-barres affiche enfin le chiffre comparable, et un contrôle tient que les écrans passent par le point unique) |
+| Version précédente | **`v0.1.6`** — horloge corrigée par celle du serveur, chiffre comparable sur les listes. Utilisable, mais sa fiche produit ne porte pas le chiffre comparable. |
 | Version à **ne pas** installer | `v0.1.3` — l'écran de suivi du poids y tombe dès la première pesée. Ses notes portent l'avertissement. |
 | Version au chiffre trompeur | `v0.1.4` — utilisable, mais trois écrans annoncent « pour 1 pot (125 g) » sous le chiffre des 100 g. Corrigé en `v0.1.5` ; voir §8. |
 | Icônes et écran de démarrage (Android et iOS) | prêt |
@@ -1148,18 +1148,20 @@ Le choix est tranché, et il ne l'a pas été **contre** la demande initiale.
 comparable** : les mêmes valeurs ramenées à 100 g, et `null` quand l'aperçu *est*
 déjà la valeur des 100 g. La portion reste mise en avant — c'est ce que
 l'utilisateur mange, et ce qu'il a demandé — et le chiffre comparable vient **à
-côté**, jamais à la place. Les résultats de recherche et les favoris l'affichent
-sous la valeur de la portion.
+côté**, jamais à la place. Les trois écrans qui reçoivent un aperçu l'affichent sous
+la valeur de la portion : les résultats de recherche et les favoris par le bloc
+partagé, la fiche produit du code-barres par la même ligne, sous sa mise en page.
 
 La ligne est construite en un seul endroit (`ligneComparable`,
 `ui/widgets/common.dart`), et c'est là que le défaut est né : un écran annonçait
 « 12 g de glucides pour 1 pot (125 g) », où 12 est la valeur des 100 g. Une ligne
 qui prendrait son nombre ici et son étiquette là reproduit exactement cette faute ;
-c'est ce que le banc fabrique, avant de laisser passer la fonction. Deux bancs
+c'est ce que le banc fabrique, avant de laisser passer la fonction. Trois bancs
 tiennent l'ensemble : `falsifier_apercu_aliment_dart.py` pour ce que l'aperçu rend,
-`falsifier_ligne_comparable_dart.py` pour ce que la liste en écrit.
+`falsifier_ligne_comparable_dart.py` pour ce que la liste en écrit, et
+`falsifier_affichage_des_apercus_dart.py` pour ce que les écrans en font.
 
-Ce que ces deux bancs couvrent, et qui a demandé un détour : les tuiles elles-mêmes.
+Ce que ces bancs couvrent, et qui a demandé deux détours : les tuiles elles-mêmes.
 Elles n'étaient pas éprouvables — `_FoodTile` lisait `portionsProvider`, donc un test
 de widget aurait exigé de remplacer tout le fournisseur, et un test qui remplace tout
 ne mesure plus la tuile. Le bloc d'affichage a donc été extrait en un widget public qui
@@ -1168,6 +1170,16 @@ montent. Le banc `falsifier_ligne_comparable_dart.py` en porte la preuve : sa ci
 faute — le bloc cesse d'écrire la ligne comparable — laisse la fonction juste, et
 **aucun** test de fonction ne la voit ; seul le test d'interface tombe. Sans ce cas, on
 ne saurait pas si ces trois tests mesurent quoi que ce soit.
+
+**Et ce bloc ne suffisait pas**, parce qu'un écran peut ne pas l'appeler. Un audit
+avant livraison a trouvé le troisième : celui du code-barres composait son texte
+lui-même et n'affichait donc pas le chiffre comparable. Aucun banc ne pouvait le
+voir — les bancs mesurent la fonction et le bloc, jamais leurs appelants. Le
+contrôle ajouté (`app/test/ui/affichage_des_apercus_test.dart`) **dérive** la liste
+des écrans qui appellent `apercuDePortion`, et exige que chacun passe par le point
+unique. Sa falsification a un cas qui compte plus que les autres : un écran factice
+apparaît, et le contrôle doit le déclarer fautif **sans qu'on ait touché à aucune
+liste** — c'est ce qui établit qu'il dérive au lieu de recopier.
 
 Ce que cela ne résout pas non plus : deux produits dont un seul a une portion
 demandent encore de lire la petite ligne pour être comparés. Une base unique pour
@@ -1298,6 +1310,7 @@ python3 tools/bancs/falsifier_horloge_dart.py          # 7 cas — l'horloge cor
 python3 tools/bancs/falsifier_pierres_tombales_dart.py # 3 cas — les deux dates d'une suppression (Flutter)
 python3 tools/bancs/falsifier_apercu_aliment_dart.py   # 4 cas — la portion, et le chiffre comparable (Flutter)
 python3 tools/bancs/falsifier_ligne_comparable_dart.py # 6 cas — la ligne comparable, et le bloc qui l'ecrit (Flutter)
+python3 tools/bancs/falsifier_affichage_des_apercus_dart.py # 3 cas — les ecrans passent-ils par le point unique (Flutter)
 python3 tools/bancs/falsifier_synchronisation_dart.py  # 7 cas — plan de synchronisation (Flutter)
 python3 tools/bancs/falsifier_synchronisation_locale_dart.py  # 7 cas — lecture/écriture locales (Flutter)
 python3 tools/bancs/falsifier_synchronisation_service_dart.py  # 9 cas — convergence de deux appareils (Flutter)
@@ -1325,17 +1338,17 @@ conclure — et il rapporte désormais **le message du compilateur**, sans quoi 
 la mutation à la main pour savoir ce qui était reproché.
 
 Un mot sur le nombre de tests annoncé dans ce document : c'est celui que l'exécuteur **imprime**
-(`593 tests`), et non le nombre de déclarations `test(` présentes dans les fichiers. Mesure faite
-dix fois : 456 déclarations pour 462 annoncés, puis 492 pour 498, puis 518 pour 524, puis
+(`594 tests`), et non le nombre de déclarations `test(` présentes dans les fichiers. Mesure faite
+onze fois : 456 déclarations pour 462 annoncés, puis 492 pour 498, puis 518 pour 524, puis
 532 pour 538, puis 534 pour 540, puis 548 pour 554, puis 561 pour 567, puis 577 pour 583, puis
-584 pour 590, puis 587 pour 593 — l'écart est petit et constant.
+584 pour 590, puis 587 pour 593, puis 588 pour 594 — l'écart est petit et constant.
 
 Ce paragraphe attribuait cet écart aux `setUpAll`/`tearDownAll`, « que l'exécuteur compte comme des
 tests ». **La mesure le contredit** : il y a **12** `setUpAll(` et **0** `tearDownAll(` dans
 `app/test/`. La cause est maintenant établie, et elle est plus simple — et plus intéressante.
 
-Le rapport **JSON** de `flutter test` sépare les entrées : **653** `testDone`, dont **60 masquées**
-(les crochets de groupe) et **593 visibles**. Aucune entrée visible ne commence par `(` : l'exécuteur
+Le rapport **JSON** de `flutter test` sépare les entrées : **655** `testDone`, dont **61 masquées**
+(les crochets de groupe) et **594 visibles**. Aucune entrée visible ne commence par `(` : l'exécuteur
 ne compte donc **pas** les crochets comme des tests. Et aucun nom n'apparaît deux fois, donc aucune
 boucle ne fabrique de tests. La comparaison fichier par fichier, littéral contre exécuté, ne désigne
 qu'un seul écart : `backup_service_test.dart` porte **37** déclarations `test(` et le coureur en
@@ -1344,18 +1357,18 @@ contient **une** déclaration `test(` et que le groupe appelle **sept** fois : s
 une déclaration. Ce n'est donc pas une anomalie du coureur, c'est un motif — chaque refus est un
 test, et le nommer coûte une ligne.
 
-Le compte referme l'explication : **587** déclarations réelles pour **593** tests exécutés, soit
+Le compte referme l'explication : **588** déclarations réelles pour **594** tests exécutés, soit
 **+6** — exactement les six appels supplémentaires de ce helper. L'écart constant n'est pas une
 tolérance qu'on s'accorde, c'est un chiffre qu'on explique.
 
 Compter les déclarations n'est d'ailleurs pas une base solide : le total change selon qu'on inclut
-`testWidgets(` — 521 `test(` seuls, 587 avec `testWidgets(` — et un `test(` apparaît dans un
+`testWidgets(` — 522 `test(` seuls, 588 avec `testWidgets(` — et un `test(` apparaît dans un
 commentaire. Il y en a exactement **un** — `poids_screen_test.dart`, à la ligne du commentaire qui
-explique que les tests de widgets n'ont pas cette contrainte — donc un compte brut rend 522 là où un
-compte réel rend 521. Un second piège du même genre : les **66** `testWidgets` sont tous rattachés
+explique que les tests de widgets n'ont pas cette contrainte — donc un compte brut rend 523 là où un
+compte réel rend 522. Un second piège du même genre : les **66** `testWidgets` sont tous rattachés
 par le rapport à `widget_tester.dart` et non à leur propre fichier, si bien que six fichiers de
-widgets paraissent n'avoir aucun test — 36 suites, dont 30 portent des tests. Le rapport le dit
-sans ambiguïté : **31** fichiers cités par les tests visibles, dont `widget_tester.dart`, et les six
+widgets paraissent n'avoir aucun test — 37 suites, dont 31 portent des tests. Le rapport le dit
+sans ambiguïté : **32** fichiers cités par les tests visibles, dont `widget_tester.dart`, et les six
 suites sans test rattaché sont les six fichiers `ui/` de widgets — `compte_section`, `navigation`,
 `poids_screen`, `quantity_editor`, `section_card`, `settings_notifications`. Ce qui compte reste
 inchangé : le nombre cité est celui que l'exécuteur **imprime**, parce que c'est le seul qu'un lecteur

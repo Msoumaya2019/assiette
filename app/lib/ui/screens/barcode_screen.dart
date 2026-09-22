@@ -345,7 +345,17 @@ class _ProductPanel extends ConsumerWidget {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  'g de glucides\n${apercu.reference}',
+                  // Cet ecran garde sa mise en page, le nombre est en grand,
+                  // mais pas sa propre facon d'ecrire la ligne comparable : elle
+                  // vient de la meme fonction que les listes. C'est precisement
+                  // ce qui manquait ici, et un ecran qui recomposerait ce texte
+                  // seul est ce qui avait laisse annoncer "pour 1 pot (125 g)"
+                  // sous le chiffre des 100 g.
+                  [
+                    'g de glucides',
+                    apercu.reference,
+                    if (ligneComparable(apercu) case final ligne?) ligne,
+                  ].join('\n'),
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,

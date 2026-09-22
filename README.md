@@ -92,8 +92,8 @@ peut plus désigner une autre unité que celle des valeurs. Les binaires publié
 `v0.1.3` et `v0.1.4` portent l'ancien affichage.
 
 Une **liste** sert à comparer, et deux produits dont l'un est chiffré pour un pot
-et l'autre pour 100 g ne se comparent pas sans un calcul mental. Les résultats de
-recherche et les favoris affichent donc, sous la valeur de la portion, le chiffre
+et l'autre pour 100 g ne se comparent pas sans un calcul mental. Les trois écrans
+qui reçoivent un aperçu affichent donc, sous la valeur de la portion, le chiffre
 comparable :
 
 ```
@@ -107,6 +107,14 @@ l'aperçu *est* déjà la valeur des 100 g : la ligne disparaît, plutôt que de
 le même chiffre sous deux formes. Elle est construite en un seul endroit
 (`ligneComparable()`), pour la raison même du paragraphe précédent : un écran qui
 l'écrirait lui-même pourrait remettre le chiffre des 100 g sous l'unité du pot.
+
+Ce « seul endroit » est **tenu par un contrôle**, et pas seulement écrit ici : un
+test dérive la liste des écrans qui appellent `apercuDePortion()` et exige que
+chacun passe par ce point unique. Il a été écrit parce qu'un troisième écran — la
+fiche produit du code-barres — composait encore son texte lui-même, et n'affichait
+donc pas le chiffre comparable. Sa falsification comprend un écran factice que le
+contrôle doit déclarer fautif sans qu'on touche à aucune liste : c'est ce qui
+prouve qu'il dérive la liste au lieu de la recopier.
 
 ### Suivi du poids
 
@@ -444,7 +452,7 @@ CI, sur cette machine :
 ```bash
 python tools/verifier_version_build.py    # 11 cas sur tools/version_build.sh
 python tools/check_migration_serveur.py   # accord des schémas local et serveur
-python tools/lancer_bancs.py              # les vingt-six bancs de falsification
+python tools/lancer_bancs.py              # les vingt-sept bancs de falsification
 ```
 
 L'épreuve des migrations, elle, demande Node et le paquet `@electric-sql/pglite`,
@@ -650,5 +658,5 @@ transport, et l'écran dit ce qu'il a fait). Le passage est **manuel** — il n'
 l'enregistrement d'un repas, et l'écran le dit. Les tables du projet Supabase ont été créées depuis l'éditeur SQL du tableau de bord. Reste à
 établir que le serveur accepte ce que l'application lui envoie — aucune machine de ce dépôt ne
 peut le vérifier, faute de canal privilégié |
-| APK et AAB signés, IPA non signée | Produits et vérifiés — release `v0.1.6` (les `v0.1.3` et `v0.1.4` portent un affichage fautif des glucides par portion, `v0.1.5` une horloge non corrigée : ne pas les installer) |
+| APK et AAB signés, IPA non signée | Produits et vérifiés — release `v0.1.7` (les `v0.1.3` et `v0.1.4` portent un affichage fautif des glucides par portion, `v0.1.5` une horloge non corrigée, `v0.1.6` une fiche produit sans chiffre comparable : ne pas les installer) |
 | Envoi sur l'App Store / le Play Store | Non entamé — demande un compte Google Play et un compte Apple Developer |
